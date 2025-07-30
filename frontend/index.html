@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DrugHunter</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <h1></h1> 
+        </div>
+        <nav>
+        </nav>
+    </header>
+    <main>
+        <section class="calculator-section">
+            <h2>Calculadora (Entrada do Usuário)</h2>
+            <div class="calculator-form">
+                <input type="number" id="num1" placeholder="Primeiro número" required>
+                <select id="operation">
+                    <option value="+">+</option>
+                    <option value="-">-</option>
+                    <option value="*">*</option>
+                    <option value="/">/</option>
+                </select>
+                <input type="number" id="num2" placeholder="Segundo número" required>
+                <button id="calculateButton">Calcular</button>
+            </div>
+            <div class="result-area">
+                <h3>Resultado:</h3>
+                <p id="resultDisplay">Aguardando cálculo...</p>
+            </div>
+        </section>
+
+        <section class="file-results-section">
+            <h2>Cálculos Carregados de `input.csv`</h2>
+            <div id="fileResultsDisplay" class="result-area">
+                <p>Carregando resultados do arquivo...</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 DrugHunter. Todos os direitos reservados.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

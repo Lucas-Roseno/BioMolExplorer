@@ -1,0 +1,8 @@
+Rodar o bacK:
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 app.py
+
+para sair do venv:
+deactivate

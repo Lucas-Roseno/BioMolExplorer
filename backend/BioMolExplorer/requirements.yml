@@ -1,0 +1,17 @@
+name: BioMolExplorer
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12.3
+  - pip
+  - chembl_webresource_client=0.10.9
+  - numpy=1.26.4
+  - pandas=2.1.4
+  - rdkit=2023.09.6
+  - networkx=3.3
+  - biopython=1.84
+  - datasketch=1.6.5
+  - seaborn=0.13.2
+  - pip:
+    - rcsbsearchapi==1.6.0

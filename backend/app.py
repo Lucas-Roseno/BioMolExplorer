@@ -1,62 +1,42 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from calculator import calculate
-import csv  
-import os   
+from flask import Flask, request, jsonify, render_template
+import sys
+import os
 
-app = Flask(__name__)
-CORS(app)
+# Adiciona o diretório raiz do BioMolExplorer ao Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer', 'src')))
 
-@app.route('/calculate', methods=['POST'])
-def perform_calculation():
+from wrappers.crawlers import load_pdb
+from crawlers.complex import PolymerEntityType, ExperimentalMethod
+
+app = Flask(__name__, template_folder='../frontend', static_folder='../frontend')
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/load_pdb', methods=['POST'])
+def run_load_pdb():
     data = request.json
-    num1 = data.get('num1')
-    num2 = data.get('num2')
-    operation = data.get('operation')
-
-    if not all([num1 is not None, num2 is not None, operation]):
-        return jsonify({"error": "Missing parameters."}), 400
-    
     try:
-        num1 = float(num1)
-        num2 = float(num2)
-    except ValueError:
-        return jsonify({"error": "Invalid numbers provided."}), 400
+        # Converte as strings recebidas do frontend para os membros do Enum correspondente
+        if 'PolymerEntityTypeID' in data and data['PolymerEntityTypeID']:
+            data['PolymerEntityTypeID'] = [PolymerEntityType[item] for item in data['PolymerEntityTypeID']]
+        if 'ExperimentalMethodID' in data and data['ExperimentalMethodID']:
+            data['ExperimentalMethodID'] = [ExperimentalMethod[item] for item in data['ExperimentalMethodID']]
 
-    result = calculate(num1, num2, operation)
-
-    if isinstance(result, str) and "Error:" in result:
-        return jsonify({"error": result}), 400
-    else:
-        return jsonify({"result": result})
-
-@app.route('/calculations_from_file', methods=['GET'])
-def get_calculations_from_file():
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    file_path = os.path.join(dir_path, 'input.csv')
-    
-    results = []
-    try:
-        with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                try:
-                    num1 = float(row['num1'])
-                    op = row['operator']
-                    num2 = float(row['num2'])
-                    
-                    result = calculate(num1, num2, op)
-                    
-                    calculation_string = f"{num1} {op} {num2} = {result}"
-                    results.append({"calculation": calculation_string})
-
-                except (ValueError, KeyError) as e:
-                    results.append({"calculation": f"Error processing row: {row} - {e}"})
-
-        return jsonify(results)
-
-    except FileNotFoundError:
-        return jsonify({"error": "input.csv not found."}), 404
+        # Chama a função para baixar os arquivos PDB com os parâmetros do formulário
+        load_pdb(
+            target=data.get('target'),
+            base_output_path=os.path.join(' BioMolExplorer', 'datasets'),
+            pdb_ec=data.get('pdb_ec'),
+            PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
+            ExperimentalMethodID=data.get('ExperimentalMethodID'),
+            max_resolution=data.get('max_resolution'),
+            must_have_ligand=data.get('must_have_ligand', True)
+        )
+        return jsonify({'status': 'success', 'message': f"Dados PDB para {data.get('target')} carregados com sucesso"})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True)

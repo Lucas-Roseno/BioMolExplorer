@@ -1,51 +1,63 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DrugHunter</title>
-    <link rel="stylesheet" href="style.css">
+    <title>DrugHunter - PDB Loader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <header>
-        <div class="logo">
-            <h1></h1> 
-        </div>
-        <nav>
-        </nav>
-    </header>
-    <main>
-        <section class="calculator-section">
-            <h2>Calculadora (Entrada do Usuário)</h2>
-            <div class="calculator-form">
-                <input type="number" id="num1" placeholder="Primeiro número" required>
-                <select id="operation">
-                    <option value="+">+</option>
-                    <option value="-">-</option>
-                    <option value="*">*</option>
-                    <option value="/">/</option>
+    <div class="container">
+        <h1>PDB Loader</h1>
+        <form id="pdb-form">
+            <div class="form-group">
+                <label for="target">Target:</label>
+                <input type="text" id="target" name="target" value="Acetylcholinesterase" required>
+            </div>
+            <div class="form-group">
+                <label for="pdb_ec">PDB EC Number:</label>
+                <input type="text" id="pdb_ec" name="pdb_ec" value="3.1.1.7">
+            </div>
+            <div class="form-group">
+                <label for="polymer_entity_type">Polymer Entity Type:</label>
+                <select id="polymer_entity_type" name="polymer_entity_type">
+                    <option value="PROTEIN">Protein</option>
+                    <option value="DNA">DNA</option>
+                    <option value="NA_HYBRID">NA-hybrid</option>
+                    <option value="OTHER">Other</option>
+                    <option value="RNA">RNA</option>
                 </select>
-                <input type="number" id="num2" placeholder="Segundo número" required>
-                <button id="calculateButton">Calcular</button>
             </div>
-            <div class="result-area">
-                <h3>Resultado:</h3>
-                <p id="resultDisplay">Aguardando cálculo...</p>
+            <div class="form-group">
+                <label for="experimental_method">Experimental Method:</label>
+                <select id="experimental_method" name="experimental_method">
+                    <option value="X_RAY_DIFFRACTION">X-RAY DIFFRACTION</option>
+                    <option value="ELECTRON_CRYSTALLOGRAPHY">ELECTRON CRYSTALLOGRAPHY</option>
+                    <option value="ELECTRON_MICROSCOPY">ELECTRON MICROSCOPY</option>
+                    <option value="EPR">EPR</option>
+                    <option value="FIBER_DIFFRACTION">FIBER DIFFRACTION</option>
+                    <option value="FLUORESCENCE_TRANSFER">FLUORESCENCE TRANSFER</option>
+                    <option value="INFRARED_SPECTROSCOPY">INFRARED SPECTROSCOPY</option>
+                    <option value="NEUTRON_DIFFRACTION">NEUTRON DIFFRACTION</option>
+                    <option value="POWDER_DIFFRACTION">POWDER DIFFRACTION</option>
+                    <option value="SOLID_STATE_NMR">SOLID-STATE NMR</option>
+                    <option value="SOLUTION_NMR">SOLUTION NMR</option>
+                    <option value="SOLUTION_SCATTERING">SOLUTION SCATTERING</option>
+                    <option value="THEORETICAL_MODEL">THEORETICAL MODEL</option>
+                </select>
             </div>
-        </section>
-
-        <section class="file-results-section">
-            <h2>Cálculos Carregados de `input.csv`</h2>
-            <div id="fileResultsDisplay" class="result-area">
-                <p>Carregando resultados do arquivo...</p>
+            <div class="form-group">
+                <label for="max_resolution">Max Resolution:</label>
+                <input type="number" id="max_resolution" name="max_resolution" step="0.1" value="2.0">
             </div>
-        </section>
-    </main>
-
-    <footer>
-        <p>&copy; 2025 DrugHunter. Todos os direitos reservados.</p>
-    </footer>
-
-    <script src="script.js"></script>
+            <div class="form-group">
+                <label for="must_have_ligand">Must Have Ligand:</label>
+                <input type="checkbox" id="must_have_ligand" name="must_have_ligand" checked>
+            </div>
+            <button type="submit">Submit</button>
+        </form>
+        <div id="response"></div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>

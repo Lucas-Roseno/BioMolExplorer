@@ -157,7 +157,8 @@ def load_pdb(target:str, base_output_path:str, pdb_ec:Optional[str]=None, organi
                 'must_have_ligand': must_have_ligand
             }.items()
             if is_valid(value)
-}
+        }
+        
         pdb.get_pdb_files(filters=filters)
     
     except Exception as e:

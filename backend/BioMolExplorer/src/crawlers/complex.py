@@ -164,7 +164,6 @@ class PDBComplex():
         
         except Exception as e:
             return None
-    
 
     def get_pdb_files(self, filters:dict):
         
@@ -174,13 +173,14 @@ class PDBComplex():
             pdb_codes = self.get_pdb_ids_with_filters(filters)
 
             if pdb_codes:
+                pdb_crawler.download_pdb_files(pdb_codes, pdir=self.__outputpath, file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
                 
-                pdb_crawler.download_pdb_files(pdb_codes, pdir=self.__path + self.__outputpath, file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
-                datain  = [self.__outputpath[1:]+'pdb'+code.lower()+'.ent' for code in pdb_codes]
-                dataout = [self.__outputpath[1:]+code+'.pdb' for code in pdb_codes]
+                datain  = [os.path.join(self.__outputpath, 'pdb' + code.lower() + '.ent') for code in pdb_codes]
+                dataout = [os.path.join(self.__outputpath, code + '.pdb') for code in pdb_codes]
                 codes   = {}
 
                 for input, output, idx in zip(datain, dataout, pdb_codes): 
+
                     with open(input, 'r') as entrada, open(output, 'w') as saida:
                         for linha in entrada:
                             if not linha.startswith(('LINK', 'SSBOND')):
@@ -191,7 +191,7 @@ class PDBComplex():
                     if tmp != None:
                         codes[idx] = tmp
                      
-                with open(self.__outputpath[1:] + 'pdb_codes.csv', 'w') as fp:
+                with open(os.path.join(self.__outputpath, 'pdb_codes.csv'), 'w') as fp:
                     fp.write('PDB_CODE,LIGAND,RESNUM,CHAIN,RESOLUTION\n')
                     for code in codes.keys():
                         resolution = codes[code][1]
@@ -208,6 +208,3 @@ class PDBComplex():
             
         except Exception as e:
             self.logger.error(f'Error during to perform the get_pdb_files function', exc_info=True)
-
-    
-

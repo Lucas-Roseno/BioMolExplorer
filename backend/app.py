@@ -12,7 +12,7 @@ app = Flask(__name__, template_folder='../frontend', static_folder='../frontend/
 
 @app.route('/')
 def index():
-    return render_template('biomolexplorer.html')
+    return render_template('index.html')
 
 @app.route('/biomolexplorer')
 def biomolexplorer():
@@ -38,8 +38,9 @@ def run_load_pdb():
             must_have_ligand=data.get('must_have_ligand', True)
         )
         return jsonify({'status': 'success', 'message': f"Dados PDB para {data.get('target')} carregados com sucesso"})
+    
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)

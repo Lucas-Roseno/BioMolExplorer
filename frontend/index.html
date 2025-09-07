@@ -1,15 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DrugHunter</title>
-    
+    <title>DrugHunter - Início</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
-    
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
-    
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+    <header class="main-header">
+        <div class="header-content">
+            <img src="{{ url_for('static', filename='img/icon.png') }}" alt="DrugHunter Logo" class="header-logo">
+            <h1>Drug Hunter</h1>
+        </div>
+        <nav class="main-nav">
+            <ul>
+                <li><a href="{{ url_for('biomolexplorer') }}">PDB LOADER</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container">
+        <section class="welcome-section">
+            <h2>Bem-vindo ao Drug Hunter</h2>
+            <p>Sua plataforma integrada para exploração e análise de dados moleculares.</p>
+            <p>Utilize o menu acima para navegar até a ferramenta <strong>BioMolExplorer</strong> e iniciar sua busca
+                por estruturas PDB.</p>
+        </section>
+    </div>
+
 </body>
+
+</html>

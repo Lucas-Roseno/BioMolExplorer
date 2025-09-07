@@ -142,27 +142,23 @@ def load_pdb(target:str, base_output_path:str, pdb_ec:Optional[str]=None, organi
              ExperimentalMethodID:Optional[List[ExperimentalMethod]]=None,
              max_resolution:Optional[float]=None, must_have_ligand:Optional[bool]=True):
 
-    try:
-        pdb_output_path = f'{base_output_path}/PDB/{target.replace(' ','')}/'
-        pdb = PDBComplex(output_path=pdb_output_path)
+    pdb_output_path = f'{base_output_path}/PDB/{target.replace(' ','')}/'
+    pdb = PDBComplex(output_path=pdb_output_path)
 
-        filters = {
-            key: value
-            for key, value in {
-                'PolymerEntityTypeID': PolymerEntityTypeID,
-                'ExperimentalMethodID': ExperimentalMethodID,
-                'ec_target': pdb_ec,
-                'organism': organism,
-                'max_resolution': max_resolution,
-                'must_have_ligand': must_have_ligand
-            }.items()
-            if is_valid(value)
-        }
-        
-        pdb.get_pdb_files(filters=filters)
+    filters = {
+        key: value
+        for key, value in {
+            'PolymerEntityTypeID': PolymerEntityTypeID,
+            'ExperimentalMethodID': ExperimentalMethodID,
+            'ec_target': pdb_ec,
+            'organism': organism,
+            'max_resolution': max_resolution,
+            'must_have_ligand': must_have_ligand
+        }.items()
+        if is_valid(value)
+    }
     
-    except Exception as e:
-        logger.error(f'Error during to perform {target} in load_pdb wrapper function', exc_info=True)
+    pdb.get_pdb_files(filters=filters)
 
 
 

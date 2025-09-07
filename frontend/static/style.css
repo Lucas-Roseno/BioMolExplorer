@@ -23,19 +23,129 @@ body {
 }
 
 /* --- CABEÇALHO --- */
-header {
+/* --- Estilos para o Header e Navegação --- */
+
+.main-header {
+    position: relative;
     width: 100%;
-    background-color: var(--primary-color);
-    color: white;
-    padding: 1.5rem 0;
-    text-align: center;
-    box-shadow: 0 2px 4px var(--shadow-color);
+    background-color: #47366d;
+    /* Cor de fundo para o cabeçalho (um tom de roxo) */
+    padding-bottom: 50px;
+    /* Espaço para a barra de navegação inferior */
 }
 
-header h1 {
-    margin: 0;
-    font-size: 2.5rem;
+.header-content {
+    display: flex;
+    /* Para alinhar o logo e o texto na mesma linha */
+    align-items: center;
+    /* Centraliza verticalmente o logo e o texto */
+    justify-content: flex-start;
+    /* Alinha o conteúdo à esquerda */
+    padding: 10px 20px;
+    /* Preenchimento interno do cabeçalho */
+    height: 80px;
+    /* Altura fixa do conteúdo do header */
 }
+
+.header-logo {
+    height: 70px;
+    /* Tamanho do ícone/logo */
+    width: auto;
+    margin-right: 20px;
+    /* Espaço entre o logo e o título */
+}
+
+.header-content h1 {
+    margin: 0;
+    /* Remove margem padrão do h1 */
+    font-size: 2.5rem;
+    /* Tamanho da fonte do título */
+    color: white;
+    /* Cor do texto "Drug Hunter" */
+    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+    /* Sombra para legibilidade */
+}
+
+/* Estilo da barra de navegação (sem grandes alterações) */
+.main-nav {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: #705d9d;
+    backdrop-filter: blur(5px);
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.4s ease-out, opacity 0.3s ease-in-out;
+}
+
+/* Efeito: Quando o mouse passa sobre QUALQUER LUGAR do header... */
+.main-header:hover .main-nav {
+    /* ...a barra de navegação aparece */
+    max-height: 100px;
+    /* Altura suficiente para o conteúdo */
+    opacity: 1;
+}
+
+.main-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: left;
+    /* Centraliza os itens do menu */
+}
+
+.main-nav ul li a {
+    display: block;
+    padding: 15px 25px;
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.1em;
+    transition: background-color 0.3s ease;
+}
+
+.main-nav ul li a:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    /* Destaque sutil ao passar o mouse */
+}
+
+/* --- Estilos para o container principal da página --- */
+/* Mantive o .container para centralizar o conteúdo abaixo do header */
+.container {
+    max-width: 960px;
+    /* Largura máxima do conteúdo */
+    margin: 40px auto;
+    /* Centraliza o container na página, com margem superior/inferior */
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* --- Estilos para o conteúdo da página de boas-vindas --- */
+.welcome-section {
+    text-align: center;
+    padding: 20px 0;
+    /* Ajuste no padding para não ter tanto espaço */
+}
+
+.welcome-section h2 {
+    font-size: 2em;
+    /* Ajuste no tamanho da fonte */
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.welcome-section p {
+    font-size: 1em;
+    /* Ajuste no tamanho da fonte */
+    color: #555;
+    line-height: 1.5;
+}
+
 
 /* --- CONTAINER PRINCIPAL --- */
 .container {
@@ -127,4 +237,8 @@ button[type="submit"]:hover {
 #response.error {
     background-color: #fce8e6;
     color: var(--error-color);
+}
+
+.loading {
+    color: #383d41;
 }

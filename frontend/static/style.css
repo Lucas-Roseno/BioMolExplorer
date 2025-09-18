@@ -1,7 +1,7 @@
 /* --- GERAL --- */
 :root {
     --primary-color: #47366d;
-    --primary-hover-color: #0056b3;
+    --primary-hover-color: #9686de;
     --background-color: #f4f7f6;
     --form-background: #ffffff;
     --text-color: #333;
@@ -23,50 +23,36 @@ body {
 }
 
 /* --- CABEÇALHO --- */
-/* --- Estilos para o Header e Navegação --- */
 
 .main-header {
     position: relative;
     width: 100%;
     background-color: #47366d;
-    /* Cor de fundo para o cabeçalho (um tom de roxo) */
     padding-bottom: 50px;
-    /* Espaço para a barra de navegação inferior */
 }
 
 .header-content {
     display: flex;
-    /* Para alinhar o logo e o texto na mesma linha */
     align-items: center;
-    /* Centraliza verticalmente o logo e o texto */
     justify-content: flex-start;
-    /* Alinha o conteúdo à esquerda */
     padding: 10px 20px;
-    /* Preenchimento interno do cabeçalho */
     height: 80px;
-    /* Altura fixa do conteúdo do header */
 }
 
 .header-logo {
     height: 70px;
-    /* Tamanho do ícone/logo */
     width: auto;
     margin-right: 20px;
-    /* Espaço entre o logo e o título */
 }
 
 .header-content h1 {
     margin: 0;
-    /* Remove margem padrão do h1 */
     font-size: 2.5rem;
-    /* Tamanho da fonte do título */
     color: white;
-    /* Cor do texto "Drug Hunter" */
     text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
-    /* Sombra para legibilidade */
 }
 
-/* Estilo da barra de navegação (sem grandes alterações) */
+/* --- Estilo da barra de navegação ---- */
 .main-nav {
     position: absolute;
     bottom: 0;
@@ -80,11 +66,9 @@ body {
     transition: max-height 0.4s ease-out, opacity 0.3s ease-in-out;
 }
 
-/* Efeito: Quando o mouse passa sobre QUALQUER LUGAR do header... */
+/* Efeito quando o mouse passa sobre header */
 .main-header:hover .main-nav {
-    /* ...a barra de navegação aparece */
     max-height: 100px;
-    /* Altura suficiente para o conteúdo */
     opacity: 1;
 }
 
@@ -94,7 +78,6 @@ body {
     padding: 0;
     display: flex;
     justify-content: left;
-    /* Centraliza os itens do menu */
 }
 
 .main-nav ul li a {
@@ -112,40 +95,6 @@ body {
     /* Destaque sutil ao passar o mouse */
 }
 
-/* --- Estilos para o container principal da página --- */
-/* Mantive o .container para centralizar o conteúdo abaixo do header */
-.container {
-    max-width: 960px;
-    /* Largura máxima do conteúdo */
-    margin: 40px auto;
-    /* Centraliza o container na página, com margem superior/inferior */
-    padding: 20px;
-    background-color: #fff;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* --- Estilos para o conteúdo da página de boas-vindas --- */
-.welcome-section {
-    text-align: center;
-    padding: 20px 0;
-    /* Ajuste no padding para não ter tanto espaço */
-}
-
-.welcome-section h2 {
-    font-size: 2em;
-    /* Ajuste no tamanho da fonte */
-    margin-bottom: 15px;
-    color: #333;
-}
-
-.welcome-section p {
-    font-size: 1em;
-    /* Ajuste no tamanho da fonte */
-    color: #555;
-    line-height: 1.5;
-}
-
 
 /* --- CONTAINER PRINCIPAL --- */
 .container {
@@ -159,86 +108,20 @@ body {
     box-sizing: border-box;
 }
 
-/* --- FORMULÁRIO --- */
-#pdb-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1.2rem; /* Espaçamento entre os campos */
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.form-group label {
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-}
-
-/* Estilo para inputs, selects */
-input[type="text"],
-input[type="number"],
-select {
-    padding: 0.8rem;
-    border: 1px solid var(--border-color);
-    border-radius: 5px;
-    font-size: 1rem;
-    transition: border-color 0.3s, box-shadow 0.3s;
-}
-
-input[type="text"]:focus,
-input[type="number"]:focus,
-select:focus {
-    outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
-}
-
-.form-group input[type="checkbox"] {
-    width: 1.2rem;
-    height: 1.2rem;
-    margin-right: 0.5rem;
-}
-
-/* --- BOTÃO --- */
-button[type="submit"] {
-    padding: 0.9rem;
-    border: none;
-    border-radius: 5px;
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 1.1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.3s, transform 0.2s;
-    margin-top: 1rem;
-}
-
-button[type="submit"]:hover {
-    background-color: var(--primary-hover-color);
-    transform: translateY(-2px);
-}
-
-/* --- ÁREA DE RESPOSTA --- */
-#response {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    border-radius: 5px;
+/* --- Seção de boas vindas --- */
+.welcome-section {
     text-align: center;
-    font-weight: bold;
+    padding: 20px 0;
 }
 
-#response.success {
-    background-color: #e9f7ef;
-    color: var(--success-color);
+.welcome-section h2 {
+    font-size: 2em;
+    margin-bottom: 15px;
+    color: #333;
 }
 
-#response.error {
-    background-color: #fce8e6;
-    color: var(--error-color);
-}
-
-.loading {
-    color: #383d41;
+.welcome-section p {
+    font-size: 1em;
+    color: #555;
+    line-height: 1.5;
 }

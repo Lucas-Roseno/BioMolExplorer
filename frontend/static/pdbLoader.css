@@ -1,0 +1,167 @@
+/* --- Título da página PDB Loader --- */
+.page-title {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* --- FORMULÁRIO --- */
+#pdb-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+/* Estilo para inputs, selects */
+input[type="text"],
+input[type="number"],
+select {
+    padding: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+.form-group input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-right: 0.5rem;
+}
+
+/* --- BOTÃO --- */
+button[type="submit"] {
+    padding: 0.9rem;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+    margin-top: 1rem;
+}
+
+button[type="submit"]:hover {
+    background-color: var(--primary-hover-color);
+    transform: translateY(-2px);
+}
+
+/* --- ÁREA DE RESPOSTA --- */
+#response {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+#response.success {
+    background-color: #e9f7ef;
+    color: var(--success-color);
+}
+
+#response.error {
+    background-color: #fce8e6;
+    color: var(--error-color);
+}
+
+.loading {
+    color: #383d41;
+}
+
+/* --- Layout da Página BioMolExplorer --- */
+.content-wrapper {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+}
+
+.form-container {
+    flex: 1;
+}
+
+.pdb-table-container {
+    flex: 1;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.pdb-table-container h3 {
+    margin-top: 0;
+    text-align: center;
+    color: #333;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+#pdb-list-wrapper {
+    max-height: 450px;
+    overflow-y: auto;
+}
+
+/* --- Estilos da Tabela de PDBs --- */
+.pdb-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pdb-table th,
+.pdb-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.pdb-table .target-header-row {
+    background-color: #e9e2f0;
+    font-weight: bold;
+    color: #5b2c7e;
+    position: sticky;
+    top: 0;
+}
+
+.pdb-table .pdb-file-row td {
+    padding-left: 25px;
+}
+
+.pdb-table .delete-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    color: #c0392b;
+    transition: color 0.2s;
+}
+
+.pdb-table .delete-btn:hover {
+    color: #e74c3c;
+}
+
+/* Estilo para quando a lista está vazia */
+.empty-list-message {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+}
+

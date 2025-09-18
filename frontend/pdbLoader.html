@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DrugHunter - BioMolExplorer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdbLoader.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
+</head>
+
+<body>
+    <header class="main-header">
+        <div class="header-content">
+            <a href="{{ url_for('index') }}" class="header-link-home">
+                <img src="{{ url_for('static', filename='img/icon.png') }}" alt="DrugHunter Logo" class="header-logo">
+            </a>
+            <h1>Drug Hunter</h1>
+        </div>
+        <nav class="main-nav">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Início</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2 class="page-title">PDB Loader</h2>
+
+        <div class="content-wrapper">
+
+            <div class="form-container">
+                <form id="pdb-form">
+                    <div class="form-group">
+                        <label for="target">Target:</label>
+                        <input type="text" id="target" name="target" value="Acetylcholinesterase" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pdb_ec">PDB EC Number:</label>
+                        <input type="text" id="pdb_ec" name="pdb_ec" value="3.1.1.7">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="polymer_entity_type">Polymer Entity Type:</label>
+                        <select id="polymer_entity_type" name="polymer_entity_type">
+                            <option value="PROTEIN">Protein</option>
+                            <option value="DNA">DNA</option>
+                            <option value="NA_HYBRID">NA-hybrid</option>
+                            <option value="RNA">RNA</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="experimental_method">Experimental Method:</label>
+                        <select id="experimental_method" name="experimental_method">
+                            <option value="X_RAY_DIFFRACTION">X-RAY DIFFRACTION</option>
+                            <option value="ELECTRON_CRYSTALLOGRAPHY">ELECTRON CRYSTALLOGRAPHY</option>
+                            <option value="ELECTRON_MICROSCOPY">ELECTRON MICROSCOPY</option>
+                            <option value="EPR">EPR</option>
+                            <option value="FIBER_DIFFRACTION">FIBER DIFFRACTION</option>
+                            <option value="FLUORESCENCE_TRANSFER">FLUORESCENCE TRANSFER</option>
+                            <option value="INFRARED_SPECTROSCOPY">INFRARED SPECTROSCOPY</option>
+                            <option value="NEUTRON_DIFFRACTION">NEUTRON DIFFRACTION</option>
+                            <option value="POWDER_DIFFRACTION">POWDER DIFFRACTION</option>
+                            <option value="SOLID_STATE_NMR">SOLID-STATE NMR</option>
+                            <option value="SOLUTION_NMR">SOLUTION NMR</option>
+                            <option value="SOLUTION_SCATTERING">SOLUTION SCATTERING</option>
+                            <option value="THEORETICAL_MODEL">THEORETICAL MODEL</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="max_resolution">Max Resolution:</label>
+                        <input type="number" id="max_resolution" name="max_resolution" step="0.1" value="2.0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="must_have_ligand">Must Have Ligand:</label>
+                        <input type="checkbox" id="must_have_ligand" name="must_have_ligand" checked>
+                    </div>
+
+                    <button type="submit">Baixar</button>
+                </form>
+
+                <div id="response"></div>
+            </div>
+        </div>
+
+        <div class="pdb-table-container">
+            <h3>PDBs Baixados</h3>
+            <div id="pdb-list-wrapper">
+            </div>
+        </div>
+
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DrugHunter - BioMolExplorer</title>
+    <title>BioMolExplorer - PDB Loader</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='pdbLoader.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
@@ -14,13 +14,15 @@
     <header class="main-header">
         <div class="header-content">
             <a href="{{ url_for('index') }}" class="header-link-home">
-                <img src="{{ url_for('static', filename='img/icon.png') }}" alt="DrugHunter Logo" class="header-logo">
+                <img src="{{ url_for('static', filename='img/icon.png') }}" alt="BioMolExplorer Logo"
+                    class="header-logo">
             </a>
-            <h1>Drug Hunter</h1>
+            <h1>BioMolExplorer</h1>
         </div>
         <nav class="main-nav">
             <ul>
-                <li><a href="{{ url_for('index') }}">Início</a></li>
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('chemblLoader') }}">CHEMBL LOADER</a></li>
             </ul>
         </nav>
     </header>
@@ -81,16 +83,18 @@
                         <input type="checkbox" id="must_have_ligand" name="must_have_ligand" checked>
                     </div>
 
-                    <button type="submit">Baixar</button>
+                    <button type="submit">Download</button>
                 </form>
 
                 <div id="response"></div>
             </div>
         </div>
 
-        <div class="pdb-table-container">
-            <h3>PDBs Baixados</h3>
-            <div id="pdb-list-wrapper">
+        <div class="pdb-tabs-container">
+            <h3>Downloaded PDBs</h3>
+            <div id="tab-buttons" class="tab">
+            </div>
+            <div id="tab-content-wrapper">
             </div>
         </div>
 

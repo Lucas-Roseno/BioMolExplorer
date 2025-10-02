@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DrugHunter - Início</title>
+    <title>BioMolExplorer - Home</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
 </head>
@@ -13,22 +13,23 @@
 
     <header class="main-header">
         <div class="header-content">
-            <img src="{{ url_for('static', filename='img/icon.png') }}" alt="DrugHunter Logo" class="header-logo">
-            <h1>Drug Hunter</h1>
+            <img src="{{ url_for('static', filename='img/icon.png') }}" alt="BioMolExplorer Logo" class="header-logo">
+            <h1>BioMolExplorer</h1>
         </div>
         <nav class="main-nav">
             <ul>
                 <li><a href="{{ url_for('pdbLoader') }}">PDB LOADER</a></li>
+                <li><a href="{{ url_for('chemblLoader') }}">CHEMBL LOADER</a></li>
             </ul>
         </nav>
     </header>
 
     <div class="container">
         <section class="welcome-section">
-            <h2>Bem-vindo ao Drug Hunter</h2>
-            <p>Sua plataforma integrada para exploração e análise de dados moleculares.</p>
-            <p>Utilize o menu acima para navegar até a ferramenta <strong>PDB LOADER</strong> e iniciar sua busca
-                por estruturas PDB.</p>
+            <h2>Welcome to BioMolExplorer</h2>
+            <p>Your integrated platform for exploring and analyzing molecular data.</p>
+            <p>Use the menu above to navigate to the <strong>PDB LOADER</strong> tool and start your search for PDB
+                structures.</p>
         </section>
     </div>
 

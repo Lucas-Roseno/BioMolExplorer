@@ -1,6 +1,6 @@
 {
     "similarity": 60,
     "natural_product":0,
-    "molecule_type": "small molecule",
+    "molecule_type": "small molecule", //n mexer
     "molecule_weight": 500
 }

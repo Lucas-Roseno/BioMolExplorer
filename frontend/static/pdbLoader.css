@@ -165,3 +165,70 @@ button[type="submit"]:hover {
     padding: 20px;
 }
 
+/* Adicionar ao final do arquivo */
+.tab {
+    overflow: hidden;
+    border: 1px solid #ccc;
+    background-color: #f1f1f1;
+}
+
+.tab button {
+    background-color: inherit;
+    float: left;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    padding: 14px 16px;
+    transition: 0.3s;
+}
+
+.tab button:hover {
+    background-color: #ddd;
+}
+
+.tab button.active {
+    background-color: #ccc;
+}
+
+.tabcontent {
+    display: none;
+    padding: 6px 12px;
+    border: 1px solid #ccc;
+    border-top: none;
+}
+
+/* Adicionar ao final de pdbLoader.css */
+
+.dynamic-form {
+    margin-bottom: 25px;
+    padding: 20px;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+}
+
+.dynamic-form .form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.dynamic-form label {
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #333;
+}
+
+.dynamic-form input[type="text"] {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    /* Garante que o padding não aumente a largura */
+}
+
+.form-description {
+    margin-bottom: 20px;
+    font-style: italic;
+    color: #666;
+}

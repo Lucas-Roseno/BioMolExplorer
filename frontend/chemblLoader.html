@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioMolExplorer - ChEMBL Loader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pdbLoader.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
+</head>
+
+<body>
+    <header class="main-header">
+        <div class="header-content">
+            <a href="{{ url_for('index') }}" class="header-link-home">
+                <img src="{{ url_for('static', filename='img/icon.png') }}" alt="BioMolExplorer Logo"
+                    class="header-logo">
+            </a>
+            <h1>BioMolExplorer</h1>
+        </div>
+        <nav class="main-nav">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('pdbLoader') }}">PDB Loader</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2 class="page-title">ChEMBL Loader</h2>
+
+        <div class="content-wrapper">
+            <div class="form-container">
+                <form id="chembl-form">
+
+                    <div class="form-group">
+                        <label for="target_name">Target Name</label>
+                        <input type="text" id="target_name" name="target_name" required>
+                    </div>
+                    <h3>Target Parameters</h3>
+                    <div class="form-group">
+                        <label for="type__in">Type in</label>
+                        <input type="text" id="type__in" name="type__in" value="SINGLE PROTEIN">
+                    </div>
+                    <div class="form-group">
+                        <label for="relationship_type">Relationship Type</label>
+                        <input type="text" id="relationship_type" name="relationship_type" value="DIRECT">
+                    </div>
+
+                    <h3>Bioactivity Parameters</h3>
+                    <div class="form-group">
+                        <label for="molecule_type_bioactivity">Molecule Type</label>
+                        <input type="text" id="molecule_type_bioactivity" name="molecule_type_bioactivity"
+                            value="small molecule">
+                    </div>
+                    <div class="form-group">
+                        <label for="standard_units">Standard Units</label>
+                        <input type="text" id="standard_units" name="standard_units" value="nM">
+                    </div>
+
+                    <h3>Molecules Parameters</h3>
+                    <div class="form-group">
+                        <label for="natural_product">Natural Product</label>
+                        <input type="checkbox" id="natural_product" name="natural_product" value="1">
+                    </div>
+
+                    <h3>Similar Molecules Parameters</h3>
+                    <div class="form-group">
+                        <label for="molecule_type_similarmols">Molecule Type</label>
+                        <input type="text" id="molecule_type_similarmols" name="molecule_type_similarmols"
+                            value="small molecule">
+                    </div>
+
+                    <button type="submit">Run ChEMBL Loader</button>
+                </form>
+
+                <div id="response"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='chemblLoader.js') }}"></script>
+</body>
+
+</html>

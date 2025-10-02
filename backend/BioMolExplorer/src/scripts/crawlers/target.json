@@ -1,5 +1,5 @@
 {
     "organism": "Homo sapiens",
-    "type__in": ["SINGLE PROTEIN"],
-    "relationship_type": "DIRECT"
+    "type__in": ["SINGLE PROTEIN"], //n mexer
+    "relationship_type": "DIRECT" //n mexer
 }

@@ -282,35 +282,28 @@ class fileHandling(MyUtilities):
     
     
     def prepare_datamols(self, target:str, inputpath_mols:Optional[str]=None, inputpath_similars:Optional[str]=None):
+        self.set_inputpath(inputpath_mols)
+        mols = self.__get_datamols() if inputpath_mols != None else None
         
-        try:
+        self.set_inputpath(inputpath_similars)
+        sims = self.__get_datamols() if inputpath_similars != None else None
+        
+        if isinstance(sims, DataFrame) and isinstance(mols, DataFrame):
+            ids_mols = set(mols['molecule_chembl_id'])
+            ids_sims = set(sims['molecule_chembl_id'])
+            ids_sims = ids_sims - ids_mols
+            sims = sims[sims['molecule_chembl_id'].isin(ids_sims)]
+            self.dataframe_to_csv(target+'_MOLS', mols)
+            self.dataframe_to_csv(target+'_SIMS', sims)
+            merged = concat([mols, sims], ignore_index=True)
+            self.dataframe_to_csv(target+'_FULL', merged)
             
-            self.set_inputpath(inputpath_mols)
-            mols = self.__get_datamols() if inputpath_mols != None else None
-            
-            self.set_inputpath(inputpath_similars)
-            sims = self.__get_datamols() if inputpath_similars != None else None
-            
-            if isinstance(sims, DataFrame) and isinstance(mols, DataFrame):
-                ids_mols = set(mols['molecule_chembl_id'])
-                ids_sims = set(sims['molecule_chembl_id'])
-                ids_sims = ids_sims - ids_mols
-                sims = sims[sims['molecule_chembl_id'].isin(ids_sims)]
-                self.dataframe_to_csv(target+'_MOLS', mols)
-                self.dataframe_to_csv(target+'_SIMS', sims)
-                merged = concat([mols, sims], ignore_index=True)
-                self.dataframe_to_csv(target+'_FULL', merged)
-                
-            
-            elif isinstance(mols, DataFrame):
-                self.dataframe_to_csv(target+'_MOLS', mols)
-            
-            elif isinstance(sims, DataFrame):
-                self.dataframe_to_csv(target+'_SIMS', sims)
-    
-                
-        except Exception as e:
-            self.logger.error(f'during to perform {target} target in prepare_datamols function', exc_info=True)
+        
+        elif isinstance(mols, DataFrame):
+            self.dataframe_to_csv(target+'_MOLS', mols)
+        
+        elif isinstance(sims, DataFrame):
+            self.dataframe_to_csv(target+'_SIMS', sims)
     
     
             

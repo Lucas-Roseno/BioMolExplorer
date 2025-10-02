@@ -1,10 +1,4 @@
-/* --- Título da página PDB Loader --- */
-.page-title {
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-/* --- FORMULÁRIO --- */
+/* --- FORM --- */
 #pdb-form {
     display: flex;
     flex-direction: column;
@@ -21,7 +15,7 @@
     font-weight: bold;
 }
 
-/* Estilo para inputs, selects */
+/* INPUTS AND SELECTS STYLES */
 input[type="text"],
 input[type="number"],
 select {
@@ -46,55 +40,8 @@ select:focus {
     margin-right: 0.5rem;
 }
 
-/* --- BOTÃO --- */
-button[type="submit"] {
-    padding: 0.9rem;
-    border: none;
-    border-radius: 5px;
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 1.1rem;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.3s, transform 0.2s;
-    margin-top: 1rem;
-}
 
-button[type="submit"]:hover {
-    background-color: var(--primary-hover-color);
-    transform: translateY(-2px);
-}
-
-/* --- ÁREA DE RESPOSTA --- */
-#response {
-    margin-top: 1.5rem;
-    padding: 1rem;
-    border-radius: 5px;
-    text-align: center;
-    font-weight: bold;
-}
-
-#response.success {
-    background-color: #e9f7ef;
-    color: var(--success-color);
-}
-
-#response.error {
-    background-color: #fce8e6;
-    color: var(--error-color);
-}
-
-.loading {
-    color: #383d41;
-}
-
-/* --- Layout da Página BioMolExplorer --- */
-.content-wrapper {
-    display: flex;
-    gap: 30px;
-    align-items: flex-start;
-}
-
+/* --- BioMolExplorer layout --- */
 .form-container {
     flex: 1;
 }
@@ -120,7 +67,7 @@ button[type="submit"]:hover {
     overflow-y: auto;
 }
 
-/* --- Estilos da Tabela de PDBs --- */
+/* --- PDBs TABLES --- */
 .pdb-table {
     width: 100%;
     border-collapse: collapse;
@@ -158,14 +105,14 @@ button[type="submit"]:hover {
     color: #e74c3c;
 }
 
-/* Estilo para quando a lista está vazia */
+/* EMPTY LIST */
 .empty-list-message {
     text-align: center;
     color: #888;
     padding: 20px;
 }
 
-/* Adicionar ao final do arquivo */
+/* ADD IN THE FINAL OF FILE */
 .tab {
     overflow: hidden;
     border: 1px solid #ccc;
@@ -197,7 +144,7 @@ button[type="submit"]:hover {
     border-top: none;
 }
 
-/* Adicionar ao final de pdbLoader.css */
+/* ADD IN THE END OF PDB-LOADER */
 
 .dynamic-form {
     margin-bottom: 25px;
@@ -224,7 +171,6 @@ button[type="submit"]:hover {
     border-radius: 4px;
     width: 100%;
     box-sizing: border-box;
-    /* Garante que o padding não aumente a largura */
 }
 
 .form-description {

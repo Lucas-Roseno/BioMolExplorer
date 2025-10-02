@@ -77,29 +77,24 @@ class Targets(CrawlerSettings):
      
        
     def search(self, target_name:str, filter_params:dict) -> None:
+        files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
+        target_name = target_name.upper()
+        infile  =  files.isFile(target_name)[0]
+        columns = ['pref_name', 'target_chembl_id', 'target_components', 'target_type']
+
+        filter_params["pref_name__iexact"] =  target_name
         
-        try:
-            files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
-            target_name = target_name.upper()
-            infile  =  files.isFile(target_name)[0]
-            columns = ['pref_name', 'target_chembl_id', 'target_components', 'target_type']
+        target = files.csv_to_dataframe(target_name) if infile else self.__target.filter(**filter_params).only(columns)
+        
 
-            filter_params["pref_name__iexact"] =  target_name
-            
-            target = files.csv_to_dataframe(target_name) if infile else self.__target.filter(**filter_params).only(columns)
-            
-
-            if len(target) > 0:
-                target = DataFrame.from_records(target)
-                target.drop_duplicates(subset='target_chembl_id', inplace=True, ignore_index=True)
-                target = target[columns] if infile and len(columns) > 0 else target
-            else:
-                target = DataFrame()
-            
-            self.save_target(target, target_name) if self.__outputpath != None else None
-            
-        except Exception as e:
-            self.logger.error(f'Error during to perform {target_name} target in search function', exc_info=True)
+        if len(target) > 0:
+            target = DataFrame.from_records(target)
+            target.drop_duplicates(subset='target_chembl_id', inplace=True, ignore_index=True)
+            target = target[columns] if infile and len(columns) > 0 else target
+        else:
+            target = DataFrame()
+        
+        self.save_target(target, target_name) if self.__outputpath != None else None
             
     
      

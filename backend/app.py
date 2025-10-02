@@ -10,15 +10,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolE
 from wrappers.crawlers import load_pdb, load_chembl
 from crawlers.complex import PolymerEntityType, ExperimentalMethod
 
-# Pages path
+# PATHs
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder='../frontend', static_folder='../frontend/static')
+PDB_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'PDB')
+JSON_CRAWLERS_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'src', 'scripts', 'crawlers')
 
-# Download path
-PDB_BASE_PATH = os.path.join('BioMolExplorer', 'datasets', 'PDB')
-# JSON crawlers path
-JSON_CRAWLERS_PATH = os.path.join('BioMolExplorer', 'src', 'scripts', 'crawlers')
-
-# --- ROUTES ---
+# --- Page routes ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -31,6 +29,8 @@ def pdbLoader():
 def chemblLoader():
     return render_template('chemblLoader.html')
 
+
+# --- PDB functions ---
 @app.route('/load_pdb', methods=['POST'])
 def run_load_pdb():
     data = request.json
@@ -54,60 +54,6 @@ def run_load_pdb():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
-# --- ChEMBL ROUTE ---
-@app.route('/load_chembl', methods=['POST'])
-def run_load_chembl():
-    """Atualiza os arquivos JSON com os dados do usuário e executa o crawler do ChEMBL."""
-    try:
-        user_data = request.json
-        target_name = user_data.get('target_name')
-        if not target_name:
-            return jsonify({'status': 'error', 'message': 'Target name is required'}), 400
-
-        # --- Update target.json ---
-        target_path = os.path.join(JSON_CRAWLERS_PATH, 'target.json')
-        with open(target_path, 'r') as f:
-            target_json = json.load(f)
-        target_json.update(user_data['target'])
-        with open(target_path, 'w') as f:
-            json.dump(target_json, f, indent=4)
-
-        # --- Update bioactivity.json ---
-        bioactivity_path = os.path.join(JSON_CRAWLERS_PATH, 'bioactivity.json')
-        with open(bioactivity_path, 'r') as f:
-            bioactivity_json = json.load(f)
-        bioactivity_json.update(user_data['bioactivity'])
-        with open(bioactivity_path, 'w') as f:
-            json.dump(bioactivity_json, f, indent=4)
-
-        # --- Update molecules.json ---
-        molecules_path = os.path.join(JSON_CRAWLERS_PATH, 'molecules.json')
-        with open(molecules_path, 'r') as f:
-            molecules_json = json.load(f)
-        molecules_json.update(user_data['molecules'])
-        with open(molecules_path, 'w') as f:
-            json.dump(molecules_json, f, indent=4)
-
-        # --- Update similarmols.json ---
-        similarmols_path = os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json')
-        with open(similarmols_path, 'r') as f:
-            similarmols_json = json.load(f)
-        similarmols_json.update(user_data['similarmols'])
-        with open(similarmols_path, 'w') as f:
-            json.dump(similarmols_json, f, indent=4)
-
-        # --- Run the crawler function ---
-        load_chembl(
-            target_name=target_name,
-            base_output_path=os.path.join('BioMolExplorer', 'datasets')
-        )
-
-        return jsonify({'status': 'success', 'message': f"ChEMBL data for '{target_name}' loaded successfully!"})
-
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 400
-
-# --- Other routes (PDB) ---
 @app.route('/pdb_files', methods=['GET'])
 def get_pdb_list():
     pdb_data = {}
@@ -145,6 +91,47 @@ def delete_pdb():
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ---CHEMBL functions ---
+@app.route('/load_chembl', methods=['POST'])
+def run_load_chembl():
+    """Updates JSON files with user data and runs the ChEMBL crawler."""
+    original_cwd = os.getcwd()
+    try:
+        # Temporary change of the correnct directory so that the code work
+        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        os.chdir(biomol_explorer_path)
+        
+        user_data = request.json
+        target_name = user_data.get('target_name')
+        if not target_name:
+            return jsonify({'status': 'error', 'message': 'Target name is required'}), 400
+
+        def update_json_file(file_path, new_data):
+            with open(file_path, 'r') as f:
+                json_data = json.load(f)
+            json_data.update(new_data)
+            with open(file_path, 'w') as f:
+                json.dump(json_data, f, indent=4)
+                
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'target.json'), user_data.get('target', {}))
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'bioactivity.json'), user_data.get('bioactivity', {}))
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), user_data.get('molecules', {}))
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), user_data.get('similarmols', {}))
+
+        load_chembl(
+            target_name=target_name,
+            base_output_path='/datasets'
+        )
+        return jsonify({'status': 'success', 'message': f"ChEMBL data for '{target_name}' loaded successfully!"})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    finally:
+    # Come back to the original directory
+        os.chdir(original_cwd)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

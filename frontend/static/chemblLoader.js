@@ -4,6 +4,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
+
+        // Collect checked values for 'standard_type__in'
+        const standardTypes = Array.from(form.querySelectorAll('input[name="standard_type__in"]:checked'))
+            .map(checkbox => checkbox.value);
+
+        if (standardTypes.length === 0) {
+            responseElement.textContent = 'Error: Please select at least one Standard Type.';
+            responseElement.className = 'error';
+            responseElement.style.display = 'block';
+            return;
+        }
+
         responseElement.textContent = 'Processing request...';
         responseElement.className = 'loading';
         responseElement.style.display = 'block';
@@ -12,18 +24,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const payload = {
             target_name: formData.get('target_name'),
             target: {
-                "type__in": formData.get('type__in').split(',').map(s => s.trim()),
-                "relationship_type": formData.get('relationship_type').split(',').map(s => s.trim())
+                organism: formData.get('organism')
             },
             bioactivity: {
-                "molecule_type": formData.get('molecule_type_bioactivity'),
-                "standard_units": formData.get('standard_units')
+                standard_type__in: standardTypes,
+                max_value_ref: parseFloat(formData.get('max_value_ref'))
             },
             molecules: {
-                "natural_product": formData.get('natural_product') ? 1 : 0
+                natural_product: formData.get('natural_product_molecules') ? 1 : 0
             },
             similarmols: {
-                "molecule_type": formData.get('molecule_type_similarmols')
+                similarity: parseInt(formData.get('similarity'), 10),
+                molecule_weight: parseFloat(formData.get('molecule_weight'))
             }
         };
 

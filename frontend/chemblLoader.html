@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BioMolExplorer - ChEMBL Loader</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='pdbLoader.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='chemblLoader.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
 </head>
 
@@ -34,43 +34,75 @@
             <div class="form-container">
                 <form id="chembl-form">
 
-                    <div class="form-group">
-                        <label for="target_name">Target Name</label>
-                        <input type="text" id="target_name" name="target_name" required>
-                    </div>
-                    <h3>Target Parameters</h3>
-                    <div class="form-group">
-                        <label for="type__in">Type in</label>
-                        <input type="text" id="type__in" name="type__in" value="SINGLE PROTEIN">
-                    </div>
-                    <div class="form-group">
-                        <label for="relationship_type">Relationship Type</label>
-                        <input type="text" id="relationship_type" name="relationship_type" value="DIRECT">
-                    </div>
+                    <fieldset>
+                        <legend>Target Search</legend>
+                        <div class="form-group">
+                            <label for="target_name">Target Name</label>
+                            <input type="text" id="target_name" name="target_name"
+                                placeholder="e.g., Acetylcholinesterase" required>
+                        </div>
+                    </fieldset>
 
-                    <h3>Bioactivity Parameters</h3>
-                    <div class="form-group">
-                        <label for="molecule_type_bioactivity">Molecule Type</label>
-                        <input type="text" id="molecule_type_bioactivity" name="molecule_type_bioactivity"
-                            value="small molecule">
-                    </div>
-                    <div class="form-group">
-                        <label for="standard_units">Standard Units</label>
-                        <input type="text" id="standard_units" name="standard_units" value="nM">
-                    </div>
+                    <fieldset>
+                        <legend>Target Parameters</legend>
+                        <div class="form-group">
+                            <label for="organism">Organism</label>
+                            <input type="text" id="organism" name="organism" value="Homo sapiens">
+                        </div>
+                    </fieldset>
 
-                    <h3>Molecules Parameters</h3>
-                    <div class="form-group">
-                        <label for="natural_product">Natural Product</label>
-                        <input type="checkbox" id="natural_product" name="natural_product" value="1">
-                    </div>
+                    <fieldset>
+                        <legend>Bioactivity Parameters</legend>
+                        <div class="form-group">
+                            <label>Standard Type (select at least one)</label>
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" name="standard_type__in" value="IC50"> IC50</label>
+                                <label><input type="checkbox" name="standard_type__in" value="No. of survivors"> No. of
+                                    survivors</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Inhibition">
+                                    Inhibition</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Activity">
+                                    Activity</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Ki" checked> Ki</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Survival">
+                                    Survival</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Kd"> Kd</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Km"> Km</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Imax"> Imax</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Reversibility">
+                                    Reversibility</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Ratio"> Ratio</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Concentration">
+                                    Concentration</label>
+                                <label><input type="checkbox" name="standard_type__in" value="Ratio IC50"> Ratio
+                                    IC50</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="max_value_ref">Max Value Reference (nM)</label>
+                            <input type="number" id="max_value_ref" name="max_value_ref" value="1000">
+                        </div>
+                    </fieldset>
 
-                    <h3>Similar Molecules Parameters</h3>
-                    <div class="form-group">
-                        <label for="molecule_type_similarmols">Molecule Type</label>
-                        <input type="text" id="molecule_type_similarmols" name="molecule_type_similarmols"
-                            value="small molecule">
-                    </div>
+                    <fieldset>
+                        <legend>Molecules Parameters</legend>
+                        <div class="form-group">
+                            <label for="natural_product_molecules">Natural Product</label>
+                            <input type="checkbox" id="natural_product_molecules" name="natural_product_molecules">
+                        </div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Similar Molecules Parameters</legend>
+                        <div class="form-group">
+                            <label for="similarity">Similarity (%)</label>
+                            <input type="number" id="similarity" name="similarity" value="60" min="0" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label for="molecule_weight">Max Molecule Weight (Daltons)</label>
+                            <input type="number" id="molecule_weight" name="molecule_weight" value="500">
+                        </div>
+                    </fieldset>
 
                     <button type="submit">Run ChEMBL Loader</button>
                 </form>

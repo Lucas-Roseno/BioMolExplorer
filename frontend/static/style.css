@@ -1,4 +1,4 @@
-/* --- GERAL --- */
+/* --- OVERALL   --- */
 :root {
     --primary-color: #47366d;
     --primary-hover-color: #9686de;
@@ -22,7 +22,13 @@ body {
     min-height: 100vh;
 }
 
-/* --- CABEÇALHO --- */
+.page-title {
+    text-align: center;
+    margin-bottom: 30px;
+    color: var(--primary-color);
+}
+
+/* --- HEADER --- */
 
 .main-header {
     position: relative;
@@ -52,7 +58,7 @@ body {
     text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
 }
 
-/* --- Estilo da barra de navegação ---- */
+/* --- NAVEGATION BAR STYLE ---- */
 .main-nav {
     position: absolute;
     bottom: 0;
@@ -66,7 +72,7 @@ body {
     transition: max-height 0.4s ease-out, opacity 0.3s ease-in-out;
 }
 
-/* Efeito quando o mouse passa sobre header */
+/* Effect when mouse hovers over header */
 .main-header:hover .main-nav {
     max-height: 100px;
     opacity: 1;
@@ -92,11 +98,10 @@ body {
 
 .main-nav ul li a:hover {
     background-color: rgba(255, 255, 255, 0.2);
-    /* Destaque sutil ao passar o mouse */
 }
 
 
-/* --- CONTAINER PRINCIPAL --- */
+/* --- MAIN CONTAINER --- */
 .container {
     background-color: var(--form-background);
     padding: 2.5rem;
@@ -108,7 +113,7 @@ body {
     box-sizing: border-box;
 }
 
-/* --- Seção de boas vindas --- */
+/* --- WELCOME SECTION --- */
 .welcome-section {
     text-align: center;
     padding: 20px 0;
@@ -124,4 +129,47 @@ body {
     font-size: 1em;
     color: #555;
     line-height: 1.5;
+}
+/* --- RESPONSE AREA --- */
+#response {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+#response.success {
+    background-color: #e9f7ef;
+    color: var(--success-color);
+}
+
+#response.error {
+    background-color: #fce8e6;
+    color: var(--error-color);
+}
+
+.loading {
+    color: #383d41;
+}
+
+/* --- BUTTON --- */
+button[type="submit"] {
+    padding: 0.9rem;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--primary-color);
+    color: white;
+    text-align: center;
+    width: 100%;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+    margin-top: 1rem;
+}
+
+button[type="submit"]:hover {
+    background-color: var(--primary-hover-color);
+    transform: translateY(-2px);
 }

@@ -3,96 +3,90 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const pdbForm = document.getElementById('pdb-form');
     const responseElement = document.getElementById('response');
-    const pdbListWrapper = document.getElementById('pdb-list-wrapper');
+    const pdbListContainer = document.getElementById('pdb-list');
 
+    // DOWNLOADED PDBs 
     const loadAndDisplayPdbFiles = async () => {
         try {
             const response = await fetch('/pdb_files');
             const data = await response.json();
 
-            const tabButtonsContainer = document.getElementById('tab-buttons');
-            const tabContentWrapper = document.getElementById('tab-content-wrapper');
-            tabButtonsContainer.innerHTML = '';
-            tabContentWrapper.innerHTML = '';
+            pdbListContainer.innerHTML = '';
 
             if (Object.keys(data).length === 0) {
-                tabContentWrapper.innerHTML = '<p class="empty-list-message">No PDBs downloaded yet.</p>';
+                pdbListContainer.innerHTML = '<p class="empty-list-message">No PDBs downloaded yet.</p>';
                 return;
             }
 
-            let firstTarget = true;
             for (const target in data) {
-                // Cria o botão da aba
-                const button = document.createElement('button');
-                button.className = 'tablinks';
-                button.textContent = target;
-                button.onclick = (event) => openTab(event, target);
-                tabButtonsContainer.appendChild(button);
+                const collapsibleContainer = document.createElement('div');
+                collapsibleContainer.className = 'collapsible-container';
 
-                // Cria o conteúdo da aba
-                const contentDiv = document.createElement('div');
-                contentDiv.id = target;
-                contentDiv.className = 'tabcontent';
+                const header = document.createElement('button');
+                header.className = 'collapsible-header';
+                header.innerHTML = `<span class="arrow">&#9654;</span> ${target}`;
 
-                const table = document.createElement('table');
-                table.className = 'pdb-table'; // Reutilizando a classe da tabela
-                const tbody = document.createElement('tbody');
+                const fileList = document.createElement('ul');
+                fileList.className = 'pdb-file-list';
 
                 data[target].forEach(pdbFile => {
-                    const row = tbody.insertRow();
-                    const nameCell = row.insertCell();
-                    const actionCell = row.insertCell();
-
-                    nameCell.textContent = pdbFile;
-                    actionCell.style.textAlign = 'right';
+                    const listItem = document.createElement('li');
+                    listItem.className = 'pdb-file-item';
+                    listItem.textContent = pdbFile;
 
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'delete-btn';
                     deleteBtn.innerHTML = '&#128465;';
                     deleteBtn.title = `Delete ${pdbFile}`;
-                    deleteBtn.onclick = () => deletePdbFile(target, pdbFile);
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deletePdbFile(target, pdbFile, listItem);
+                    };
 
-                    actionCell.appendChild(deleteBtn);
+                    listItem.appendChild(deleteBtn);
+                    fileList.appendChild(listItem);
                 });
 
-                table.appendChild(tbody);
-                contentDiv.appendChild(table);
-                tabContentWrapper.appendChild(contentDiv);
+                header.addEventListener('click', () => {
+                    header.classList.toggle('active');
+                    if (fileList.style.display === 'block') {
+                        fileList.style.display = 'none';
+                    } else {
+                        fileList.style.display = 'block';
+                    }
+                });
 
-                // Abre a primeira aba por padrão
-                if (firstTarget) {
-                    button.classList.add('active');
-                    contentDiv.style.display = 'block';
-                    firstTarget = false;
-                }
+                collapsibleContainer.appendChild(header);
+                collapsibleContainer.appendChild(fileList);
+                pdbListContainer.appendChild(collapsibleContainer);
             }
         } catch (error) {
             console.error('Error loading PDB list:', error);
-            document.getElementById('tab-content-wrapper').innerHTML = '<p class="empty-list-message">Error loading files.</p>';
+            pdbListContainer.innerHTML = '<p class="empty-list-message">Error loading files.</p>';
         }
     };
 
-    // Função auxiliar para controlar as abas
-    function openTab(evt, targetName) {
-        const tabcontent = document.getElementsByClassName('tabcontent');
-        for (let i = 0; i < tabcontent.length; i++) {
-            tabcontent[i].style.display = 'none';
-        }
+    // DELETE A PDB
+    const delteMessage = (message) => {
+        const alertBox = document.createElement('div');
+        alertBox.className = 'alert-notification';
+        alertBox.textContent = message;
 
-        const tablinks = document.getElementsByClassName('tablinks');
-        for (let i = 0; i < tablinks.length; i++) {
-            tablinks[i].className = tablinks[i].className.replace(' active', '');
-        }
+        document.body.appendChild(alertBox);
 
-        document.getElementById(targetName).style.display = 'block';
-        evt.currentTarget.className += ' active';
-    }
+        setTimeout(() => {
+            alertBox.classList.add('show');
+        }, 10);
 
-    const deletePdbFile = async (target, pdbFile) => {
-        // if (!confirm(`Are you sure you want to delete the file ${pdbFile}?`)) {
-        //     return;
-        // }
+        setTimeout(() => {
+            alertBox.classList.remove('show');
+            alertBox.addEventListener('transitionend', () => {
+                alertBox.remove();
+            });
+        }, 3000); 
+    };
 
+    const deletePdbFile = async (target, pdbFile, listItemElement) => {
         try {
             const response = await fetch('/delete_pdb', {
                 method: 'POST',
@@ -103,7 +97,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (response.ok) {
-                loadAndDisplayPdbFiles();
+                delteMessage(`PDB ${pdbFile} foi excluído.`);
+                const fileList = listItemElement.parentNode;
+                listItemElement.remove();
+                
+                if (fileList.children.length === 0) {
+                    fileList.parentNode.remove();
+                }
+
             } else {
                 alert(`Error when deleting: ${result.message}`);
             }
@@ -113,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-
+    // RESULTS MESSAGES
     pdbForm.addEventListener('submit', async (event) => {
         event.preventDefault();
 

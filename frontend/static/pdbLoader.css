@@ -40,59 +40,67 @@ select:focus {
     margin-right: 0.5rem;
 }
 
-
 /* --- BioMolExplorer layout --- */
 .form-container {
     flex: 1;
 }
 
-.pdb-table-container {
-    flex: 1;
-    background-color: #f9f9f9;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+/* --- PDBs LIST --- */
+.pdb-list-container {
+    margin-top: 2rem;
 }
 
-.pdb-table-container h3 {
-    margin-top: 0;
-    text-align: center;
-    color: #333;
-    border-bottom: 2px solid #eee;
-    padding-bottom: 10px;
-}
-
-#pdb-list-wrapper {
-    max-height: 450px;
-    overflow-y: auto;
-}
-
-/* --- PDBs TABLES --- */
-.pdb-table {
+.collapsible-header {
+    background-color: #f1f1f1;
+    color: #444;
+    cursor: pointer;
+    padding: 18px;
     width: 100%;
-    border-collapse: collapse;
-}
-
-.pdb-table th,
-.pdb-table td {
-    padding: 10px;
+    border: none;
     text-align: left;
+    outline: none;
+    font-size: 15px;
+    transition: background-color 0.3s;
     border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
 }
 
-.pdb-table .target-header-row {
-    background-color: #e9e2f0;
-    font-weight: bold;
-    color: #5b2c7e;
-    position: sticky;
-    top: 0;
+.collapsible-header:hover {
+    background-color: var(--primary-hover-color);
 }
 
-.pdb-table .pdb-file-row td {
-    padding-left: 25px;
+.collapsible-header.active {
+    background-color: #ccc;
 }
 
-.pdb-table .delete-btn {
+.collapsible-header .arrow {
+    transition: transform 0.3s;
+    margin-right: 10px;
+}
+
+.collapsible-header.active .arrow {
+    transform: rotate(90deg);
+}
+
+.pdb-file-list {
+    padding: 0 18px;
+    display: none;
+    overflow: hidden;
+    background-color: white;
+    list-style-type: none;
+}
+
+.pdb-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.delete-btn {
     cursor: pointer;
     background: none;
     border: none;
@@ -101,7 +109,7 @@ select:focus {
     transition: color 0.2s;
 }
 
-.pdb-table .delete-btn:hover {
+.delete-btn:hover {
     color: #e74c3c;
 }
 
@@ -112,69 +120,32 @@ select:focus {
     padding: 20px;
 }
 
-/* ADD IN THE FINAL OF FILE */
-.tab {
-    overflow: hidden;
-    border: 1px solid #ccc;
-    background-color: #f1f1f1;
-}
-
-.tab button {
-    background-color: inherit;
-    float: left;
-    border: none;
-    outline: none;
-    cursor: pointer;
-    padding: 14px 16px;
-    transition: 0.3s;
-}
-
-.tab button:hover {
-    background-color: #ddd;
-}
-
-.tab button.active {
-    background-color: #ccc;
-}
-
-.tabcontent {
-    display: none;
-    padding: 6px 12px;
-    border: 1px solid #ccc;
-    border-top: none;
-}
-
-/* ADD IN THE END OF PDB-LOADER */
-
-.dynamic-form {
-    margin-bottom: 25px;
-    padding: 20px;
+/* DELETE MESSAGE */
+.alert-notification {
+    position: fixed;
+    /* Mantém o alerta fixo na tela */
+    top: 20px;
+    right: 20px;
+    background-color: #228B22;
+    /* Verde escuro para sucesso */
+    color: white;
+    padding: 15px 25px;
     border-radius: 8px;
-    background-color: #f9f9f9;
-    border: 1px solid #e0e0e0;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1050;
+    /* Garante que o alerta fique sobre outros elementos */
+    opacity: 0;
+    /* Começa invisível */
+    transform: translateX(100%);
+    /* Começa fora da tela à direita */
+    transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+    /* Animação suave */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.dynamic-form .form-group {
-    display: flex;
-    flex-direction: column;
-}
-
-.dynamic-form label {
-    margin-bottom: 5px;
-    font-weight: bold;
-    color: #333;
-}
-
-.dynamic-form input[type="text"] {
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.form-description {
-    margin-bottom: 20px;
-    font-style: italic;
-    color: #666;
+.alert-notification.show {
+    opacity: 1;
+    /* Torna o alerta visível */
+    transform: translateX(0);
+    /* Move o alerta para a sua posição final */
 }

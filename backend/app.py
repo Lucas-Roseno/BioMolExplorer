@@ -132,6 +132,5 @@ def run_load_chembl():
     # Come back to the original directory
         os.chdir(original_cwd)
 
-
 if __name__ == '__main__':
     app.run(debug=True)

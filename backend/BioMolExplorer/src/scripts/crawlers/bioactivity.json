@@ -4,5 +4,6 @@
     ],
     "molecule_type": "small molecule",
     "max_value_ref": 1000,
-    "standard_units": "nM"
+    "standard_units": "nM",
+    "standard_value__lte": "1000"
 }

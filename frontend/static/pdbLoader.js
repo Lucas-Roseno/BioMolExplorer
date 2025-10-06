@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const responseElement = document.getElementById('response');
     const pdbListContainer = document.getElementById('pdb-list');
 
-    // DOWNLOADED PDBs 
+    // DOWNLOADED jPDBs 
     const loadAndDisplayPdbFiles = async () => {
         try {
             const response = await fetch('/pdb_files');

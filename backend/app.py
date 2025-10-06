@@ -104,7 +104,10 @@ def run_load_chembl():
         os.chdir(biomol_explorer_path)
         
         user_data = request.json
-        target_name = user_data.get('target_name')
+        
+        target_data = user_data.get('target', {})
+        target_name = target_data.get('target_name')
+        
         if not target_name:
             return jsonify({'status': 'error', 'message': 'Target name is required'}), 400
 
@@ -119,6 +122,7 @@ def run_load_chembl():
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'bioactivity.json'), user_data.get('bioactivity', {}))
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), user_data.get('molecules', {}))
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), user_data.get('similarmols', {}))
+
 
         load_chembl(
             target_name=target_name,

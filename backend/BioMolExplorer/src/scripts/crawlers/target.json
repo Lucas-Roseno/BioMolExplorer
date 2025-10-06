@@ -3,5 +3,6 @@
     "type__in": [
         "SINGLE PROTEIN"
     ],
-    "relationship_type": "DIRECT"
+    "relationship_type": "DIRECT",
+    "target_name": "as"
 }

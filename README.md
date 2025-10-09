@@ -18,8 +18,12 @@ conda activate BioMolExplorer
 conda install -c conda-forge flask
 ```
 
-# 4) Run the application
+# 4) Enter directory
 ```
 cd .\backend\
+```
+
+# 5) Run the application
+```
 python app.py
 ```

@@ -3,14 +3,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const chemblForm = document.getElementById('chembl-form');
     const responseElement = document.getElementById('response');
+    const loadingOverlay = document.getElementById('loading-overlay'); // Get the overlay element
 
     chemblForm.addEventListener('submit', async (event) => {
         event.preventDefault();
 
-        responseElement.textContent = 'Searching for files to download...';
-        responseElement.classList.remove('success', 'error');
-        responseElement.classList.add('loading');
-        responseElement.style.display = 'block';
+        responseElement.textContent = '';
+        responseElement.classList.remove('success', 'error', 'loading');
+        responseElement.style.display = 'none';
+
+        
+        loadingOverlay.style.display = 'flex';
 
         const formData = new FormData(event.target);
 
@@ -27,14 +30,14 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             bioactivity: {
                 standard_type__in: standardTypes,
-                standard_value__lte: formData.get('max_value_ref') 
+                standard_value__lte: formData.get('max_value_ref')
             },
             molecules: {
-                natural_product: formData.has('natural_product_molecules') 
+                natural_product: formData.has('natural_product_molecules')
             },
             similarmols: {
                 similarity: formData.get('similarity'),
-                mw_freebase__lte: formData.get('molecule_weight') 
+                mw_freebase__lte: formData.get('molecule_weight')
             }
         };
 
@@ -51,13 +54,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             responseElement.textContent = result.message;
-            responseElement.classList.remove('loading', 'error');
+            responseElement.style.display = 'block';
             responseElement.classList.add('success');
 
         } catch (error) {
             responseElement.textContent = error.message;
-            responseElement.classList.remove('loading', 'success');
+            responseElement.style.display = 'block';
             responseElement.classList.add('error');
+        } finally {
+            loadingOverlay.style.display = 'none';
         }
     });
 });

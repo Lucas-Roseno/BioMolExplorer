@@ -48,6 +48,17 @@ select:focus {
 /* --- PDBs LIST --- */
 .pdb-list-container {
     margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    max-height: 55vh;
+    min-height: 0;
+}
+
+#pdb-list {
+  margin-top: .5rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .collapsible-header {
@@ -90,6 +101,8 @@ select:focus {
     overflow: hidden;
     background-color: white;
     list-style-type: none;
+    max-height: 365px;
+    overflow-y: auto;
 }
 
 .pdb-file-item {
@@ -149,3 +162,80 @@ select:focus {
     transform: translateX(0);
     /* Move o alerta para a sua posição final */
 }
+
+
+.pdb-flex-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.pdb-flex-layout .form-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+}
+
+.pdb-flex-layout .pdb-list-container {
+    flex: 1 1 50%;
+    min-width: 320px;
+    background-color: #fff;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+.pdb-flex-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.pdb-flex-layout .form-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+}
+
+.with-help{ position: relative; }
+
+.info-btn{
+  margin-left: 8px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  color: var(--primary-color);
+  font-weight: 700;
+  line-height: 16px;
+  cursor: help;
+  padding: 0;
+}
+
+.tooltip{
+  position: absolute;
+  top: 100%; left: 0;
+  transform: translateY(8px);
+  width: min(420px, 90vw);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 18px var(--shadow-color);
+  z-index: 20;
+  opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.with-help:hover .tooltip,
+.info-btn:focus + .tooltip,
+.info-btn:focus-visible + .tooltip{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(4px);
+}
+
+.tooltip ul{ margin: 6px 0 0 18px; }
+.tooltip code{ background: #f5f5f5; padding: 0 4px; border-radius: 4px; }

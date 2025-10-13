@@ -29,3 +29,17 @@
     gap: 8px;
     font-weight: normal;
 }
+
+.fieldset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.fieldset-row fieldset {
+  flex: 1;
+  min-width: 280px;
+  box-sizing: border-box;
+}

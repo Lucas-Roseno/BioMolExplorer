@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='chemblLoader.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -34,22 +35,25 @@
             <div class="form-container">
                 <form id="chembl-form">
 
-                    <fieldset>
-                        <legend>Target Search</legend>
-                        <div class="form-group">
-                            <label for="target_name">Target Name</label>
-                            <input type="text" id="target_name" name="target_name"
-                                placeholder="e.g., Acetylcholinesterase" required>
-                        </div>
-                    </fieldset>
+                    <div class="fieldset-row">
+                        <fieldset>
+                            <legend>Target Search</legend>
+                            <div class="form-group">
+                                <label for="target_name">Target Name</label>
+                                <input type="text" id="target_name" name="target_name"
+                                    placeholder="e.g., Acetylcholinesterase" required>
+                            </div>
+                        </fieldset>
 
-                    <fieldset>
-                        <legend>Target Parameters</legend>
-                        <div class="form-group">
-                            <label for="organism">Organism</label>
-                            <input type="text" id="organism" name="organism" value="Homo sapiens">
-                        </div>
-                    </fieldset>
+                        <fieldset>
+                            <legend>Target Parameters</legend>
+                            <div class="form-group">
+                                <label for="organism">Organism</label>
+                                <input type="text" id="organism" name="organism" value="Homo sapiens">
+                            </div>
+                        </fieldset>
+                    </div>
+                    
 
                     <fieldset>
                         <legend>Bioactivity Parameters</legend>
@@ -77,26 +81,26 @@
                         </div>
                     </fieldset>
 
-                    <fieldset>
-                        <legend>Molecules Parameters</legend>
-                        <div class="form-group">
-                            <label for="natural_product_molecules">Natural Product</label>
-                            <input type="checkbox" id="natural_product_molecules" name="natural_product_molecules">
-                        </div>
-                    </fieldset>
+                    <div class="fieldset-row">
+                        <fieldset>
+                            <legend>Molecules Parameters</legend>
+                            <div class="form-group">
+                                <label for="natural_product_molecules">Natural Product</label>
+                                <input type="checkbox" id="natural_product_molecules" name="natural_product_molecules">
+                            </div>
+                        </fieldset>
 
-                    <fieldset>
-                        <legend>Similar Molecules Parameters</legend>
-                        <div class="form-group">
-                            <label for="similarity">Similarity (%)</label>
-                            <input type="number" id="similarity" name="similarity" value="60" min="0" max="100">
-                        </div>
-                        <div class="form-group">
-                            <label for="molecule_weight">Max Molecule Weight (Daltons)</label>
-                            <input type="number" id="molecule_weight" name="molecule_weight" value="500">
-                        </div>
-                    </fieldset>
-
+                        <fieldset>
+                            <legend>Similar Molecules Parameters</legend>
+                            <div class="form-group">
+                                <label for="similarity">Similarity (%)</label>
+                                <input type="number" id="similarity" name="similarity" value="60" min="0" max="100">
+                                <label for="molecule_weight">Max Molecule Weight (Daltons)</label>
+                                <input type="number" id="molecule_weight" name="molecule_weight" value="500">
+                            </div>
+                        </fieldset>
+                    </div>
+                
                     <button type="submit">Run ChEMBL Loader</button>
                 </form>
 
@@ -104,6 +108,24 @@
             </div>
         </div>
     </div>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-left">
+            <strong>BioMolExplorer</strong> · Version <span id="app-version">0.1</span>
+            </div>
+            <nav class="footer-links">
+            <a href="#">About</a>
+            <a href="#">References</a>
+            <a href="#">Contact</a>
+            </nav>
+            <div class="footer-right">
+            Copyright © {{ 2025 }} BioMolExplorer. All Rights Reserved.
+            </div>
+            <script defer src="{{ url_for('static', filename='js/common.js') }}"></script>
+
+        </div>
+    </footer>
 
     <script src="{{ url_for('static', filename='chemblLoader.js') }}"></script>
 </body>

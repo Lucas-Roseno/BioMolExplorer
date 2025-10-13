@@ -1,5 +1,6 @@
 # 0) Activate Conda
 ```
+conda deactivate
 conda activate
 ```
 

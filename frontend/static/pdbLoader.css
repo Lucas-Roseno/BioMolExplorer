@@ -136,31 +136,23 @@ select:focus {
 /* DELETE MESSAGE */
 .alert-notification {
     position: fixed;
-    /* Mantém o alerta fixo na tela */
     top: 20px;
     right: 20px;
     background-color: #228B22;
-    /* Verde escuro para sucesso */
     color: white;
     padding: 15px 25px;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     z-index: 1050;
-    /* Garante que o alerta fique sobre outros elementos */
     opacity: 0;
-    /* Começa invisível */
     transform: translateX(100%);
-    /* Começa fora da tela à direita */
     transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
-    /* Animação suave */
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .alert-notification.show {
     opacity: 1;
-    /* Torna o alerta visível */
     transform: translateX(0);
-    /* Move o alerta para a sua posição final */
 }
 
 

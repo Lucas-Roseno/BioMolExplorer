@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const responseElement = document.getElementById('response');
     const pdbListContainer = document.getElementById('pdb-list');
 
-    // DOWNLOADED jPDBs 
+    // DOWNLOADED PDBs 
     const loadAndDisplayPdbFiles = async () => {
         try {
             const response = await fetch('/pdb_files');
@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (response.ok) {
-                delteMessage(`PDB ${pdbFile} foi excluído.`);
+                delteMessage(`PDB ${pdbFile} was deleted`);
                 const fileList = listItemElement.parentNode;
                 listItemElement.remove();
                 

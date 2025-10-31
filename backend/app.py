@@ -29,6 +29,10 @@ def pdbLoader():
 def chemblLoader():
     return render_template('chemblLoader.html')
 
+@app.route('/about')
+def about():
+    return render_template('about.html')
+
 
 # --- PDB functions ---
 @app.route('/load_pdb', methods=['POST'])

@@ -127,34 +127,79 @@ def run_load_chembl():
     """Updates JSON files with user data and runs the ChEMBL crawler."""
     original_cwd = os.getcwd()
     try:
-        # Lógica revertida para o básico
+        user_data = request.json
+        
+        # --- Robust Validation ---
+        if not user_data:
+            return jsonify({'status': 'error', 'message': 'No data provided in request.'}), 400
+
+        target_data = user_data.get('target', {})
+        bioactivity_data = user_data.get('bioactivity', {})
+        similarmols_data = user_data.get('similarmols', {})
+        molecules_data = user_data.get('molecules', {})
+
+        # 1. Validate Target Name
+        target_name = target_data.get('target_name')
+        print(target_name)
+        if not target_name or not isinstance(target_name, str) or len(target_name.strip()) == 0:
+            print('erro aqui')
+            return jsonify({'status': 'error', 'message': "Target name is required."}), 400
+        
+        target_name = target_name.strip() # Use stripped version
+
+        # 2. Validate Bioactivity Standard Types
+        standard_types = bioactivity_data.get('standard_type__in')
+        if not standard_types or not isinstance(standard_types, list) or len(standard_types) == 0:
+            return jsonify({'status': 'error', 'message': "At least one Standard Type is required."}), 400
+
+        # 3. Validate Bioactivity Value
+        max_value = bioactivity_data.get('standard_value__lte')
+        if max_value is None: # Allow 0
+            return jsonify({'status': 'error', 'message': "Max Value Reference (standard_value__lte) is required."}), 400
+        try:
+            float(max_value)
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': "Max Value Reference (standard_value__lte) must be a number."}), 400
+
+        # 4. Validate Similarity
+        similarity = similarmols_data.get('similarity')
+        if similarity is None: # Allow 0
+            return jsonify({'status': 'error', 'message': "Similarity percentage is required."}), 400
+        try:
+            float(similarity)
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': "Similarity must be a number."}), 400
+
+        # 5. Validate Molecule Weight
+        mw = similarmols_data.get('mw_freebase__lte')
+        if mw is None: # Allow 0
+            return jsonify({'status': 'error', 'message': "Max Molecule Weight (mw_freebase__lte) is required."}), 400
+        try:
+            float(mw)
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': "Max Molecule Weight must be a number."}), 400
+        # --- End Validation ---
+
+        # Temporary change of the correct directory so that the code work
         biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
         os.chdir(biomol_explorer_path)
         
-        user_data = request.json
-        
-        target_data = user_data.get('target', {})
-        target_name = target_data.get('target_name')
-        
-        if not target_name:
-            return jsonify({'status': 'error', 'message': 'Target name is required'}), 400
-
         def update_json_file(file_path, new_data):
             # Check if file exists, if not, create it
             if not os.path.exists(file_path):
                 with open(file_path, 'w') as f:
                     json.dump({}, f, indent=4)
-
+                    
             with open(file_path, 'r') as f:
                 json_data = json.load(f)
             json_data.update(new_data)
             with open(file_path, 'w') as f:
                 json.dump(json_data, f, indent=4)
                 
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'target.json'), user_data.get('target', {}))
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'bioactivity.json'), user_data.get('bioactivity', {}))
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), user_data.get('molecules', {}))
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), user_data.get('similarmols', {}))
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'target.json'), target_data)
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'bioactivity.json'), bioactivity_data)
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), molecules_data)
+        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), similarmols_data)
 
 
         load_chembl(
@@ -164,13 +209,12 @@ def run_load_chembl():
         return jsonify({'status': 'success', 'message': f"ChEMBL data for '{target_name}' loaded successfully!"})
 
     except Exception as e:
-        # Erro básico reportado
+        print(e)
         return jsonify({'status': 'error', 'message': str(e)}), 400
     finally:
     # Come back to the original directory
         os.chdir(original_cwd)
-
-# --- NEW ChEMBL file management routes ---
+        
 
 @app.route('/chembl_files', methods=['GET'])
 def get_chembl_list():

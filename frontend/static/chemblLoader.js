@@ -29,6 +29,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     };
 
+    // --- TRANSLATE ERROR MESSAGE ---
+    const translateErrorMessage = (rawError) => {
+        const errorString = String(rawError).toLowerCase();
+
+        // 1. Target errors
+        if (errorString.includes("target_chembl_id") ||
+            errorString.includes("target not found") ||
+            errorString.includes("could not find target") ||
+            errorString.includes("target name is required")) {
+            return 'Target not found. Please check the name and try again.';
+        }
+
+        // 2. Bioactivity errors
+        if (errorString.includes("standard_type") || errorString.includes("standard_value")) {
+            return 'Invalid Bioactivity. Please select at least one Standard Type and provide a valid Max Value.';
+        }
+
+        // 3. Similarity errors
+        if (errorString.includes("similarity")) {
+            return 'Invalid Similarity. Please provide a valid percentage (0-100).';
+        }
+
+        // 4. Molecule weight errors
+        if (errorString.includes("molecule_weight") || errorString.includes("mw_freebase")) {
+            return 'Invalid Molecule Weight. Please provide a valid number.';
+        }
+
+        // 5. Organism errors
+        if (errorString.includes("organism")) {
+            return 'Invalid Organism. Please check the spelling.';
+        }
+
+        // 6. No checkboxes selected
+        if (errorString.includes("at least one standard type")) {
+            return 'No Standard Type selected. Please check at least one bioactivity type (e.g., Ki, IC50).';
+        }
+
+        // Default/Fallback error for debugging
+        return `A server error occurred: ${rawError}`;
+    };
+
     // --- DELETE ChEMBL FILE ---
     const deleteChemblFile = async (subDirName, target, csvFile, listItemElement) => {
         try {
@@ -293,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const result = await response.json();
             if (!response.ok) {
-                // A mensagem de erro amigável virá do backend (result.message)
+                // Joga o erro para o bloco catch, vindo do backend
                 throw new Error(result.message || 'A server error occurred.');
             }
 
@@ -304,8 +345,18 @@ document.addEventListener('DOMContentLoaded', () => {
             loadAndDisplayChemblFiles(); // Refresh list on success
 
         } catch (error) {
-            // EXIBE O ERRO AMIGÁVEL NO POP-UP
-            showNotification(error.message, 'error');
+            // --- MODIFICATION HERE ---
+            // Traduz a mensagem de erro antes de exibir
+            const friendlyMessage = translateErrorMessage(error.message);
+
+            // Mostra o erro na caixa de resposta
+            responseElement.textContent = friendlyMessage + error;
+            responseElement.style.display = 'block';
+            responseElement.classList.add('error');
+
+            // Mostra o pop-up de erro vermelho
+            showNotification(friendlyMessage, 'error');
+            // --- END MODIFICATION ---
         } finally {
             loadingOverlay.style.display = 'none';
         }

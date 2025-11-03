@@ -4,6 +4,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const pdbForm = document.getElementById('pdb-form');
     const responseElement = document.getElementById('response');
     const pdbListContainer = document.getElementById('pdb-list');
+    const loadingOverlay = document.getElementById('loading-overlay'); // Get the overlay element
+
+
+    // --- SHOW NOTIFICATION (Função do Pop-up) ---
+    const showNotification = (message, type = 'success') => {
+        const alertBox = document.createElement('div');
+        alertBox.className = 'alert-notification'; // Base class
+        alertBox.classList.add(type); // Add type class (success or error)
+        alertBox.textContent = message;
+
+        document.body.appendChild(alertBox);
+
+        // Show animation
+        setTimeout(() => {
+            alertBox.classList.add('show');
+        }, 10);
+
+        // Hide and remove after 3 seconds
+        setTimeout(() => {
+            alertBox.classList.remove('show');
+            alertBox.addEventListener('transitionend', () => {
+                alertBox.remove();
+            });
+        }, 3000);
+    };
+
 
     // DOWNLOADED PDBs 
     const loadAndDisplayPdbFiles = async () => {
@@ -32,27 +58,55 @@ document.addEventListener('DOMContentLoaded', () => {
                 data[target].forEach(pdbFile => {
                     const listItem = document.createElement('li');
                     listItem.className = 'pdb-file-item';
-                    listItem.textContent = pdbFile;
 
+                    // Add file name as text
+                    const fileNameSpan = document.createElement('span');
+                    fileNameSpan.textContent = pdbFile;
+                    listItem.appendChild(fileNameSpan);
+
+                    // Create container for action buttons
+                    const actionBtnsContainer = document.createElement('div');
+                    actionBtnsContainer.className = 'pdb-item-actions';
+
+                    // Download button
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'download-btn';
+                    downloadBtn.innerHTML = '&#11015;'; // Download icon
+                    downloadBtn.title = `Download ${pdbFile}`;
+                    downloadBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        // Trigger download by hitting the new backend endpoint
+                        window.location.href = `/download_pdb/${target}/${pdbFile}`;
+                    };
+
+                    // Delete button
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'delete-btn';
-                    deleteBtn.innerHTML = '&#128465;';
+                    deleteBtn.innerHTML = '&#128465;'; // Trash icon
                     deleteBtn.title = `Delete ${pdbFile}`;
                     deleteBtn.onclick = (e) => {
                         e.stopPropagation();
                         deletePdbFile(target, pdbFile, listItem);
                     };
 
-                    listItem.appendChild(deleteBtn);
+                    // Append buttons to their container
+                    actionBtnsContainer.appendChild(downloadBtn);
+                    actionBtnsContainer.appendChild(deleteBtn);
+
+                    // Append button container to list item
+                    listItem.appendChild(actionBtnsContainer);
                     fileList.appendChild(listItem);
                 });
 
                 header.addEventListener('click', () => {
                     header.classList.toggle('active');
+                    const arrow = header.querySelector('.arrow');
                     if (fileList.style.display === 'block') {
                         fileList.style.display = 'none';
+                        arrow.style.transform = 'rotate(0deg)';
                     } else {
                         fileList.style.display = 'block';
+                        arrow.style.transform = 'rotate(90deg)';
                     }
                 });
 
@@ -67,25 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // DELETE A PDB
-    const delteMessage = (message) => {
-        const alertBox = document.createElement('div');
-        alertBox.className = 'alert-notification';
-        alertBox.textContent = message;
-
-        document.body.appendChild(alertBox);
-
-        setTimeout(() => {
-            alertBox.classList.add('show');
-        }, 10);
-
-        setTimeout(() => {
-            alertBox.classList.remove('show');
-            alertBox.addEventListener('transitionend', () => {
-                alertBox.remove();
-            });
-        }, 3000); 
-    };
-
     const deletePdbFile = async (target, pdbFile, listItemElement) => {
         try {
             const response = await fetch('/delete_pdb', {
@@ -97,31 +132,36 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (response.ok) {
-                delteMessage(`PDB ${pdbFile} was deleted`);
+                // Show red error message
+                showNotification(`PDB ${pdbFile} was deleted`, 'error');
                 const fileList = listItemElement.parentNode;
                 listItemElement.remove();
-                
+
                 if (fileList.children.length === 0) {
                     fileList.parentNode.remove();
                 }
 
             } else {
-                alert(`Error when deleting: ${result.message}`);
+                showNotification(`Error when deleting: ${result.message}`, 'error');
             }
         } catch (error) {
             console.error('Error in delete request:', error);
-            alert('A communication error with the server occurred.');
+            showNotification('A communication error with the server occurred.', 'error');
         }
     };
 
-    // RESULTS MESSAGES
+    // --- FORM SUBMISSION ---
     pdbForm.addEventListener('submit', async (event) => {
         event.preventDefault();
 
-        responseElement.textContent = 'Searching for files to download...';
-        responseElement.classList.remove('success', 'error');
-        responseElement.classList.add('loading');
-        responseElement.style.display = 'block';
+        responseElement.textContent = '';
+        responseElement.classList.remove('success', 'error', 'loading');
+        responseElement.style.display = 'none';
+
+        // Show loading overlay
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'flex';
+        }
 
         const formData = new FormData(event.target);
         const data = {
@@ -149,13 +189,22 @@ document.addEventListener('DOMContentLoaded', () => {
             responseElement.textContent = result.message;
             responseElement.classList.remove('loading', 'error');
             responseElement.classList.add('success');
+            responseElement.style.display = 'block';
 
             loadAndDisplayPdbFiles();
 
         } catch (error) {
+            // Mostrar o erro no pop-up vermelho e na caixa de resposta
             responseElement.textContent = error.message;
             responseElement.classList.remove('loading', 'success');
             responseElement.classList.add('error');
+            responseElement.style.display = 'block';
+            showNotification(error.message, 'error'); // <-- Pop-up de erro vermelho
+        } finally {
+            // Hide loading overlay
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
         }
     });
 

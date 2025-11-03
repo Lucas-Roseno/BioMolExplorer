@@ -54,11 +54,13 @@ select:focus {
     min-height: 0;
 }
 
-#pdb-list {
-  margin-top: .5rem;
-  overflow-y: auto;
-  flex: 1 1 auto;
-  min-height: 0;
+#pdb-list,
+#chembl-list {
+    /* Added chembl-list */
+    margin-top: .5rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .collapsible-header {
@@ -113,12 +115,33 @@ select:focus {
     border-bottom: 1px solid #eee;
 }
 
+.pdb-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.download-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    color: #27ae60;
+    /* Green */
+    transition: color 0.2s;
+}
+
+.download-btn:hover {
+    color: #2ecc71;
+}
+
 .delete-btn {
     cursor: pointer;
     background: none;
     border: none;
     font-size: 1.2em;
     color: #c0392b;
+    /* Red */
     transition: color 0.2s;
 }
 
@@ -133,12 +156,11 @@ select:focus {
     padding: 20px;
 }
 
-/* DELETE MESSAGE */
+/* NOTIFICATION MESSAGE */
 .alert-notification {
     position: fixed;
     top: 20px;
     right: 20px;
-    background-color: #228B22;
     color: white;
     padding: 15px 25px;
     border-radius: 8px;
@@ -150,12 +172,23 @@ select:focus {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+.alert-notification.success {
+    background-color: #228B22;
+    /* Green */
+}
+
+.alert-notification.error {
+    background-color: #c0392b;
+    /* Red */
+}
+
 .alert-notification.show {
     opacity: 1;
     transform: translateX(0);
 }
 
-
+/* --- THIS IS THE FIX --- */
+/* This rule now applies to both pdbLoader and chemblLoader */
 .pdb-flex-layout {
     display: flex;
     gap: 2rem;
@@ -164,7 +197,8 @@ select:focus {
     flex-wrap: wrap;
 }
 
-.pdb-flex-layout .form-container {
+/* This selector was corrected to target the direct child (.content-wrapper) */
+.pdb-flex-layout .content-wrapper {
     flex: 1 1 45%;
     min-width: 320px;
 }
@@ -178,56 +212,58 @@ select:focus {
     box-shadow: 0 4px 15px var(--shadow-color);
 }
 
-.pdb-flex-layout {
-    display: flex;
-    gap: 2rem;
-    align-items: flex-start;
-    justify-content: space-between;
-    flex-wrap: wrap;
+/* --- End of FIX --- */
+
+
+.with-help {
+    position: relative;
 }
 
-.pdb-flex-layout .form-container {
-    flex: 1 1 45%;
-    min-width: 320px;
+.info-btn {
+    margin-left: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: #fff;
+    color: var(--primary-color);
+    font-weight: 700;
+    line-height: 16px;
+    cursor: help;
+    padding: 0;
 }
 
-.with-help{ position: relative; }
-
-.info-btn{
-  margin-left: 8px;
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  border: 1px solid var(--border-color);
-  background: #fff;
-  color: var(--primary-color);
-  font-weight: 700;
-  line-height: 16px;
-  cursor: help;
-  padding: 0;
-}
-
-.tooltip{
-  position: absolute;
-  top: 100%; left: 0;
-  transform: translateY(8px);
-  width: min(420px, 90vw);
-  background: #fff;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 12px 14px;
-  box-shadow: 0 6px 18px var(--shadow-color);
-  z-index: 20;
-  opacity: 0; pointer-events: none;
-  transition: opacity .18s ease, transform .18s ease;
+.tooltip {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    transform: translateY(8px);
+    width: min(420px, 90vw);
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: 0 6px 18px var(--shadow-color);
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
 }
 
 .with-help:hover .tooltip,
-.info-btn:focus + .tooltip,
-.info-btn:focus-visible + .tooltip{
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(4px);
+.info-btn:focus+.tooltip,
+.info-btn:focus-visible+.tooltip {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(4px);
 }
 
-.tooltip ul{ margin: 6px 0 0 18px; }
-.tooltip code{ background: #f5f5f5; padding: 0 4px; border-radius: 4px; }
+.tooltip ul {
+    margin: 6px 0 0 18px;
+}
+
+.tooltip code {
+    background: #f5f5f5;
+    padding: 0 4px;
+    border-radius: 4px;
+}

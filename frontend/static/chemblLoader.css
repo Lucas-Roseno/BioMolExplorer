@@ -1,36 +1,282 @@
-.form-container fieldset {
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 25px;
-    background-color: #f9f9f9;
+/* --- FORM --- */
+#pdb-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
 }
 
-.form-container legend {
-    font-size: 1.4em;
-    font-weight: 600;
-    color: var(--primary-color);
-    padding: 0 10px;
-    margin-left: 10px;
-    border-bottom: 2px solid var(--primary-color);
-    margin-bottom: 15px;
+.form-group {
+    display: flex;
+    flex-direction: column;
 }
 
-.checkbox-group {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 10px;
-    margin-top: 10px;
+.form-group label {
+    margin-bottom: 0.5rem;
+    font-weight: bold;
 }
 
-.checkbox-group label {
+/* INPUTS AND SELECTS STYLES */
+input[type="text"],
+input[type="number"],
+select {
+    padding: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+.form-group input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-right: 0.5rem;
+}
+
+/* --- BioMolExplorer layout --- */
+.form-container {
+    flex: 1;
+}
+
+/* --- PDBs LIST --- */
+.pdb-list-container {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    max-height: 55vh;
+    min-height: 0;
+}
+
+#pdb-list,
+#chembl-list {
+    /* Added chembl-list */
+    margin-top: .5rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.collapsible-header {
+    background-color: #f1f1f1;
+    color: #444;
+    cursor: pointer;
+    padding: 18px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 15px;
+    transition: background-color 0.3s;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.collapsible-header:hover {
+    background-color: var(--primary-hover-color);
+}
+
+.collapsible-header.active {
+    background-color: #ccc;
+}
+
+.collapsible-header .arrow {
+    transition: transform 0.3s;
+    margin-right: 10px;
+}
+
+.collapsible-header.active .arrow {
+    transform: rotate(90deg);
+}
+
+.pdb-file-list {
+    padding: 0 18px;
+    display: none;
+    overflow: hidden;
+    background-color: white;
+    list-style-type: none;
+    max-height: 365px;
+    overflow-y: auto;
+}
+
+.pdb-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.pdb-item-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-weight: normal;
+    gap: 0.5rem;
 }
 
-/* --- LOADING OVERLAY --- */
+.download-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    color: #27ae60;
+    /* Green */
+    transition: color 0.2s;
+}
+
+.download-btn:hover {
+    color: #2ecc71;
+}
+
+.delete-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    color: #c0392b;
+    /* Red */
+    transition: color 0.2s;
+}
+
+.delete-btn:hover {
+    color: #e74c3c;
+}
+
+/* EMPTY LIST */
+.empty-list-message {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+}
+
+/* NOTIFICATION MESSAGE */
+.alert-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    color: white;
+    padding: 15px 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1050;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.alert-notification.success {
+    background-color: #228B22;
+    /* Green */
+}
+
+.alert-notification.error {
+    background-color: #c0392b;
+    /* Red */
+}
+
+.alert-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+
+.pdb-flex-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.pdb-flex-layout .form-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+}
+
+.pdb-flex-layout .pdb-list-container {
+    flex: 1 1 50%;
+    min-width: 320px;
+    background-color: #fff;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+.pdb-flex-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.pdb-flex-layout .form-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+}
+
+.with-help {
+    position: relative;
+}
+
+.info-btn {
+    margin-left: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: #fff;
+    color: var(--primary-color);
+    font-weight: 700;
+    line-height: 16px;
+    cursor: help;
+    padding: 0;
+}
+
+.tooltip {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    transform: translateY(8px);
+    width: min(420px, 90vw);
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: 0 6px 18px var(--shadow-color);
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+}
+
+.with-help:hover .tooltip,
+.info-btn:focus+.tooltip,
+.info-btn:focus-visible+.tooltip {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(4px);
+}
+
+.tooltip ul {
+    margin: 6px 0 0 18px;
+}
+
+.tooltip code {
+    background: #f5f5f5;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+/* Loock-screnn */
 #loading-overlay {
     position: fixed;
     top: 0;
@@ -69,18 +315,4 @@
 #loading-overlay p {
     font-size: 1.2em;
     font-weight: bold;
-}
-
-.fieldset-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.fieldset-row fieldset {
-  flex: 1;
-  min-width: 280px;
-  box-sizing: border-box;
 }

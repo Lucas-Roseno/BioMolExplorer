@@ -32,110 +32,128 @@
         <h2 class="page-title">PDB Loader</h2>
 
         <div class="pdb-flex-layout">
-            <div class="content-wrapper">
-                <div class="form-container">
-                    <form id="pdb-form">
-                        <div class="form-group">
-                            <label for="target">Target:</label>
-                            <input type="text" id="target" name="target" value="Acetylcholinesterase" required>
-                        </div>
 
-                        <div class="form-group with-help">
-                            <label for="pdb_ec">
-                                PDB EC Number:
-                                <button type="button" class="info-btn" aria-label="What is an EC number?">i</button>
-                                <div class="tooltip" role="tooltip">
-                                <strong>EC number</strong> (Enzyme Commission): format <code>X.X.X.X</code>.<br>
-                                <em>Classes</em>:
-                                <ul>
-                                    <li>1 – Oxidoreductases</li>
-                                    <li>2 – Transferases</li>
-                                    <li>3 – Hydrolases (e.g., <code>3.1.1.7</code> acetylcholinesterase)</li>
-                                    <li>4 – Lyases</li>
-                                    <li>5 – Isomerases</li>
-                                    <li>6 – Ligases</li>
-                                    <li>7 – Translocases</li>
-                                </ul>
-                                Examples: <code>1.1.1.1</code>, <code>2.7.11.1</code>, <code>3.1.1.7</code>.<br>
-                                Leave empty for “any EC”.
-                                </div>
-                            </label>
-                            <input type="text" id="pdb_ec" name="pdb_ec" value="3.1.1.7">
+            <div class="form-container">
+                <form id="pdb-form">
+                    <div class="form-group with-help">
+                        <label for="target">Target Name</label>
+                        <input type="text" id="target" name="target" placeholder="e.g., Acetylcholinesterase" required>
+                        <button type="button" class="info-btn" aria-label="More info about Target Name">?</button>
+                        <div class="tooltip">
+                            Specify the target name. Examples:
+                            <ul>
+                                <li><code>Acetylcholinesterase</code></li>
+                                <li><code>EGFR</code></li>
+                            </ul>
+                            This name will be used to create a directory for the downloaded files.
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label for="polymer_entity_type">Polymer Entity Type:</label>
-                            <select id="polymer_entity_type" name="polymer_entity_type">
-                                <option value="PROTEIN">Protein</option>
-                                <option value="DNA">DNA</option>
-                                <option value="NA_HYBRID">NA-hybrid</option>
-                                <option value="RNA">RNA</option>
-                            </select>
+                    <div class="form-group with-help">
+                        <label for="pdb_ec">PDB EC Number</label>
+                        <input type="text" id="pdb_ec" name="pdb_ec" placeholder="e.g., 3.1.1.7" required> <button
+                            type="button" class="info-btn" aria-label="More info about PDB EC Number">?</button>
+                        <div class="tooltip">
+                            Enzyme Commission (EC) number. This field is mandatory.
+                            <ul>
+                                <li>EC 3.1.1.7 for <code>Acetylcholinesterase</code></li>
+                                <li>EC 2.7.10.1 for <code>EGFR</code></li>
+                            </ul>
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label for="experimental_method">Experimental Method:</label>
-                            <select id="experimental_method" name="experimental_method">
-                                <option value="X_RAY_DIFFRACTION">X-RAY DIFFRACTION</option>
-                                <option value="ELECTRON_CRYSTALLOGRAPHY">ELECTRON CRYSTALLOGRAPHY</option>
-                                <option value="ELECTRON_MICROSCOPY">ELECTRON MICROSCOPY</option>
-                                <option value="EPR">EPR</option>
-                                <option value="FIBER_DIFFRACTION">FIBER DIFFRACTION</option>
-                                <option value="FLUORESCENCE_TRANSFER">FLUORESCENCE TRANSFER</option>
-                                <option value="INFRARED_SPECTROSCOPY">INFRARED SPECTROSCOPY</option>
-                                <option value="NEUTRON_DIFFRACTION">NEUTRON DIFFRACTION</option>
-                                <option value="POWDER_DIFFRACTION">POWDER DIFFRACTION</option>
-                                <option value="SOLID_STATE_NMR">SOLID-STATE NMR</option>
-                                <option value="SOLUTION_NMR">SOLUTION NMR</option>
-                                <option value="SOLUTION_SCATTERING">SOLUTION SCATTERING</option>
-                                <option value="THEORETICAL_MODEL">THEORETICAL MODEL</option>
-                            </select>
+                    <div class="form-group with-help">
+                        <label for="polymer_entity_type">Polymer Entity Type</label>
+                        <select id="polymer_entity_type" name="polymer_entity_type">
+                            <option value="PROTEIN">Protein</option>
+                            <option value="DNA">DNA</option>
+                            <option value="RNA">RNA</option>
+                            <option value="DNA_RNA_HYBRID">DNA/RNA Hybrid</option>
+                            <option value="PEPTIDE_NUCLEIC_ACID">Peptide Nucleic Acid</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                        <button type="button" class="info-btn"
+                            aria-label="More info about Polymer Entity Type">?</button>
+                        <div class="tooltip">
+                            Select the type of polymer entity to search for. 'Protein' is the most common selection.
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label for="max_resolution">Max Resolution:</label>
-                            <input type="number" id="max_resolution" name="max_resolution" step="0.1" value="2.0">
+                    <div class="form-group with-help">
+                        <label for="experimental_method">Experimental Method</label>
+                        <select id="experimental_method" name="experimental_method">
+                            <option value="X_RAY_DIFFRACTION">X-Ray Diffraction</option>
+                            <option value="ELECTRON_MICROSCOPY">Electron Microscopy</option>
+                            <option value="SOLUTION_NMR">Solution NMR</option>
+                            <option value="SOLID_STATE_NMR">Solid-State NMR</option>
+                            <option value="NEUTRON_DIFFRACTION">Neutron Diffraction</option>
+                            <option value="ELECTRON_CRYSTALLOGRAPHY">Electron Crystallography</option>
+                            <option value="FIBER_DIFFRACTION">Fiber Diffraction</option>
+                            <option value="EPR">EPR</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                        <button type="button" class="info-btn"
+                            aria-label="More info about Experimental Method">?</button>
+                        <div class="tooltip">
+                            Select the experimental method used to determine the structure. 'X-Ray Diffraction' is
+                            standard.
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label for="must_have_ligand">Must Have Ligand:</label>
+                    <div class="form-group with-help">
+                        <label for="max_resolution">Max Resolution (Å)</label>
+                        <input type="number" id="max_resolution" name="max_resolution" step="0.1" value="2.5" required>
+                        <button type="button" class="info-btn" aria-label="More info about Max Resolution">?</button>
+                        <div class="tooltip">
+                            Specify the maximum resolution in Ångströms (Å). A lower number means higher quality.
+                            <code>2</code> is a common cutoff.
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="must_have_ligand">
                             <input type="checkbox" id="must_have_ligand" name="must_have_ligand" checked>
-                        </div>
+                            Must Have Ligand
+                        </label>
+                    </div>
 
-                        <button type="submit">Download</button>
-                    </form>
+                    <button type="submit">Run PDB Loader</button>
+                </form>
 
-                    <div id="response"></div>
+                <div id="response"></div>
+            </div>
+
+            <div class="pdb-list-container">
+                <h3>Downloaded PDB Files</h3>
+                <div id="pdb-list">
                 </div>
             </div>
-        
-        <div class="pdb-list-container">
-            <h3>Downloaded PDBs</h3>
-            <div id="pdb-list">
-            </div>
-        </div>
-    
+
         </div>
     </div>
 
     <footer class="site-footer">
         <div class="footer-inner">
             <div class="footer-left">
-            <strong>BioMolExplorer</strong> · Version <span id="app-version">0.1</span>
+                <strong>BioMolExplorer</strong> · Version <span id="app-version">0.1</span>
             </div>
             <nav class="footer-links">
-            <a href="#">About</a>
-            <a href="#">References</a>
-            <a href="#">Contact</a>
+                <a href="#">About</a>
+                <a href="#">References</a>
+                <a href="#">Contact</a>
             </nav>
             <div class="footer-right">
-            Copyright © <span id="current-year"></span> BioMolExplorer. All Rights Reserved.
+                Copyright © <span id="current-year"></span> BioMolExplorer. All Rights Reserved.
             </div>
             <script src="{{ url_for('static', filename='common.js') }}"></script>
-
         </div>
     </footer>
-    
+
+    <div id="loading-overlay">
+        <div class="loader"></div>
+        <p>Downloading PDB data, please wait...</p>
+    </div>
+
     <script src="{{ url_for('static', filename='pdbLoader.js') }}"></script>
 </body>
 

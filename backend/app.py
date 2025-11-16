@@ -4,6 +4,12 @@ import os
 import shutil
 import json
 import re
+import io
+import base64
+import pandas as pd
+from rdkit import Chem
+from rdkit.Chem import AllChem, Draw
+import ast
 
 # Michel's files
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer', 'src')))
@@ -300,5 +306,154 @@ def delete_chembl():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# (Mantenha as importações no topo: io, base64, pd, Chem, AllChem, Draw, e agora ast)
+
+@app.route('/get_molecule_data/<sub_dir_name>/<target>/<csv_file>', methods=['GET'])
+def get_molecule_data(sub_dir_name, target, csv_file):
+    """
+    Busca o SMILES de um arquivo CSV de molécula, gera a imagem 2D
+    e uma conformação 3D (MolBlock) para visualização.
+
+    Esta função tenta encontrar o SMILES de três formas:
+    1. Coluna 'canonical_smiles'
+    2. Coluna 'smiles'
+    3. Chave 'canonical_smiles' dentro da coluna 'molecule_structures'
+    """
+    if not all([sub_dir_name, target, csv_file]):
+        return jsonify({'status': 'error', 'message': 'Path components not specified'}), 400
+    if '..' in sub_dir_name or '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
+    if sub_dir_name not in ['molecules', 'similars']:
+            return jsonify({'status': 'error', 'message': 'Invalid directory'}), 400
+
+    file_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target, csv_file)
+
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'File not found'}), 404
+
+    try:
+        # 1. Read the CSV file
+        df = pd.read_csv(file_path)
+        smiles = None
+
+        # --- MODIFICATION START: Robust SMILES finding ---
+
+        # Method 1: Check for a top-level 'canonical_smiles' column
+        if 'canonical_smiles' in df.columns:
+            smiles = df['canonical_smiles'].iloc[0]
+
+        # Method 2: Check for a top-level 'smiles' column
+        elif 'smiles' in df.columns:
+            smiles = df['smiles'].iloc[0]
+
+        # Method 3: Check inside the 'molecule_structures' column
+        elif 'molecule_structures' in df.columns:
+            structures_str = df['molecule_structures'].iloc[0]
+
+            # Check if it's a non-empty string
+            if structures_str and isinstance(structures_str, str):
+                # Safely evaluate the string representation of the dictionary
+                # It looks like: "{'canonical_smiles': '...', 'molfile': '...'}"
+                structures_dict = ast.literal_eval(structures_str)
+
+                if 'canonical_smiles' in structures_dict:
+                    smiles = structures_dict['canonical_smiles']
+
+        # If SMILES is still not found after all methods, raise a clear error
+        if smiles is None:
+            raise ValueError(f"Could not find SMILES in file {csv_file}. Checked 'canonical_smiles', 'smiles', and 'molecule_structures' columns.")
+
+        # Check if the found SMILES is empty or NaN
+        if not smiles or pd.isna(smiles):
+            raise ValueError(f"SMILES string is empty or missing in file {csv_file}")
+
+        # --- MODIFICATION END ---
+
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            # Provide the problematic SMILES in the error
+            raise ValueError(f"Invalid SMILES string in file: {smiles}")
+
+        # 2. Generate 2D Image (Base64)
+        img = Draw.MolToImage(mol, size=(400, 300))
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+        img_base64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+
+        # 3. Generate 3D Structure (MolBlock)
+        mol_3d = Chem.MolFromSmiles(smiles) # Reload for 3D
+        mol_3d = Chem.AddHs(mol_3d)
+        AllChem.EmbedMolecule(mol_3d, AllChem.ETKDG())
+        AllChem.MMFFOptimizeMolecule(mol_3d)
+        mol_block = Chem.MolToMolBlock(mol_3d)
+
+        return jsonify({
+            'status': 'success',
+            'name': csv_file.replace('.csv', ''),
+            'smiles': smiles,
+            'image_base64': img_base64,
+            'mol_block': mol_block
+        })
+
+    except Exception as e:
+        # Send the specific error message to the frontend
+        return jsonify({'status': 'error', 'message': str(e)}), 500   
+    
+@app.route('/get_pdb_content/<target>/<pdb_file>', methods=['GET'])
+def get_pdb_content(target, pdb_file):
+    """Envia o conteúdo de um arquivo PDB como texto plano."""
+    if not target or not pdb_file:
+        return jsonify({'status': 'error', 'message': 'Target or PDB file not specified'}), 400
+    if '..' in target or '..' in pdb_file:
+        return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, pdb_file)
+    
+    try:
+        if os.path.exists(file_path):
+            # Envia o arquivo como texto, não como anexo
+            return send_file(file_path, mimetype='text/plain')
+        else:
+            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/get_target_pdb/<target_name>', methods=['GET'])
+def get_target_pdb(target_name):
+    """
+    Encontra o primeiro arquivo PDB disponível para um determinado alvo
+    e envia seu conteúdo como texto.
+    """
+    if not target_name:
+        return jsonify({'status': 'error', 'message': 'Target name not specified'}), 400
+    if '..' in target_name:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    # Use PDB_BASE_PATH which should be '.../datasets/PDB'
+    target_dir = os.path.join(PDB_BASE_PATH, target_name)
+    
+    if not os.path.isdir(target_dir):
+        return jsonify({'status': 'error', 'message': f"PDB directory for target '{target_name}' not found"}), 404
+
+    try:
+        # Find the first .pdb file in the directory
+        pdb_file = None
+        # Sort the directory content to ensure a consistent file is chosen first
+        for f in sorted(os.listdir(target_dir)): 
+            if f.endswith('.pdb'):
+                pdb_file = f
+                break  # Found one, stop looking
+
+        if pdb_file is None:
+            return jsonify({'status': 'error', 'message': f"No .pdb files found in directory for '{target_name}'"}), 404
+        
+        # We found a file, now send its content
+        file_path = os.path.join(target_dir, pdb_file)
+        return send_file(file_path, mimetype='text/plain')
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 if __name__ == '__main__':
     app.run(debug=True)

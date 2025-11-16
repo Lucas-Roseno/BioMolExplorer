@@ -6,6 +6,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const pdbListContainer = document.getElementById('pdb-list');
     const loadingOverlay = document.getElementById('loading-overlay'); // Get the overlay element
 
+    const modal = document.getElementById('viewer-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const viewer2DContainer = document.getElementById('viewer-2d-container');
+    const viewer3DContainer = document.getElementById('viewer-3d-container');
+    const viewer3DCanvas = document.getElementById('viewer-3d-canvas');
+    let viewer3D = $3Dmol.createViewer(viewer3DCanvas); // Inicializa o viewer 3D
+
+    modalCloseBtn.onclick = () => {
+        modal.style.display = 'none';
+        viewer3D.clear();
+    };
+    window.onclick = (event) => {
+        if (event.target == modal) {
+            modal.style.display = 'none';
+            viewer3D.clear();
+        }
+    };
+
+    // Create a dedicated close function
+    const closeModal = () => {
+        modal.style.display = 'none';
+        viewer3DCanvas.innerHTML = ''; // Clear the canvas DOM element to destroy the old viewer
+    };
+
+    modalCloseBtn.onclick = closeModal;
+    window.onclick = (event) => {
+        if (event.target == modal) {
+            closeModal();
+        }
+    };
+
 
     // --- SHOW NOTIFICATION (Função do Pop-up) ---
     const showNotification = (message, type = 'success') => {
@@ -30,6 +62,73 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     };
 
+    const openPdbModal = async (target, pdbFile) => {
+        loadingOverlay.style.display = 'flex';
+        modalTitle.textContent = pdbFile;
+
+    
+        viewer2DContainer.style.display = 'none';
+        viewer3DContainer.style.display = 'block';
+
+        try {
+            const response = await fetch(`/get_pdb_content/${target}/${pdbFile}`);
+            if (!response.ok) throw new Error('Could not fetch PDB content');
+            const pdbData = await response.text();
+
+            let viewer3D = $3Dmol.createViewer(viewer3DCanvas);
+
+            viewer3D.addModel(pdbData, 'pdb');
+            viewer3D.setStyle({}, { cartoon: { color: 'spectrum' } }); // Estilo "cartoon" para proteínas
+            viewer3D.zoomTo();
+            viewer3D.render();
+
+            modal.style.display = 'flex'; // Mostra o modal
+
+        } catch (error) {
+            console.error('Error opening PDB modal:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    };
+
+    // --- OPEN THE TARGET (ENZYME) MODAL ---
+    const openTargetModal = async (targetName) => {
+        loadingOverlay.style.display = 'flex';
+        modalTitle.textContent = targetName; // Set modal title to the enzyme name
+
+        // PDB files (proteins) do not have a simple 2D image,
+        // so we hide the 2D container and show the 3D one.
+        viewer2DContainer.style.display = 'none';
+        viewer3DContainer.style.display = 'block';
+
+        try {
+            // Fetch from the NEW backend route
+            const response = await fetch(`/get_target_pdb/${targetName}`);
+            if (!response.ok) {
+                // Try to parse error message from backend
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Could not fetch target PDB content');
+            }
+            const pdbData = await response.text();
+
+            // Create a NEW viewer instance every time
+            let viewer3D = $3Dmol.createViewer(viewer3DCanvas);
+
+            viewer3D.addModel(pdbData, 'pdb');
+            viewer3D.setStyle({}, { cartoon: { color: 'spectrum' } });
+            viewer3D.zoomTo();
+            viewer3D.render();
+
+            modal.style.display = 'flex'; // Show modal
+
+        } catch (error) {
+            console.error('Error opening target modal:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    };
 
     // DOWNLOADED PDBs 
     const loadAndDisplayPdbFiles = async () => {
@@ -44,17 +143,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // We use your original 'for...in' loop
             for (const target in data) {
                 const collapsibleContainer = document.createElement('div');
                 collapsibleContainer.className = 'collapsible-container';
 
+                // --- MODIFICATION IS HERE ---
+
+                // 1. We keep your <button> as the header
                 const header = document.createElement('button');
                 header.className = 'collapsible-header';
-                header.innerHTML = `<span class="arrow">&#9654;</span> ${target}`;
+
+                // 2. Create the arrow span (for collapsing)
+                const arrowSpan = document.createElement('span');
+                arrowSpan.className = 'arrow';
+                arrowSpan.innerHTML = '&#9654;';
+
+                // 3. Create a NEW span just for the target name
+                const targetNameSpan = document.createElement('span');
+                targetNameSpan.textContent = ` ${target}`; // Add a space before the name
+                targetNameSpan.className = 'clickable-filename'; // Reuse your clickable style
+                targetNameSpan.title = `Clique para ver o modelo 3D representativo para ${target}`;
+
+                // 4. Add the click listener FOR THE MODAL only to the NAME span
+                targetNameSpan.onclick = (e) => {
+                    // This stops the click from also triggering the button's collapse listener
+                    e.stopPropagation();
+
+                    // This calls the new function (make sure you added openTargetModal to your file)
+                    openTargetModal(target);
+                };
+
+                // 5. Add both spans to the header button
+                header.appendChild(arrowSpan);
+                header.appendChild(targetNameSpan);
+
+                // --- END OF MODIFICATION ---
+
 
                 const fileList = document.createElement('ul');
                 fileList.className = 'pdb-file-list';
 
+                // This is your original code for the files, which is correct
                 data[target].forEach(pdbFile => {
                     const listItem = document.createElement('li');
                     listItem.className = 'pdb-file-item';
@@ -62,6 +192,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Add file name as text
                     const fileNameSpan = document.createElement('span');
                     fileNameSpan.textContent = pdbFile;
+                    fileNameSpan.className = 'clickable-filename'; // Adiciona a classe CSS
+                    fileNameSpan.onclick = (e) => { // Adiciona o evento de clique
+                        e.stopPropagation();
+                        openPdbModal(target, pdbFile);
+                    };
                     listItem.appendChild(fileNameSpan);
 
                     // Create container for action buttons
@@ -98,6 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     fileList.appendChild(listItem);
                 });
 
+                // This is your original collapse listener. It's perfect.
+                // It listens for clicks on the whole <button>
                 header.addEventListener('click', () => {
                     header.classList.toggle('active');
                     const arrow = header.querySelector('.arrow');

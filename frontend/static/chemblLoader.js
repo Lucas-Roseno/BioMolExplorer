@@ -5,6 +5,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const responseElement = document.getElementById('response');
     const loadingOverlay = document.getElementById('loading-overlay');
     const chemblListContainer = document.getElementById('chembl-list');
+    
+    // --- MODAL VIEWER ELEMENTS ---
+    const modal = document.getElementById('viewer-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const viewer2DContainer = document.getElementById('viewer-2d-container');
+    const viewer3DContainer = document.getElementById('viewer-3d-container');
+    const viewer2DImage = document.getElementById('viewer-2d-image');
+    const viewer3DCanvas = document.getElementById('viewer-3d-canvas');
+    let viewer3D = $3Dmol.createViewer(viewer3DCanvas); // Inicializa o viewer 3D
+
+    modalCloseBtn.onclick = () => {
+        modal.style.display = 'none';
+        viewer3D.clear();
+    };
+    window.onclick = (event) => {
+        if (event.target == modal) {
+            modal.style.display = 'none';
+            viewer3D.clear();
+        }
+    };
+
+    // Create a dedicated close function
+    const closeModal = () => {
+        modal.style.display = 'none';
+        viewer3DCanvas.innerHTML = ''; // Clear the canvas DOM element to destroy the old viewer
+    };
+
+    modalCloseBtn.onclick = closeModal;
+    window.onclick = (event) => {
+        if (event.target == modal) {
+            closeModal();
+        }
+    };
 
     // --- SHOW NOTIFICATION (Copied from pdbLoader.js) ---
     const showNotification = (message, type = 'success') => {
@@ -70,6 +104,74 @@ document.addEventListener('DOMContentLoaded', () => {
         return `A server error occurred: ${rawError}`;
     };
 
+    const openMoleculeModal = async (subdir, target, csvFile) => {
+        loadingOverlay.style.display = 'flex';
+        modalTitle.textContent = csvFile.replace('.csv', '');
+
+        // Mostra ambos os containers 2D e 3D
+        viewer2DContainer.style.display = 'block';
+        viewer3DContainer.style.display = 'block';
+
+        try {
+            const response = await fetch(`/get_molecule_data/${subdir}/${target}/${csvFile}`);
+            const data = await response.json();
+            if (data.status === 'error') throw new Error(data.message);
+
+            // 1. Carrega a imagem 2D
+            viewer2DImage.src = 'data:image/png;base64,' + data.image_base64;
+
+            // Create a NEW viewer instance every time the modal opens
+            let viewer3D = $3Dmol.createViewer(viewer3DCanvas);
+
+            viewer3D.addModel(data.mol_block, 'mol');
+            viewer3D.setStyle({}, { stick: {} }); // Estilo "stick" para moléculas
+            viewer3D.zoomTo();
+            viewer3D.render();
+
+            modal.style.display = 'flex'; // Mostra o modal
+
+        } catch (error) {
+            console.error('Error opening molecule modal:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    };
+
+    // --- OPEN THE TARGET (ENZYME) MODAL ---
+    const openTargetModal = async (targetName) => {
+        // ... (COLE A FUNÇÃO INTEIRA AQUI) ...
+        loadingOverlay.style.display = 'flex';
+        modalTitle.textContent = targetName;
+
+        viewer2DContainer.style.display = 'none';
+        viewer3DContainer.style.display = 'block';
+
+        try {
+            const response = await fetch(`/get_target_pdb/${targetName}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Could not fetch target PDB content');
+            }
+            const pdbData = await response.text();
+
+            let viewer3D = $3Dmol.createViewer(viewer3DCanvas);
+
+            viewer3D.addModel(pdbData, 'pdb');
+            viewer3D.setStyle({}, { cartoon: { color: 'spectrum' } });
+            viewer3D.zoomTo();
+            viewer3D.render();
+
+            modal.style.display = 'flex';
+
+        } catch (error) {
+            console.error('Error opening target modal:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            loadingOverlay.style.display = 'none';
+        }
+    };
+
     // --- DELETE ChEMBL FILE ---
     const deleteChemblFile = async (subDirName, target, csvFile, listItemElement) => {
         try {
@@ -120,7 +222,12 @@ document.addEventListener('DOMContentLoaded', () => {
         listItem.className = 'pdb-file-item'; // Re-use style
 
         const fileNameSpan = document.createElement('span');
-        fileNameSpan.textContent = fileName;
+        fileNameSpan.textContent = fileName.replace('.csv', ''); // Remove .csv
+        fileNameSpan.className = 'clickable-filename'; // Adiciona a classe
+        fileNameSpan.onclick = (e) => { // Adiciona o clique
+            e.stopPropagation();
+            openMoleculeModal(subDirName, target, fileName);
+        };
         listItem.appendChild(fileNameSpan);
 
         const actionBtnsContainer = document.createElement('div');
@@ -251,7 +358,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Target Header (e.g., Acetylcholinesterase)
                 const targetHeader = document.createElement('button');
                 targetHeader.className = 'collapsible-header active'; // Start active/open
-                targetHeader.innerHTML = `<span class="arrow" style="transform: rotate(90deg);">&#9654;</span> ${targetName}`;
+
+                // --- MODIFICATION START ---
+                // We build the header with separate spans to control clicks
+
+                // 1. Create the arrow span
+                const arrowSpan = document.createElement('span');
+                arrowSpan.className = 'arrow'; // Class for the collapse handler to find
+                arrowSpan.style.transform = 'rotate(90deg)';
+                arrowSpan.innerHTML = '&#9654;';
+
+                // 2. Create the clickable target name span
+                const targetNameSpan = document.createElement('span');
+                targetNameSpan.className = 'clickable-filename target-name-span'; // Add a new class to check
+                targetNameSpan.textContent = ` ${targetName}`; // Add space before name
+                targetNameSpan.title = `Clique para ver o modelo 3D representativo para ${targetName}`;
+
+                // 3. Append both spans to the header button
+                targetHeader.appendChild(arrowSpan);
+                targetHeader.appendChild(targetNameSpan);
+
+                // --- MODIFICATION END ---
+
 
                 // Container for categories (Molecules, Similars)
                 const categoriesListDiv = document.createElement('div');
@@ -259,24 +387,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 categoriesListDiv.style.display = 'block'; // Start open
                 categoriesListDiv.style.paddingLeft = '10px'; // Indent nested lists
 
-                // Toggle logic for Target Header
-                targetHeader.onclick = () => {
-                    targetHeader.classList.toggle('active');
-                    const arrow = targetHeader.querySelector('.arrow');
-                    if (categoriesListDiv.style.display === 'block') {
-                        categoriesListDiv.style.display = 'none';
-                        arrow.style.transform = 'rotate(0deg)';
+                // --- MODIFICATION START ---
+                // Replace the simple .onclick with a more robust .addEventListener
+                // This handler now checks WHAT was clicked
+                targetHeader.addEventListener('click', (e) => {
+
+                    // Check if the click was ON THE NAME SPAN
+                    if (e.target.classList.contains('target-name-span')) {
+                        // Click was on the name, open the modal
+                        // We do NOT toggle the collapse state
+                        openTargetModal(targetName);
+
                     } else {
-                        categoriesListDiv.style.display = 'block';
-                        arrow.style.transform = 'rotate(90deg)';
+                        // Click was on the arrow or button padding, toggle collapse
+                        targetHeader.classList.toggle('active');
+                        const arrow = targetHeader.querySelector('.arrow');
+                        if (categoriesListDiv.style.display === 'block') {
+                            categoriesListDiv.style.display = 'none';
+                            arrow.style.transform = 'rotate(0deg)';
+                        } else {
+                            categoriesListDiv.style.display = 'block';
+                            arrow.style.transform = 'rotate(90deg)';
+                        }
                     }
-                };
+                });
+                // --- MODIFICATION END ---
 
                 targetCollapsibleContainer.appendChild(targetHeader);
                 targetCollapsibleContainer.appendChild(categoriesListDiv);
                 chemblListContainer.appendChild(targetCollapsibleContainer);
 
                 // Level 2: Create Molecules and Similars sections inside
+                // (Your original code here is correct)
                 createCategorySubSection('Molecules', targetName, targetData.molecules, categoriesListDiv);
                 createCategorySubSection('Similars', targetName, targetData.similars, categoriesListDiv);
             }
@@ -286,7 +428,6 @@ document.addEventListener('DOMContentLoaded', () => {
             chemblListContainer.innerHTML = '<p class="empty-list-message">Error loading files.</p>';
         }
     };
-
 
     // --- FORM SUBMISSION ---
     chemblForm.addEventListener('submit', async (event) => {

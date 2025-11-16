@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='pdbLoader.css') }}">
     <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
+    <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
 </head>
 
@@ -148,6 +149,26 @@
             <script src="{{ url_for('static', filename='common.js') }}"></script>
         </div>
     </footer>
+
+    <div id="viewer-modal" class="modal-overlay">
+        <div class="modal-content">
+            <span class="modal-close" id="modal-close-btn">&times;</span>
+            <h3 id="modal-title">Structure Viewer</h3>
+            <div class="modal-body">
+                <div id="viewer-2d-container" class="viewer-container">
+                    <h4>2D Structure</h4>
+                    <img id="viewer-2d-image" src="" alt="2D Structure">
+                </div>
+                <div id="viewer-3d-container" class="viewer-container">
+                    <h4>3D Structure</h4>
+                    <div id="viewer-3d-canvas"
+                        style="width: 100%; height: 400px; position: relative; border: 1px solid var(--border-color);">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <div id="loading-overlay">
         <div class="loader"></div>

@@ -218,7 +218,7 @@ select:focus {
     flex-wrap: wrap;
 }
 
-.pdb-flex-layout .form-container {
+.pdb-flex-layout .content-wrapper {
     flex: 1 1 45%;
     min-width: 320px;
 }

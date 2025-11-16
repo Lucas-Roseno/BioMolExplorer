@@ -126,7 +126,9 @@
 
             <div class="pdb-list-container">
                 <h3>Downloaded PDB Files</h3>
-                <div id="pdb-list">
+                <div class="list-scroll">
+                    <div id="pdb-list">
+                </div>
                 </div>
             </div>
 
@@ -139,7 +141,7 @@
                 <strong>BioMolExplorer</strong> · Version <span id="app-version">0.1</span>
             </div>
             <nav class="footer-links">
-                <a href="#">About</a>
+                <a href="{{ url_for('about') }}">About</a>
                 <a href="#">References</a>
                 <a href="#">Contact</a>
             </nav>

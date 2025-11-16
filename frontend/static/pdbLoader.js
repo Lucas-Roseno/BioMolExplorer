@@ -130,6 +130,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // HELPER - fecha todas as pastas abertas de pdb
+    function closeAllGroups(container) {
+    // Remove "active" from all headers and reset arrow rotation
+    container.querySelectorAll('.collapsible-header').forEach(h => {
+        h.classList.remove('active');
+        const arrow = h.querySelector('.arrow');
+        if (arrow) {
+            arrow.style.transform = 'rotate(0deg)'; // arrow pointing right/closed
+        }
+    });
+
+    // Hide all file lists
+    container.querySelectorAll('.pdb-file-list').forEach(ul => {
+        ul.style.display = 'none';
+    });
+}
+
+
     // DOWNLOADED PDBs 
     const loadAndDisplayPdbFiles = async () => {
         try {
@@ -258,14 +276,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 // This is your original collapse listener. It's perfect.
                 // It listens for clicks on the whole <button>
                 header.addEventListener('click', () => {
-                    header.classList.toggle('active');
+                    const alreadyOpen = header.classList.contains('active');
+
+                    closeAllGroups(pdbListContainer);
+
+                    if (alreadyOpen) {
+                        return;
+                    }
+
+                    // Abre só esse
+                    header.classList.add('active');
+                    fileList.style.display = 'block';
+
                     const arrow = header.querySelector('.arrow');
-                    if (fileList.style.display === 'block') {
-                        fileList.style.display = 'none';
-                        arrow.style.transform = 'rotate(0deg)';
-                    } else {
-                        fileList.style.display = 'block';
-                        arrow.style.transform = 'rotate(90deg)';
+                    if (arrow) {
+                        arrow.style.transform = 'rotate(90deg)'; // arrow pointing down/open
                     }
                 });
 

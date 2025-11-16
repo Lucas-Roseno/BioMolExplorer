@@ -50,8 +50,6 @@ select:focus {
     margin-top: 2rem;
     display: flex;
     flex-direction: column;
-    max-height: 55vh;
-    min-height: 0;
 }
 
 #pdb-list,
@@ -190,15 +188,31 @@ select:focus {
 /* --- THIS IS THE FIX --- */
 /* This rule now applies to both pdbLoader and chemblLoader */
 .pdb-flex-layout {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) minmax(420px, 1fr);
     gap: 2rem;
-    align-items: flex-start;
+    align-items: stretch;
     justify-content: space-between;
     flex-wrap: wrap;
 }
 
+.content-wrapper,
+.form-container,
+.pdb-list-container{
+  display: flex;
+  flex-direction: column;
+}
+
+.pdb-list-container h3{
+  position: sticky;
+  top: 0;
+  background: #fff;
+  padding-bottom: .5rem;
+  z-index: 1;
+}
+
 /* This selector was corrected to target the direct child (.content-wrapper) */
-.pdb-flex-layout .content-wrapper {
+.pdb-flex-layout .content-wrapper .form-container {
     flex: 1 1 45%;
     min-width: 320px;
 }
@@ -271,3 +285,33 @@ select:focus {
 .collapsible-header .download-all-btn {
     margin-left: auto !important;
 }
+
+
+.pdb-flex-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.pdb-flex-layout .form-container,
+.pdb-flex-layout .pdb-list-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+}
+
+.pdb-flex-layout .pdb-list-container {
+    background-color: #fff;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+.list-scroll{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.with-help{ position: relative; }

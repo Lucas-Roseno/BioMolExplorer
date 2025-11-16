@@ -10,6 +10,7 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 import ast
+import zipfile
 
 # Michel's files
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer', 'src')))
@@ -102,6 +103,43 @@ def download_pdb(target, pdb_file):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/download_pdb_zip/<target>', methods=['GET'])
+def download_pdb_zip(target):
+    """Compress all PDB files for a given target into a ZIP and send it for download."""
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
+
+    # Basic security check
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    target_dir = os.path.join(PDB_BASE_PATH, target)
+
+    if not os.path.isdir(target_dir):
+        return jsonify({'status': 'error', 'message': 'Target folder not found'}), 404
+
+    try:
+        # Create ZIP in memory (no temp file on disk)
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for filename in os.listdir(target_dir):
+                file_path = os.path.join(target_dir, filename)
+                if os.path.isfile(file_path) and filename.endswith('.pdb'):
+                    # Name of the file inside the ZIP
+                    zf.write(file_path, arcname=filename)
+
+        zip_buffer.seek(0)
+
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'{target}.zip'
+        )
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/delete_pdb', methods=['POST'])
 def delete_pdb():
     data = request.json
@@ -125,6 +163,31 @@ def delete_pdb():
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/delete_pdb_target', methods=['POST'])
+def delete_pdb_target():
+    """Deletes an entire target folder (all PDBs for that target)."""
+    data = request.json
+    target = data.get('target')
+
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
+
+    # Basic security check
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    target_dir_path = os.path.join(PDB_BASE_PATH, target)
+
+    try:
+        if os.path.isdir(target_dir_path):
+            shutil.rmtree(target_dir_path)
+            return jsonify({'status': 'success', 'message': f'Target folder "{target}" deleted successfully'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Target folder not found'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 
 # ---CHEMBL functions ---
@@ -276,6 +339,45 @@ def download_chembl(sub_dir_name, target, csv_file):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/download_chembl_zip/<target>', methods=['GET'])
+def download_chembl_zip(target):
+    """Compress all ChEMBL CSVs for a given target (molecules + similars) into a ZIP."""
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
+
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    sub_dirs = ['molecules', 'similars']
+    zip_buffer = io.BytesIO()
+
+    try:
+        files_added = 0
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for sub_dir in sub_dirs:
+                target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir, target)
+                if os.path.isdir(target_dir):
+                    for filename in os.listdir(target_dir):
+                        if filename.endswith('.csv'):
+                            file_path = os.path.join(target_dir, filename)
+                            arcname = f'{sub_dir}/{filename}'
+                            zf.write(file_path, arcname=arcname)
+                            files_added += 1
+
+        if files_added == 0:
+            return jsonify({'status': 'error', 'message': 'No CSV files found for this target'}), 404
+
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'{target}_chembl.zip'
+        )
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/delete_chembl', methods=['POST'])
 def delete_chembl():
     """Deletes a specific ChEMBL CSV file."""
@@ -304,6 +406,36 @@ def delete_chembl():
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/delete_chembl_target', methods=['POST'])
+def delete_chembl_target():
+    """Deletes all ChEMBL data (molecules + similars) for a given target."""
+    data = request.json
+    target = data.get('target')
+
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
+
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    sub_dirs = ['molecules', 'similars']
+    removed_any = False
+
+    try:
+        for sub_dir in sub_dirs:
+            target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir, target)
+            if os.path.isdir(target_dir):
+                shutil.rmtree(target_dir)
+                removed_any = True
+
+        if not removed_any:
+            return jsonify({'status': 'error', 'message': 'No folders found for this target'}), 404
+
+        return jsonify({'status': 'success', 'message': f'All ChEMBL data for "{target}" deleted successfully'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 
 # (Mantenha as importações no topo: io, base64, pd, Chem, AllChem, Draw, e agora ast)

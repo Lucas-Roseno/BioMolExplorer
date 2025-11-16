@@ -216,6 +216,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // DELETE ALL ChEMBL FILES FOR A TARGET (molecules + similars)
+    const deleteChemblTarget = async (target, targetContainerElement) => {
+        try {
+            const response = await fetch('/delete_chembl_target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showNotification(`All ChEMBL files for "${target}" were deleted`, 'error');
+
+                // Remove the whole target block from the UI
+                targetContainerElement.remove();
+
+                // If there are no more targets, show empty message
+                if (chemblListContainer.children.length === 0) {
+                    chemblListContainer.innerHTML =
+                        '<p class="empty-list-message">No ChEMBL files downloaded yet.</p>';
+                }
+            } else {
+                showNotification(`Error when deleting target: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error in delete target request:', error);
+            showNotification('A communication error occurred.', 'error');
+        }
+    };
+
     // --- Helper function to create file list items (li) ---
     const createFileItem = (subDirName, target, fileName, fileListElement) => {
         const listItem = document.createElement('li');
@@ -374,9 +405,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 targetNameSpan.textContent = ` ${targetName}`; // Add space before name
                 targetNameSpan.title = `Clique para ver o modelo 3D representativo para ${targetName}`;
 
+                // Download-all ZIP button (right side)
+                const downloadAllBtn = document.createElement('button');
+                downloadAllBtn.className = 'download-btn download-all-btn';
+                downloadAllBtn.innerHTML = '&#11015;';
+                downloadAllBtn.title = `Download all ChEMBL files for ${targetName} as ZIP`;
+                downloadAllBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    window.location.href = `/download_chembl_zip/${encodeURIComponent(targetName)}`;
+                };
+
+                // Delete-all button (right side)
+                const deleteAllBtn = document.createElement('button');
+                deleteAllBtn.className = 'delete-btn delete-all-btn';
+                deleteAllBtn.innerHTML = '&#128465;';
+                deleteAllBtn.title = `Delete all ChEMBL files for ${targetName}`;
+                deleteAllBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteChemblTarget(targetName, targetCollapsibleContainer);
+                };
+
                 // 3. Append both spans to the header button
                 targetHeader.appendChild(arrowSpan);
                 targetHeader.appendChild(targetNameSpan);
+                targetHeader.appendChild(downloadAllBtn);
+                targetHeader.appendChild(deleteAllBtn);
 
                 // --- MODIFICATION END ---
 

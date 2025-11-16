@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const targetNameSpan = document.createElement('span');
                 targetNameSpan.textContent = ` ${target}`; // Add a space before the name
                 targetNameSpan.className = 'clickable-filename'; // Reuse your clickable style
-                targetNameSpan.title = `Clique para ver o modelo 3D representativo para ${target}`;
+                targetNameSpan.title = `Click to view a representative 3D model for ${target}`;
 
                 // 4. Add the click listener FOR THE MODAL only to the NAME span
                 targetNameSpan.onclick = (e) => {
@@ -174,10 +174,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     openTargetModal(target);
                 };
 
+                // Download-all ZIP button (right side)
+                const downloadAllBtn = document.createElement('button');
+                downloadAllBtn.className = 'download-btn download-all-btn';
+                downloadAllBtn.innerHTML = '&#11015;';
+                downloadAllBtn.title = `Download all PDBs for ${target} as ZIP`;
+                downloadAllBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    window.location.href = `/download_pdb_zip/${encodeURIComponent(target)}`;
+                };
+                
+                // Delete-all button (delete entire target folder)
+                const deleteAllBtn = document.createElement('button');
+                deleteAllBtn.className = 'delete-btn delete-all-btn';
+                deleteAllBtn.innerHTML = '&#128465;';
+                deleteAllBtn.title = `Delete all PDBs for ${target}`;
+                deleteAllBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deletePdbTarget(target, collapsibleContainer);
+                };
+
                 // 5. Add both spans to the header button
                 header.appendChild(arrowSpan);
                 header.appendChild(targetNameSpan);
-
+                header.appendChild(downloadAllBtn);
+                header.appendChild(deleteAllBtn);
+                
                 // --- END OF MODIFICATION ---
 
 
@@ -286,6 +308,38 @@ document.addEventListener('DOMContentLoaded', () => {
             showNotification('A communication error with the server occurred.', 'error');
         }
     };
+
+    // DELETE AN ENTIRE TARGET FOLDER (all PDBs for that target)
+    const deletePdbTarget = async (target, containerElement) => {
+        try {
+            const response = await fetch('/delete_pdb_target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Show red notification (same style as deleting a file)
+                showNotification(`All PDBs for "${target}" were deleted`, 'error');
+
+                // Remove the entire collapsible container from the UI
+                containerElement.remove();
+
+                // If list is now empty, show "No PDBs downloaded yet."
+                if (!pdbListContainer.hasChildNodes()) {
+                    pdbListContainer.innerHTML = '<p class="empty-list-message">No PDBs downloaded yet.</p>';
+                }
+            } else {
+                showNotification(`Error when deleting target: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error in delete target request:', error);
+            showNotification('A communication error with the server occurred.', 'error');
+        }
+    };
+
 
     // --- FORM SUBMISSION ---
     pdbForm.addEventListener('submit', async (event) => {

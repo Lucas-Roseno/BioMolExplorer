@@ -267,3 +267,7 @@ select:focus {
     padding: 0 4px;
     border-radius: 4px;
 }
+
+.collapsible-header .download-all-btn {
+    margin-left: auto !important;
+}

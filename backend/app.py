@@ -10,11 +10,10 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 import ast
-import zipfile
 
 # Michel's files
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer', 'src')))
-from wrappers.crawlers import load_pdb, load_chembl
+from wrappers.crawlers import load_pdb, load_chembl, load_zinc
 from crawlers.complex import PolymerEntityType, ExperimentalMethod
 
 # PATHs
@@ -23,6 +22,7 @@ app = Flask(__name__, template_folder='../frontend', static_folder='../frontend/
 PDB_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'PDB')
 CHEMBL_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL')
 JSON_CRAWLERS_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'src', 'scripts', 'crawlers')
+ZINC_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ZINC')
 
 # --- Page routes ---
 @app.route('/')
@@ -36,6 +36,10 @@ def pdbLoader():
 @app.route('/chemblLoader')
 def chemblLoader():
     return render_template('chemblLoader.html')
+
+@app.route('/zincLoader')
+def zincLoader():
+    return render_template('zincLoader.html')
 
 @app.route('/about')
 def about():
@@ -103,43 +107,6 @@ def download_pdb(target, pdb_file):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/download_pdb_zip/<target>', methods=['GET'])
-def download_pdb_zip(target):
-    """Compress all PDB files for a given target into a ZIP and send it for download."""
-    if not target:
-        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
-
-    # Basic security check
-    if '..' in target:
-        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
-
-    target_dir = os.path.join(PDB_BASE_PATH, target)
-
-    if not os.path.isdir(target_dir):
-        return jsonify({'status': 'error', 'message': 'Target folder not found'}), 404
-
-    try:
-        # Create ZIP in memory (no temp file on disk)
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for filename in os.listdir(target_dir):
-                file_path = os.path.join(target_dir, filename)
-                if os.path.isfile(file_path) and filename.endswith('.pdb'):
-                    # Name of the file inside the ZIP
-                    zf.write(file_path, arcname=filename)
-
-        zip_buffer.seek(0)
-
-        return send_file(
-            zip_buffer,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name=f'{target}.zip'
-        )
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
 @app.route('/delete_pdb', methods=['POST'])
 def delete_pdb():
     data = request.json
@@ -163,31 +130,6 @@ def delete_pdb():
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/delete_pdb_target', methods=['POST'])
-def delete_pdb_target():
-    """Deletes an entire target folder (all PDBs for that target)."""
-    data = request.json
-    target = data.get('target')
-
-    if not target:
-        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
-
-    # Basic security check
-    if '..' in target:
-        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
-
-    target_dir_path = os.path.join(PDB_BASE_PATH, target)
-
-    try:
-        if os.path.isdir(target_dir_path):
-            shutil.rmtree(target_dir_path)
-            return jsonify({'status': 'success', 'message': f'Target folder "{target}" deleted successfully'})
-        else:
-            return jsonify({'status': 'error', 'message': 'Target folder not found'}), 404
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
 
 
 # ---CHEMBL functions ---
@@ -339,45 +281,6 @@ def download_chembl(sub_dir_name, target, csv_file):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/download_chembl_zip/<target>', methods=['GET'])
-def download_chembl_zip(target):
-    """Compress all ChEMBL CSVs for a given target (molecules + similars) into a ZIP."""
-    if not target:
-        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
-
-    if '..' in target:
-        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
-
-    sub_dirs = ['molecules', 'similars']
-    zip_buffer = io.BytesIO()
-
-    try:
-        files_added = 0
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for sub_dir in sub_dirs:
-                target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir, target)
-                if os.path.isdir(target_dir):
-                    for filename in os.listdir(target_dir):
-                        if filename.endswith('.csv'):
-                            file_path = os.path.join(target_dir, filename)
-                            arcname = f'{sub_dir}/{filename}'
-                            zf.write(file_path, arcname=arcname)
-                            files_added += 1
-
-        if files_added == 0:
-            return jsonify({'status': 'error', 'message': 'No CSV files found for this target'}), 404
-
-        zip_buffer.seek(0)
-        return send_file(
-            zip_buffer,
-            mimetype='application/zip',
-            as_attachment=True,
-            download_name=f'{target}_chembl.zip'
-        )
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
 @app.route('/delete_chembl', methods=['POST'])
 def delete_chembl():
     """Deletes a specific ChEMBL CSV file."""
@@ -406,40 +309,123 @@ def delete_chembl():
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 
-@app.route('/delete_chembl_target', methods=['POST'])
-def delete_chembl_target():
-    """Deletes all ChEMBL data (molecules + similars) for a given target."""
-    data = request.json
-    target = data.get('target')
+# --- ZINC Functions ---
 
-    if not target:
-        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
-
-    if '..' in target:
-        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
-
-    sub_dirs = ['molecules', 'similars']
-    removed_any = False
-
+@app.route('/load_zinc', methods=['POST'])
+def run_load_zinc():
+    """
+    Handles the upload of the .uri file and execution of the ZINC crawler.
+    """
     try:
-        for sub_dir in sub_dirs:
-            target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir, target)
-            if os.path.isdir(target_dir):
-                shutil.rmtree(target_dir)
-                removed_any = True
+        # 1. Check if file is present
+        if 'zinc_file' not in request.files:
+            return jsonify({'status': 'error', 'message': 'No file part'}), 400
+        
+        file = request.files['zinc_file']
+        
+        if file.filename == '':
+            return jsonify({'status': 'error', 'message': 'No selected file'}), 400
 
-        if not removed_any:
-            return jsonify({'status': 'error', 'message': 'No folders found for this target'}), 404
+        if not file.filename.endswith('.uri'):
+             return jsonify({'status': 'error', 'message': 'File must be a .uri file'}), 400
 
-        return jsonify({'status': 'success', 'message': f'All ChEMBL data for "{target}" deleted successfully'})
+        # 2. Determine Parameters based on Filename
+        filename_original = file.filename
+        # Verifica se contém os termos (case-sensitive, conforme seu código original)
+        has_2d = '2D' in filename_original
+        has_3d = '3D' in filename_original
+        
+        if not has_2d and not has_3d:
+            return jsonify({'status': 'error', 'message': 'Invalid Model: Filename must contain "2D" or "3D"'}), 400
+
+        # 3. Get Verbose Parameter
+        verbose_flag = request.form.get('verbose') == 'on'
+
+        # 4. Save the uploaded file AND set the flags strictly based on what we actully save
+        if not os.path.exists(ZINC_BASE_PATH):
+            os.makedirs(ZINC_BASE_PATH)
+            
+        # CORREÇÃO: Determinar qual arquivo será salvo e ajustar as flags para load_zinc
+        # Se tiver "2D", priorizamos salvar como zinc_2d.uri e processar APENAS 2D.
+        # Caso contrário (tem "3D" e não "2D"), salvamos como zinc_3d.uri e processamos APENAS 3D.
+        
+        if has_2d:
+            target_filename = "zinc_2d.uri"
+            run_2d = True
+            run_3d = False
+        else:
+            target_filename = "zinc_3d.uri"
+            run_2d = False
+            run_3d = True
+        
+        file_path = os.path.join(ZINC_BASE_PATH, target_filename)
+        
+        # Remove arquivo antigo se existir para evitar conflitos
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        file.save(file_path)
+
+        # 5. Run the Crawler Wrapper
+        original_cwd = os.getcwd()
+        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        os.chdir(biomol_explorer_path)
+
+        try:
+            # CORREÇÃO: Passar run_2d e run_3d em vez das variáveis baseadas apenas no nome
+            load_zinc(
+                base_output_path='/datasets', 
+                zinc2d=run_2d,  # Usa a flag que corresponde ao arquivo salvo
+                zinc3d=run_3d,  # Usa a flag que corresponde ao arquivo salvo
+                verbose=verbose_flag
+            )
+        finally:
+            os.chdir(original_cwd)
+
+        return jsonify({'status': 'success', 'message': f'ZINC processing for {filename_original} completed.'})
+
+    except Exception as e:
+        print(f"ZINC Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+
+@app.route('/zinc_files', methods=['GET'])
+def get_zinc_list():
+    """Lists files in the ZINC dataset directory."""
+    files = []
+    if os.path.exists(ZINC_BASE_PATH):
+        # List URI files and potentially downloaded results
+        for f in sorted(os.listdir(ZINC_BASE_PATH)):
+            # Filter out system files if necessary, or just list everything
+            if not f.startswith('.'): 
+                files.append(f)
+    return jsonify(files)
+
+@app.route('/delete_zinc', methods=['POST'])
+def delete_zinc():
+    data = request.json
+    filename = data.get('filename')
+
+    if not filename:
+        return jsonify({'status': 'error', 'message': 'Filename not specified'}), 400
+
+    file_path = os.path.join(ZINC_BASE_PATH, filename)
+    
+    try:
+        if os.path.exists(file_path):
+            if os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+            else:
+                os.remove(file_path)
+            return jsonify({'status': 'success', 'message': f'{filename} deleted successfully'})
+        else:
+            return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-
-
-# (Mantenha as importações no topo: io, base64, pd, Chem, AllChem, Draw, e agora ast)
-
+# -----2D and 3D visualization----
 @app.route('/get_molecule_data/<sub_dir_name>/<target>/<csv_file>', methods=['GET'])
 def get_molecule_data(sub_dir_name, target, csv_file):
     """

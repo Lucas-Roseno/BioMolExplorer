@@ -1,0 +1,33 @@
+input[type="file"] {
+    padding: 0.5rem;
+    background-color: white;
+    cursor: pointer;
+}
+
+.checkbox-label {
+    cursor: pointer;
+    font-weight: normal !important;
+}
+
+/* Reutilizando estilos de lista para garantir consistência */
+#zinc-list {
+    margin-top: .5rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.zinc-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid #eee;
+    background-color: white;
+}
+
+.zinc-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}

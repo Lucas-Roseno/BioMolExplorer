@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioMolExplorer - ZINC Loader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='chemblLoader.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='zincLoader.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <header class="main-header">
+        <div class="header-content">
+            <a href="{{ url_for('index') }}" class="header-link-home">
+                <img src="{{ url_for('static', filename='img/icon.png') }}" alt="BioMolExplorer Logo"
+                    class="header-logo">
+            </a>
+            <h1>BioMolExplorer</h1>
+        </div>
+        <nav class="main-nav">
+            <ul>
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('pdbLoader') }}">PDB Loader</a></li>
+                <li><a href="{{ url_for('chemblLoader') }}">ChEMBL Loader</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2 class="page-title">ZINC Loader</h2>
+
+        <div class="pdb-flex-layout">
+
+            <div class="content-wrapper">
+                <div class="form-container">
+                    <form id="zinc-form" enctype="multipart/form-data">
+                        <fieldset>
+                            <legend>ZINC URI Upload</legend>
+
+                            <div class="form-group with-help">
+                                <label for="zinc_file">Upload URI File (.uri)</label>
+                                <div style="display: flex; align-items: center;">
+                                    <input type="file" id="zinc_file" name="zinc_file" accept=".uri" required>
+
+                                    <button type="button" class="info-btn" aria-label="Help">?</button>
+                                    <div class="tooltip">
+                                        <p><strong>ZINC URI File:</strong></p>
+                                        <p>This file contains a list of molecules to download. You can generate this
+                                            file at the ZINC15/20 website.</p>
+                                        <p>The filename <strong>MUST</strong> contain "2D" or "3D" to specify the
+                                            format.</p>
+                                        <p><a href="https://zinc.docking.org/" target="_blank"
+                                                style="color: var(--primary-color);">Visit ZINC Database</a></p>
+                                    </div>
+                                </div>
+                                <small style="color: #666; margin-top: 5px;">Ex: ZINC-downloader-2D-smi.uri</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="checkbox-label"
+                                    style="display: flex; align-items: center; margin-top: 15px;">
+                                    <input type="checkbox" id="verbose" name="verbose">
+                                    <span style="margin-left: 8px;">Verbose Mode (Detailed logs)</span>
+                                </label>
+                            </div>
+
+                        </fieldset>
+
+                        <button type="submit">Upload & Download</button>
+                    </form>
+
+                    <div id="response"></div>
+                </div>
+            </div>
+
+            <div class="pdb-list-container">
+                <h3>Downloaded ZINC Files</h3>
+                <div id="zinc-list">
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-left">
+                <strong>BioMolExplorer</strong> · Version <span id="app-version">0.1</span>
+            </div>
+            <nav class="footer-links">
+                <a href="{{ url_for('about') }}">About</a>
+                <a href="#">References</a>
+                <a href="#">Contact</a>
+            </nav>
+            <div class="footer-right">
+                Copyright © <span id="current-year"></span> BioMolExplorer. All Rights Reserved.
+            </div>
+            <script src="{{ url_for('static', filename='common.js') }}"></script>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='zincLoader.js') }}"></script>
+
+    <div id="loading-overlay">
+        <div class="loader"></div>
+        <p>Downloading ZINC data based on URI file, please wait...</p>
+    </div>
+
+</body>
+
+</html>

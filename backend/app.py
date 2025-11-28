@@ -377,6 +377,83 @@ def download_chembl_zip(target):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/download_chembl_category_zip/<sub_dir_name>/<target>', methods=['GET'])
+def download_chembl_category_zip(sub_dir_name, target):
+    """
+    Compresses all CSVs of ONE category (molecules OR similar)
+    to a specific target and sent as a ZIP file.
+    """
+    if not sub_dir_name or not target:
+        return jsonify({'status': 'error', 'message': 'Category or target not specified'}), 400
+
+    if '..' in sub_dir_name or '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    if sub_dir_name not in ['molecules', 'similars']:
+        return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
+
+    target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
+
+    if not os.path.isdir(target_dir):
+        return jsonify({'status': 'error', 'message': 'Category folder not found for this target'}), 404
+
+    zip_buffer = io.BytesIO()
+
+    try:
+        files_added = 0
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for filename in os.listdir(target_dir):
+                if filename.endswith('.csv'):
+                    file_path = os.path.join(target_dir, filename)
+                    zf.write(file_path, arcname=filename)
+                    files_added += 1
+
+        if files_added == 0:
+            return jsonify({'status': 'error', 'message': 'No CSV files found in this category'}), 404
+
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f'{target}_{sub_dir_name}.zip'
+        )
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/delete_chembl_category', methods=['POST'])
+def delete_chembl_category():
+    """
+    Delete all CSVs of ONE category (molecules OR similar)
+    for a specific target.
+    """
+    data = request.json or {}
+    sub_dir_name = data.get('sub_dir_name')
+    target = data.get('target')
+
+    if not sub_dir_name or not target:
+        return jsonify({'status': 'error', 'message': 'Category or target not specified'}), 400
+
+    if '..' in sub_dir_name or '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    if sub_dir_name not in ['molecules', 'similars']:
+        return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
+
+    target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
+
+    try:
+        if os.path.isdir(target_dir):
+            shutil.rmtree(target_dir)
+            return jsonify({
+                'status': 'success',
+                'message': f'All "{sub_dir_name}" data for "{target}" deleted successfully'
+            })
+        else:
+            return jsonify({'status': 'error', 'message': 'Category folder not found for this target'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 
 @app.route('/delete_chembl', methods=['POST'])
 def delete_chembl():

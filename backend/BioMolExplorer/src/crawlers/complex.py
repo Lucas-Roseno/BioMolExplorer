@@ -198,4 +198,4 @@ class PDBComplex():
             print('[INFO]: ATTENTION: If you need to use DOCK6 functions, you must resolve the non-existent loops in the complexes before!')
 
         else:
-            raise ValueError('A combinação de filtros não é válida. Nenhum PDB encontrado. Por favor, ajuste e tente novamente.')
+            raise ValueError('The filter combination is invalid. No PDB found. Please adjust and try again.')

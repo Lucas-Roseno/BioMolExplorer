@@ -393,15 +393,50 @@ def run_load_zinc():
 
 @app.route('/zinc_files', methods=['GET'])
 def get_zinc_list():
-    """Lists files in the ZINC dataset directory."""
+    """Lists files in the ZINC dataset directory. Deprecated or used as fallback."""
     files = []
     if os.path.exists(ZINC_BASE_PATH):
-        # List URI files and potentially downloaded results
         for f in sorted(os.listdir(ZINC_BASE_PATH)):
-            # Filter out system files if necessary, or just list everything
             if not f.startswith('.'): 
                 files.append(f)
     return jsonify(files)
+
+@app.route('/get_zinc_content', methods=['GET'])
+def get_zinc_content():
+    """
+    Returns the content of the generated ZINC CSV files (ZINC2D.csv, ZINC3D.csv)
+    to be displayed in a table.
+    """
+    data = []
+    if os.path.exists(ZINC_BASE_PATH):
+        for f in sorted(os.listdir(ZINC_BASE_PATH)):
+            if f.endswith('.csv'): # Process only CSVs
+                file_path = os.path.join(ZINC_BASE_PATH, f)
+                try:
+                    df = pd.read_csv(file_path)
+                    # Check if required columns exist
+                    if not df.empty and 'smile' in df.columns and 'zinc_id' in df.columns:
+                        # Convert to list of dicts. You can limit rows here if needed (e.g., .head(100))
+                        records = df[['zinc_id', 'smile']].fillna('').to_dict(orient='records')
+                        data.append({'filename': f, 'content': records})
+                except Exception as e:
+                    print(f"Error reading {f}: {e}")
+    return jsonify(data)
+
+@app.route('/download_zinc/<filename>', methods=['GET'])
+def download_zinc_file(filename):
+    """Downloads a specific file from the ZINC datasets folder."""
+    if not filename:
+         return jsonify({'status': 'error', 'message': 'Filename not specified'}), 400
+    
+    # Basic security to ensure we stay in ZINC folder
+    if '..' in filename or '/' in filename:
+         return jsonify({'status': 'error', 'message': 'Invalid filename'}), 400
+         
+    file_path = os.path.join(ZINC_BASE_PATH, filename)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    return jsonify({'status': 'error', 'message': 'File not found'}), 404
 
 @app.route('/delete_zinc', methods=['POST'])
 def delete_zinc():

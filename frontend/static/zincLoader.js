@@ -22,55 +22,134 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     };
 
-    // --- LOAD AND DISPLAY ZINC FILES ---
+    // --- LOAD AND DISPLAY ZINC DATA (TABLE) ---
     const loadAndDisplayZincFiles = async () => {
         try {
-            const response = await fetch('/zinc_files');
+            // Updated endpoint to get parsed CSV content
+            const response = await fetch('/get_zinc_content');
             const data = await response.json();
 
             zincListContainer.innerHTML = '';
 
             if (!data || data.length === 0) {
-                zincListContainer.innerHTML = '<p class="empty-list-message">No ZINC files found.</p>';
+                zincListContainer.innerHTML = '<p class="empty-list-message">No ZINC CSV data found.</p>';
                 return;
             }
 
-            const ul = document.createElement('ul');
-            ul.className = 'pdb-file-list';
-            ul.style.display = 'block';
-            ul.style.maxHeight = 'none';
+            // Iterate over each file data (e.g., ZINC2D.csv, ZINC3D.csv)
+            data.forEach(fileObj => {
+                const fileName = fileObj.filename;
+                const rows = fileObj.content;
 
-            data.forEach(fileName => {
-                const listItem = document.createElement('li');
-                listItem.className = 'zinc-file-item';
+                // 1. Container for this file's data
+                const fileSection = document.createElement('div');
+                fileSection.style.marginBottom = '30px';
+                fileSection.style.border = '1px solid #ddd';
+                fileSection.style.borderRadius = '8px';
+                fileSection.style.overflow = 'hidden';
 
-                const nameSpan = document.createElement('span');
-                nameSpan.textContent = fileName;
-                listItem.appendChild(nameSpan);
+                // 2. Header with Filename + Buttons
+                const headerDiv = document.createElement('div');
+                headerDiv.style.backgroundColor = '#f7f7f7';
+                headerDiv.style.padding = '10px 15px';
+                headerDiv.style.borderBottom = '1px solid #ddd';
+                headerDiv.style.display = 'flex';
+                headerDiv.style.justifyContent = 'space-between';
+                headerDiv.style.alignItems = 'center';
+
+                const title = document.createElement('h4');
+                title.textContent = fileName;
+                title.style.margin = '0';
+                title.style.color = '#333';
 
                 const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'zinc-item-actions';
+                actionsDiv.className = 'zinc-item-actions'; // Reusing existing class for layout
 
-                // Delete Button
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-btn';
-                deleteBtn.innerHTML = '&#128465;';
-                deleteBtn.title = `Delete ${fileName}`;
-                deleteBtn.onclick = async () => {
-                    deleteZincFile(fileName);
-                    loadAndDisplayZincFiles();
+                // Download Button (for the whole CSV)
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'download-btn';
+                downloadBtn.innerHTML = '&#11015;'; // Download icon
+                downloadBtn.title = `Download ${fileName}`;
+                downloadBtn.style.marginRight = '8px';
+                downloadBtn.onclick = () => {
+                    window.location.href = `/download_zinc/${fileName}`;
                 };
 
+                // Delete Button (for the whole CSV)
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.innerHTML = '&#128465;'; // Trash icon
+                deleteBtn.title = `Delete ${fileName}`;
+                deleteBtn.onclick = async () => {
+                    if (confirm(`Are you sure you want to delete ${fileName}?`)) {
+                        await deleteZincFile(fileName);
+                        loadAndDisplayZincFiles(); // Reload
+                    }
+                };
+
+                actionsDiv.appendChild(downloadBtn);
                 actionsDiv.appendChild(deleteBtn);
-                listItem.appendChild(actionsDiv);
-                ul.appendChild(listItem);
+                headerDiv.appendChild(title);
+                headerDiv.appendChild(actionsDiv);
+
+                // 3. Table for Data
+                const tableContainer = document.createElement('div');
+                tableContainer.style.overflowX = 'auto'; // Handle wide tables
+
+                const table = document.createElement('table');
+                table.style.width = '100%';
+                table.style.borderCollapse = 'collapse';
+                table.style.fontSize = '0.9rem';
+
+                // Table Head
+                const thead = document.createElement('thead');
+                const trHead = document.createElement('tr');
+                trHead.style.backgroundColor = '#eaeaea';
+
+                ['ZINC ID', 'SMILE'].forEach(text => {
+                    const th = document.createElement('th');
+                    th.textContent = text;
+                    th.style.padding = '8px';
+                    th.style.textAlign = 'left';
+                    th.style.borderBottom = '2px solid #ddd';
+                    trHead.appendChild(th);
+                });
+                thead.appendChild(trHead);
+                table.appendChild(thead);
+
+                // Table Body
+                const tbody = document.createElement('tbody');
+                rows.forEach((row, index) => {
+                    const tr = document.createElement('tr');
+                    tr.style.backgroundColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+
+                    const tdId = document.createElement('td');
+                    tdId.textContent = row.zinc_id;
+                    tdId.style.padding = '8px';
+                    tdId.style.borderBottom = '1px solid #eee';
+
+                    const tdSmile = document.createElement('td');
+                    tdSmile.textContent = row.smile;
+                    tdSmile.style.padding = '8px';
+                    tdSmile.style.borderBottom = '1px solid #eee';
+                    tdSmile.style.fontFamily = 'monospace'; // Better for smiles
+
+                    tr.appendChild(tdId);
+                    tr.appendChild(tdSmile);
+                    tbody.appendChild(tr);
+                });
+                table.appendChild(tbody);
+                tableContainer.appendChild(table);
+
+                // Combine elements
+                fileSection.appendChild(headerDiv);
+                fileSection.appendChild(tableContainer);
+                zincListContainer.appendChild(fileSection);
             });
 
-            zincListContainer.appendChild(ul);
-
         } catch (error) {
-            console.error('Error loading ZINC list:', error);
-            zincListContainer.innerHTML = '<p class="empty-list-message">Error loading files.</p>';
+            console.error('Error loading ZINC data:', error);
+            zincListContainer.innerHTML = '<p class="empty-list-message">Error loading data.</p>';
         }
     };
 
@@ -144,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             responseElement.classList.add('success');
             showNotification('ZINC processing completed successfully!', 'success');
 
-            // Limpar formulário e recarregar lista
+            // Limpar formulário e recarregar lista (agora como tabelas)
             zincForm.reset();
             loadAndDisplayZincFiles();
 

@@ -24,8 +24,8 @@
         <nav class="main-nav">
             <ul>
                 <li><a href="{{ url_for('index') }}">Home</a></li>
-                <li><a href="{{ url_for('pdbLoader') }}">PDB Loader</a></li>
-                <li><a href="{{ url_for('chemblLoader') }}">ChEMBL Loader</a></li>
+                <li><a href="{{ url_for('pdbLoader') }}">PDB</a></li>
+                <li><a href="{{ url_for('chemblLoader') }}">ChEMBL</a></li>
             </ul>
         </nav>
     </header>
@@ -70,7 +70,7 @@
 
                         </fieldset>
 
-                        <button type="submit">Upload & Download</button>
+                        <button type="submit">Download</button>
                     </form>
 
                     <div id="response"></div>
@@ -78,7 +78,7 @@
             </div>
 
             <div class="pdb-list-container">
-                <h3>Downloaded ZINC Files</h3>
+                <h3>Downloaded ZINC Data</h3>
                 <div id="zinc-list">
                 </div>
             </div>

@@ -247,6 +247,57 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // DELETE ALL FILES OF ONE CATEGORY (Molecules OR Similars) FOR A TARGET
+    const deleteChemblCategory = async (subDirName, target, categoryContainerElement) => {
+        let result = null;
+
+        try {
+            const response = await fetch('/delete_chembl_category', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sub_dir_name: subDirName, target })
+            });
+
+            try{
+                result = await response.json();
+            } catch(e) {
+                console.warn('Could not parse JSON from /delete_chembl_category', e);
+            }
+
+            if (!response.ok) {
+                const msg = (result && result.message) ? result.message : 'Server error.';
+                showNotification(`Error when deleting category: ${msg}`, 'error');
+                return;
+            }
+        } catch (error) {
+            console.error('Network error in deleteChemblCategory:', error);
+            showNotification('A communication error occurred.', 'error');
+            return;
+        }
+        showNotification(`All "${subDirName}" files for "${target}" were deleted`, 'error');
+
+        // Remove o bloco da categoria (Molecules ou Similars)
+        if (categoryContainerElement && categoryContainerElement.parentNode) {
+            const categoriesListDiv = categoryContainerElement.parentNode;
+            categoriesListDiv.removeChild(categoryContainerElement);
+
+            // Se não sobrou nenhuma categoria dentro desse alvo, remove o container do alvo
+            if (categoriesListDiv.children.length === 0) {
+                const targetContainerElement = categoriesListDiv.parentNode;
+                if (targetContainerElement && targetContainerElement.parentNode) {
+                    targetContainerElement.parentNode.removeChild(targetContainerElement);
+                }
+            }
+        }
+
+        // Se a lista principal ficou vazia, mostra mensagem de lista vazia
+        if (!chemblListContainer.hasChildNodes()) {
+            chemblListContainer.innerHTML =
+                '<p class="empty-list-message">No ChEMBL files downloaded yet.</p>';
+        }
+    };
+
+
     // --- Helper function to create file list items (li) ---
     const createFileItem = (subDirName, target, fileName, fileListElement) => {
         const listItem = document.createElement('li');
@@ -331,6 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const createCategorySubSection = (categoryName, targetName, fileArray, parentElement) => {
         if (!fileArray || fileArray.length === 0) return; // Skip if no files
 
+        const subDirName = categoryName.toLowerCase();  // "molecules" ou "similars"
+
         const categoryContainer = document.createElement('div');
         categoryContainer.className = 'collapsible-container'; // Re-use style
 
@@ -338,9 +391,37 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryHeader.className = 'collapsible-header'; // Re-use style
         categoryHeader.innerHTML = `<span class="arrow">&#9654;</span> ${categoryName}`;
 
+        // delete and download for category (molecules/similars)
+        const headerActions = document.createElement('span');
+        headerActions.className = 'pdb-item-actions';
+
+        const downloadAllBtn = document.createElement('button');
+        downloadAllBtn.className = 'download-btn';
+        downloadAllBtn.innerHTML = '&#11015;';
+        downloadAllBtn.title = `Download all ${categoryName} for ${targetName} as ZIP`;
+        downloadAllBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.location.href =
+                `/download_chembl_category_zip/${subDirName}/${encodeURIComponent(targetName)}`;
+        };
+
+        const deleteAllBtn = document.createElement('button');
+        deleteAllBtn.className = 'delete-btn';
+        deleteAllBtn.innerHTML = '&#128465;';
+        deleteAllBtn.title = `Delete all ${categoryName} for ${targetName}`;
+        deleteAllBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteChemblCategory(subDirName, targetName, categoryContainer);
+        };
+
+        headerActions.appendChild(downloadAllBtn);
+        headerActions.appendChild(deleteAllBtn);
+        categoryHeader.appendChild(headerActions);
+
         const fileList = document.createElement('ul');
-        fileList.className = 'pdb-file-list'; // Re-use style
-        fileList.style.backgroundColor = '#fdfdfd'; // Slightly different bg
+        fileList.className = 'pdb-file-list';
+        fileList.style.backgroundColor = '#fdfdfd';
+        // END of delete and download for category (molecules/similars)
 
         // Populate file list
         fileArray.forEach(fileName => {

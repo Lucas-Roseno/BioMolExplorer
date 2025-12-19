@@ -28,3 +28,14 @@ cd .\backend\
 ```
 python app.py
 ```
+
+---
+
+# 1) Run by Docker
+```
+docker build -t biomolexplorer .
+```
+
+```
+docker run --rm -it -p 5000:5000 biomolexplorer
+```

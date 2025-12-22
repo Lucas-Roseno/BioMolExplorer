@@ -315,3 +315,60 @@ select:focus {
 }
 
 .with-help{ position: relative; }
+
+.alert-notification.warning {
+    background-color: #ff9800;
+    /* Laranja */
+    color: white;
+    border-left: 5px solid #e65100;
+}
+
+#notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    /* Empilha verticalmente */
+    gap: 10px;
+    /* Espaço entre os avisos */
+    max-width: 350px;
+}
+
+.alert-notification {
+    position: fixed;
+    top: 20px;
+    min-width: 250px;
+    padding: 15px;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transform: translateX(20px);
+    transition: all 0.3s ease;
+    /* Cores padrão */
+    background-color: #4CAF50;
+    /* Verde sucesso */
+}
+
+.alert-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.alert-notification.success {
+    background-color: #4CAF50;
+    border-left: 5px solid #2E7D32;
+}
+
+.alert-notification.error {
+    background-color: #f44336;
+    border-left: 5px solid #b71c1c;
+}
+
+.alert-notification.warning {
+    background-color: #ff9800;
+    border-left: 5px solid #e65100;
+}

@@ -149,7 +149,9 @@ def load_pdb(target:str, base_output_path:str, pdb_ec:Optional[str]=None, organi
         if is_valid(value)
     }
     
-    pdb.get_pdb_files(filters=filters)
+    warnings = pdb.get_pdb_files(filters=filters)
+    
+    return warnings
 
 
 

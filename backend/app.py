@@ -57,7 +57,7 @@ def run_load_pdb():
         if 'ExperimentalMethodID' in data and data['ExperimentalMethodID']:
             data['ExperimentalMethodID'] = [ExperimentalMethod[item] for item in data['ExperimentalMethodID'] if item]
         
-        load_pdb(
+        warnings = load_pdb(
             target=data.get('target'),
             base_output_path=os.path.join('BioMolExplorer', 'datasets'),
             pdb_ec=data.get('pdb_ec'),
@@ -66,10 +66,14 @@ def run_load_pdb():
             max_resolution=data.get('max_resolution'),
             must_have_ligand=data.get('must_have_ligand', True)
         )
-        return jsonify({'status': 'success', 'message': f"PDB data for {data.get('target')} loaded successfully"})
+        
+        return jsonify({
+            'status': 'success', 
+            'message': f"PDB data for {data.get('target')} loaded successfully",
+            'warnings': warnings 
+        })
     
     except Exception as e:
-        # Erro básico reportado
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 @app.route('/pdb_files', methods=['GET'])
@@ -131,6 +135,28 @@ def delete_pdb():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/delete_pdb_target', methods=['POST'])
+def delete_pdb_target():
+    data = request.json
+    target = data.get('target')
+
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
+
+    # Verificação básica de segurança
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    target_dir_path = os.path.join(PDB_BASE_PATH, target)
+    
+    try:
+        if os.path.exists(target_dir_path) and os.path.isdir(target_dir_path):
+            shutil.rmtree(target_dir_path) # Remove a pasta inteira e seu conteúdo
+            return jsonify({'status': 'success', 'message': f'Target {target} deleted successfully'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Target directory not found'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ---CHEMBL functions ---
 @app.route('/load_chembl', methods=['POST'])

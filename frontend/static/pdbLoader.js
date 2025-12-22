@@ -407,6 +407,13 @@ document.addEventListener('DOMContentLoaded', () => {
             responseElement.classList.add('success');
             responseElement.style.display = 'block';
 
+            if (result.warnings && result.warnings.length > 0) {
+                result.warnings.forEach(warning => {
+                    // Exibe uma notificação vermelha para cada aviso
+                    showNotification(warning, 'error');
+                });
+            }
+
             loadAndDisplayPdbFiles();
 
         } catch (error) {

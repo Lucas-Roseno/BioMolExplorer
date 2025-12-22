@@ -140,7 +140,7 @@ class PDBComplex():
                 return None
         
         except Exception as e:
-            self.logger.error(f'Error during to perform {filter_params['ec_target']} in get_pdb_ids_with_filters function', exc_info=True)
+            self.logger.error(f"Error during to perform {filter_params.get('ec_target', 'unknown')} in get_pdb_ids_with_filters function", exc_info=True)
     
 
     def __identify_ligands(self, pdb_file):
@@ -168,6 +168,7 @@ class PDBComplex():
     def get_pdb_files(self, filters:dict):
         pdb_crawler = PDBList()
         pdb_codes = self.get_pdb_ids_with_filters(filters)
+        warnings = []
 
         if pdb_codes:
             pdb_crawler.download_pdb_files(pdb_codes, pdir=self.__outputpath, file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
@@ -177,6 +178,15 @@ class PDBComplex():
             codes   = {}
 
             for input, output, idx in zip(datain, dataout, pdb_codes): 
+                
+                # --- CHANGE IN MICHEL`s ORIGINAL CODE: check if the file .ent exists before openning ---
+                if not os.path.exists(input):
+                    msg = f"The file for PDB ID '{idx}' was not found and will be ignored."            
+                    print(f"[WARNING] {msg}")
+                    self.logger.warning(msg)
+                    warnings.append(msg) # Adiciona à lista
+                    continue
+                # -------------------------------------------------------------
 
                 with open(input, 'r') as entrada, open(output, 'w') as saida:
                     for linha in entrada:
@@ -187,7 +197,10 @@ class PDBComplex():
                 tmp = self.__identify_ligands(output) 
                 if tmp != None:
                     codes[idx] = tmp
-                    
+            
+            if not codes:
+                raise ValueError("No PDB file can be downloaded. Check the logs.")
+
             with open(os.path.join(self.__outputpath, 'pdb_codes.csv'), 'w') as fp:
                 fp.write('PDB_CODE,LIGAND,RESNUM,CHAIN,RESOLUTION\n')
                 for code in codes.keys():
@@ -196,6 +209,6 @@ class PDBComplex():
                         fp.write(f'{code},{lig[0]},{lig[1]},{lig[2]},{resolution}\n')
                     
             print('[INFO]: ATTENTION: If you need to use DOCK6 functions, you must resolve the non-existent loops in the complexes before!')
-
+            return warnings # another change here
         else:
             raise ValueError('The filter combination is invalid. No PDB found. Please adjust and try again.')

@@ -36,41 +36,34 @@
         <div class="pdb-flex-layout">
 
             <div class="content-wrapper">
-                <div class="form-container">
+                <div class="form-container compact-container">
                     <form id="zinc-form" enctype="multipart/form-data">
                         <fieldset>
-                            <legend>ZINC URI Upload</legend>
+                            <legend>Upload de Arquivo ZINC (.uri)</legend>
 
-                            <div class="form-group with-help">
-                                <label for="zinc_file">Upload URI File (.uri)</label>
-                                <div style="display: flex; align-items: center;">
+                            <div class="form-group compact-form-group">
+                                <label for="zinc_file">Arquivo URI:</label>
+                                <div class="input-wrapper">
                                     <input type="file" id="zinc_file" name="zinc_file" accept=".uri" required>
-
                                     <button type="button" class="info-btn" aria-label="Help">?</button>
                                     <div class="tooltip">
-                                        <p><strong>ZINC URI File:</strong></p>
-                                        <p>This file contains a list of molecules to download. You can generate this
-                                            file at the ZINC15/20 website.</p>
-                                        <p>The filename <strong>MUST</strong> contain "2D" or "3D" to specify the
-                                            format.</p>
-                                        <p><a href="https://zinc.docking.org/" target="_blank"
-                                                style="color: var(--primary-color);">Visit ZINC Database</a></p>
+                                        <p><strong>Arquivo ZINC URI:</strong> Lista de moléculas para download.</p>
+                                        <p>O nome deve conter "2D" ou "3D".</p>
                                     </div>
                                 </div>
-                                <small style="color: #666; margin-top: 5px;">Ex: ZINC-downloader-2D-smi.uri</small>
                             </div>
 
-                            <div class="form-group">
-                                <label class="checkbox-label"
-                                    style="display: flex; align-items: center; margin-top: 15px;">
+                            <div class="form-group compact-options">
+                                <label class="checkbox-label">
                                     <input type="checkbox" id="verbose" name="verbose">
-                                    <span style="margin-left: 8px;">Verbose Mode (Detailed logs)</span>
+                                    <span>Verbose Mode</span>
                                 </label>
+                                <button type="submit" class="compact-btn">Download</button>
                             </div>
+
+                            <small class="helper-text">Ex: ZINC-downloader-2D-smi.uri</small>
 
                         </fieldset>
-
-                        <button type="submit">Download</button>
                     </form>
 
                     <div id="response"></div>
@@ -78,7 +71,7 @@
             </div>
 
             <div class="pdb-list-container">
-                <h3>Downloaded ZINC Data</h3>
+                <h3>Dados ZINC Processados</h3>
                 <div id="zinc-list">
                 </div>
             </div>
@@ -107,7 +100,7 @@
 
     <div id="loading-overlay">
         <div class="loader"></div>
-        <p>Downloading ZINC data based on URI file, please wait...</p>
+        <p>Baixando e processando dados do ZINC, aguarde...</p>
     </div>
 
 </body>

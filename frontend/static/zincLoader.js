@@ -25,65 +25,53 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- LOAD AND DISPLAY ZINC DATA (TABLE) ---
     const loadAndDisplayZincFiles = async () => {
         try {
-            // Updated endpoint to get parsed CSV content
             const response = await fetch('/get_zinc_content');
             const data = await response.json();
 
             zincListContainer.innerHTML = '';
 
             if (!data || data.length === 0) {
-                zincListContainer.innerHTML = '<p class="empty-list-message">No ZINC CSV data found.</p>';
+                zincListContainer.innerHTML = '<p class="empty-list-message">Nenhum dado ZINC processado encontrado.</p>';
                 return;
             }
 
-            // Iterate over each file data (e.g., ZINC2D.csv, ZINC3D.csv)
+            // Iterate over each file data
             data.forEach(fileObj => {
                 const fileName = fileObj.filename;
-                const rows = fileObj.content;
+                const rows = fileObj.content; // Expecting [{zinc_id: '...', smile: '...'}, ...]
 
-                // 1. Container for this file's data
+                // 1. Container Section
                 const fileSection = document.createElement('div');
-                fileSection.style.marginBottom = '30px';
-                fileSection.style.border = '1px solid #ddd';
-                fileSection.style.borderRadius = '8px';
-                fileSection.style.overflow = 'hidden';
+                fileSection.className = 'zinc-file-section';
 
-                // 2. Header with Filename + Buttons
+                // 2. Header
                 const headerDiv = document.createElement('div');
-                headerDiv.style.backgroundColor = '#f7f7f7';
-                headerDiv.style.padding = '10px 15px';
-                headerDiv.style.borderBottom = '1px solid #ddd';
-                headerDiv.style.display = 'flex';
-                headerDiv.style.justifyContent = 'space-between';
-                headerDiv.style.alignItems = 'center';
+                headerDiv.className = 'zinc-file-header';
 
                 const title = document.createElement('h4');
                 title.textContent = fileName;
-                title.style.margin = '0';
-                title.style.color = '#333';
 
                 const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'zinc-item-actions'; // Reusing existing class for layout
+                actionsDiv.className = 'zinc-item-actions';
 
-                // Download Button (for the whole CSV)
+                // Download Button
                 const downloadBtn = document.createElement('button');
                 downloadBtn.className = 'download-btn';
-                downloadBtn.innerHTML = '&#11015;'; // Download icon
-                downloadBtn.title = `Download ${fileName}`;
-                downloadBtn.style.marginRight = '8px';
+                downloadBtn.innerHTML = '&#11015;';
+                downloadBtn.title = `Baixar CSV: ${fileName}`;
                 downloadBtn.onclick = () => {
                     window.location.href = `/download_zinc/${fileName}`;
                 };
 
-                // Delete Button (for the whole CSV)
+                // Delete Button
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'delete-btn';
-                deleteBtn.innerHTML = '&#128465;'; // Trash icon
-                deleteBtn.title = `Delete ${fileName}`;
+                deleteBtn.innerHTML = '&#128465;';
+                deleteBtn.title = `Excluir: ${fileName}`;
                 deleteBtn.onclick = async () => {
-                    if (confirm(`Are you sure you want to delete ${fileName}?`)) {
+                    if (confirm(`Tem certeza que deseja excluir ${fileName}?`)) {
                         await deleteZincFile(fileName);
-                        loadAndDisplayZincFiles(); // Reload
+                        loadAndDisplayZincFiles();
                     }
                 };
 
@@ -92,52 +80,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 headerDiv.appendChild(title);
                 headerDiv.appendChild(actionsDiv);
 
-                // 3. Table for Data
+                // 3. Table
                 const tableContainer = document.createElement('div');
-                tableContainer.style.overflowX = 'auto'; // Handle wide tables
+                tableContainer.className = 'zinc-table-wrapper';
 
                 const table = document.createElement('table');
-                table.style.width = '100%';
-                table.style.borderCollapse = 'collapse';
-                table.style.fontSize = '0.9rem';
+                table.className = 'zinc-table';
 
                 // Table Head
                 const thead = document.createElement('thead');
                 const trHead = document.createElement('tr');
-                trHead.style.backgroundColor = '#eaeaea';
 
-                ['ZINC ID', 'SMILE'].forEach(text => {
-                    const th = document.createElement('th');
-                    th.textContent = text;
-                    th.style.padding = '8px';
-                    th.style.textAlign = 'left';
-                    th.style.borderBottom = '2px solid #ddd';
-                    trHead.appendChild(th);
-                });
+                const thId = document.createElement('th');
+                thId.textContent = 'ZINC ID';
+                const thSmile = document.createElement('th');
+                thSmile.textContent = 'SMILE'; // Tabela solicitada contendo SMILE
+
+                trHead.appendChild(thId);
+                trHead.appendChild(thSmile);
                 thead.appendChild(trHead);
                 table.appendChild(thead);
 
                 // Table Body
                 const tbody = document.createElement('tbody');
-                rows.forEach((row, index) => {
+
+                // Limit preview rows for performance if needed, or show all
+                rows.forEach((row) => {
                     const tr = document.createElement('tr');
-                    tr.style.backgroundColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
 
                     const tdId = document.createElement('td');
                     tdId.textContent = row.zinc_id;
-                    tdId.style.padding = '8px';
-                    tdId.style.borderBottom = '1px solid #eee';
+                    tdId.className = 'col-zinc-id';
 
                     const tdSmile = document.createElement('td');
                     tdSmile.textContent = row.smile;
-                    tdSmile.style.padding = '8px';
-                    tdSmile.style.borderBottom = '1px solid #eee';
-                    tdSmile.style.fontFamily = 'monospace'; // Better for smiles
+                    tdSmile.className = 'col-smile';
 
                     tr.appendChild(tdId);
                     tr.appendChild(tdSmile);
                     tbody.appendChild(tr);
                 });
+
                 table.appendChild(tbody);
                 tableContainer.appendChild(table);
 
@@ -149,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error('Error loading ZINC data:', error);
-            zincListContainer.innerHTML = '<p class="empty-list-message">Error loading data.</p>';
+            zincListContainer.innerHTML = '<p class="empty-list-message">Erro ao carregar dados.</p>';
         }
     };
 
@@ -161,12 +144,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ filename: fileName })
             });
             if (response.ok) {
-                showNotification(`${fileName} deleted successfully`, 'error');
+                showNotification(`${fileName} excluído`, 'success');
             } else {
-                showNotification('Error deleting file', 'error');
+                showNotification('Erro ao excluir arquivo', 'error');
             }
         } catch (e) {
-            showNotification('Connection error', 'error');
+            showNotification('Erro de conexão', 'error');
         }
     };
 
@@ -182,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = fileInput.files[0];
 
         if (!file) {
-            showNotification("Please select a file.", 'error');
+            showNotification("Por favor selecione um arquivo.", 'error');
             return;
         }
 
@@ -190,9 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const has2D = fileName.includes('2D');
         const has3D = fileName.includes('3D');
 
-        // VALIDAÇÃO DO NOME DO ARQUIVO (Requisito do usuário)
         if (!has2D && !has3D) {
-            const msg = 'Invalid Model: The filename must contain "2D" or "3D".';
+            const msg = 'Modelo Inválido: O nome do arquivo deve conter "2D" ou "3D".';
             responseElement.textContent = msg;
             responseElement.style.display = 'block';
             responseElement.classList.add('error');
@@ -200,31 +182,28 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Preparar FormData para envio
         const formData = new FormData(event.target);
-
-        // Ativar Lockscreen
         loadingOverlay.style.display = 'flex';
 
         try {
             const response = await fetch('/load_zinc', {
                 method: 'POST',
-                body: formData // Envia como multipart/form-data
+                body: formData
             });
 
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.message || 'Server error during ZINC processing.');
+                throw new Error(result.message || 'Erro no servidor durante processamento ZINC.');
             }
 
             responseElement.textContent = result.message;
             responseElement.style.display = 'block';
             responseElement.classList.add('success');
-            showNotification('ZINC processing completed successfully!', 'success');
+            showNotification('Processamento ZINC concluído!', 'success');
 
-            // Limpar formulário e recarregar lista (agora como tabelas)
             zincForm.reset();
+            // A chamada abaixo recarrega a lista e exibe a tabela com ZINC ID e SMILE
             loadAndDisplayZincFiles();
 
         } catch (error) {
@@ -234,11 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
             responseElement.classList.add('error');
             showNotification(error.message, 'error');
         } finally {
-            // Desativar Lockscreen
             loadingOverlay.style.display = 'none';
         }
     });
 
-    // Carregamento inicial
+    // Carga inicial
     loadAndDisplayZincFiles();
 });

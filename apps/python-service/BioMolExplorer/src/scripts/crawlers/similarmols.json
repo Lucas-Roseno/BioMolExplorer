@@ -1,7 +1,7 @@
 {
-    "similarity": "60",
+    "similarity": 95,
     "natural_product": 0,
     "molecule_type": "small molecule",
     "molecule_weight": 500,
-    "mw_freebase__lte": "500"
+    "mw_freebase__lte": 500
 }

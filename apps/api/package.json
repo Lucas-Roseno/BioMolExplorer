@@ -1,0 +1,22 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "ts-node-dev src/server.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.x.x",
+    "multer": "^2.1.0",
+    "undici": "^7.22.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.x.x",
+    "@types/express": "^4.x.x",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^20.x.x",
+    "ts-node-dev": "^2.x.x",
+    "typescript": "^5.x.x"
+  }
+}

@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 /* --- OVERALL   --- */
 :root {
     --primary-color: #47366d;
@@ -400,3 +402,358 @@ button[type="submit"]:hover {
 .clickable-filename:hover {
   color: var(--primary-hover-color);
 }
+
+
+
+/* =======================================================================
+   ESTRUTURA DE BUSCA COMPARTILHADA (PDB, ChEMBL, ZINC)
+   ======================================================================= */
+
+/* --- LAYOUT PRINCIPAL DIVIDIDO --- */
+.pdb-flex-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/* Coluna da Esquerda (Formulário) */
+.pdb-flex-layout .content-wrapper,
+.pdb-flex-layout > .form-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Coluna da Direita (Lista de Arquivos) */
+.pdb-flex-layout .pdb-list-container {
+    flex: 1 1 45%;
+    min-width: 320px;
+    background-color: #fff;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px var(--shadow-color);
+    margin-top: 0;
+    max-height: calc(100vh - 260px);
+    display: flex;
+    flex-direction: column;
+}
+
+.pdb-list-container h3 {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    padding-bottom: 0.5rem;
+    z-index: 1;
+    margin-top: 0;
+    border-bottom: 2px solid #eee;
+}
+
+#pdb-list,
+#chembl-list,
+#zinc-list {
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 0.5rem;
+}
+
+/* --- ESTILOS DOS FORMULÁRIOS --- */
+#pdb-form, #chembl-form, #zinc-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+    padding: 0.8rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+}
+
+.form-group input[type="checkbox"] {
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-right: 0.5rem;
+}
+
+/* Botão de interrogação (?) */
+.with-help {
+    position: relative;
+}
+
+.info-btn {
+    margin-left: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: #fff;
+    color: var(--primary-color);
+    font-weight: 700;
+    line-height: 16px;
+    cursor: help;
+    padding: 0;
+}
+
+.tooltip {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    transform: translateY(8px);
+    width: min(420px, 90vw);
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    box-shadow: 0 6px 18px var(--shadow-color);
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+}
+
+.with-help:hover .tooltip,
+.info-btn:focus + .tooltip,
+.info-btn:focus-visible + .tooltip {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(4px);
+}
+
+.tooltip ul {
+    margin: 6px 0 0 18px;
+}
+
+.tooltip code {
+    background: #f5f5f5;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+/* --- ESTILO DOS ITENS DA LISTA (ACORDEÃO E ARQUIVOS) --- */
+.collapsible-header {
+    background-color: #f1f1f1;
+    color: #444;
+    cursor: pointer;
+    padding: 18px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 15px;
+    transition: background-color 0.3s;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.collapsible-header:hover {
+    background-color: var(--primary-hover-color);
+    color: white;
+}
+
+.collapsible-header.active {
+    background-color: #ccc;
+}
+
+.pdb-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid #eee;
+}
+
+.download-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    color: #27ae60;
+}
+
+.delete-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    color: #c0392b;
+}
+
+/* --- SISTEMA DE NOTIFICAÇÕES (ALERTS) --- */
+#notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 350px;
+}
+
+.alert-notification {
+    min-width: 250px;
+    padding: 15px;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transform: translateX(20px);
+    transition: all 0.3s ease;
+}
+
+.alert-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.alert-notification.success {
+    background-color: #4CAF50;
+    border-left: 5px solid #2E7D32;
+}
+
+.alert-notification.error {
+    background-color: #f44336;
+    border-left: 5px solid #b71c1c;
+}
+
+.alert-notification.warning {
+    background-color: #ff9800;
+    border-left: 5px solid #e65100;
+}
+
+/* =======================================================================
+   RESTAURAÇÃO DO FIELDSET E LEGEND (Substituindo o Reset do Tailwind)
+   ======================================================================= */
+
+fieldset {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 0.5rem;
+    background-color: #fdfdfd;
+}
+
+legend {
+    font-weight: 600;
+    color: var(--primary-color);
+    padding: 0 0.5rem;
+    font-size: 1.1rem;
+}
+
+/* Coloca os fieldsets lado a lado em telas grandes */
+.fieldset-row {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.fieldset-row fieldset {
+    flex: 1 1 calc(50% - 1.5rem);
+    min-width: 280px;
+    margin-bottom: 0;
+}
+
+/* Organiza os checkboxes do ChEMBL (Standard Type) */
+.checkbox-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    font-weight: normal;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+/* =======================================================================
+   ESTILOS RESTAURADOS DO LEGADO (Listas, Ícones e Botões)
+   ======================================================================= */
+.target-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: bold;
+}
+.accordion-icon {
+    font-size: 0.9em;
+    color: #555;
+    width: 15px;
+    text-align: center;
+}
+.pdb-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.95rem;
+}
+.pdb-file-item:last-child {
+    border-bottom: none;
+}
+.file-name {
+    color: #333;
+}
+.file-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ccc; /* Cor da barrinha divisória | */
+}
+.view-2d-btn, .view-3d-btn {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    padding: 0;
+}
+.view-2d-btn:hover, .view-3d-btn:hover {
+    text-decoration: underline;
+}
+.download-btn, .delete-target-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+}
+.download-btn i { color: #27ae60; font-size: 1.1rem; transition: color 0.3s;}
+.download-btn:hover i { color: #1e8449; }
+.delete-target-btn i { color: #c0392b; font-size: 1.1rem; transition: color 0.3s;}
+.delete-target-btn:hover i { color: #922b21; }

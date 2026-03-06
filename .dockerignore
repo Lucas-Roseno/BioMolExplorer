@@ -1,11 +1,5 @@
-venv/
-backend/logs/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.log
+node_modules
+.next
 .git
-.gitignore
-.env
-.env.*
+*.md
+apps/python-service/BioMolExplorer/datasets

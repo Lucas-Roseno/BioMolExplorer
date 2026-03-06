@@ -1,28 +1,34 @@
-# Usa a imagem oficial reduzida do Node 20
+# ==========================================
+# Etapa 1: Build do Next.js
+# ==========================================
 FROM node:20-slim AS builder
 
 WORKDIR /app
+COPY package.json package-lock.json* ./
+COPY apps/web/package.json apps/web/
+COPY apps/api/package.json apps/api/
+
+RUN npm install
+
 COPY . .
 
-# Build Next.js
-RUN npm install
 RUN npm run build --workspace=web
 
 # ==========================================
-# Etapa Final (Produção com Python + Node.js)
+# Etapa 2: Produção (Python + Node.js)
 # ==========================================
 FROM continuumio/miniconda3:latest
 
-# Instala o Node.js no ambiente hibrido
+# Instala o Node.js 20
 RUN apt-get update && \
     apt-get install -y curl && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
-    apt-get clean
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copia dependências Node do builder (apenas essenciais)
+# Copia TODO o projeto do builder (incluindo o .next build e node_modules)
 COPY --from=builder /app /app/
 
 # Configura o ambiente Conda para o Python Service
@@ -32,10 +38,11 @@ RUN conda env create -f apps/python-service/BioMolExplorer/requirements.yml && \
 # Dá permissão ao script de inicialização
 RUN chmod +x init.sh
 
-# Exportando portas da Web (3000), Api (3001) e Backend Python (5000)
-EXPOSE 3000 3001 5000
+# A porta principal do Render (Next.js)
+EXPOSE 3000
 
 ENV PORT=3000
+ENV NODE_ENV=production
 
 # Executa o script que ativa o Conda e roda o projeto
-CMD ["./init.sh"]
+CMD ["bash", "./init.sh"]

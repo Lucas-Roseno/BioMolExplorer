@@ -6,6 +6,9 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "BioMolExplorer",
   description: "Exploração Molecular Avançada",
+  icons: {
+    icon: "/img/icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

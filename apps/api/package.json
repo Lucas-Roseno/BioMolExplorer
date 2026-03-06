@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev src/server.ts"
+    "dev": "ts-node-dev src/server.ts",
+    "start": "npx ts-node src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

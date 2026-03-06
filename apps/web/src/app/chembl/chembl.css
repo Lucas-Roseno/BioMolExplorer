@@ -308,3 +308,111 @@ select:focus {
     font-size: 1.2em;
     font-weight: bold;
 }
+
+/* Chembl Folder Architecture */
+.chembl-arrow {
+    transition: transform 0.3s ease;
+}
+
+.chembl-arrow.open {
+    transform: rotate(90deg);
+}
+
+.chembl-folder-content {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-top: none;
+    padding: 0;
+}
+
+.chembl-subdir {
+    border-bottom: 1px solid #eee;
+}
+
+.chembl-subdir:last-child {
+    border-bottom: none;
+}
+
+.subdir-header {
+    padding-left: 45px !important;
+    background-color: #fafafa;
+}
+
+.chembl-file-list {
+    padding-left: 75px !important;
+    padding-right: 15px;
+    background: #fff;
+}
+
+.molecule-link {
+    cursor: pointer !important;
+    text-decoration: underline !important;
+    color: var(--primary-color) !important;
+    transition: color 0.2s;
+    position: relative;
+}
+
+.molecule-link:hover {
+    color: var(--primary-hover-color);
+}
+
+.molecule-link:hover::after {
+    content: 'Visualizar molécula em 2D/3D';
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    z-index: 10;
+    pointer-events: none;
+    margin-bottom: 6px;
+}
+
+.molecule-link:hover::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.viewer-flex {
+    display: flex !important;
+    justify-content: space-between;
+    gap: 20px;
+    margin-top: 15px;
+    flex-wrap: nowrap !important;
+}
+
+.viewer-col {
+    flex: 1 1 0%;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fafafa;
+    overflow: hidden;
+}
+
+.target-header-left {
+    display: flex;
+    align-items: center;
+}
+
+.target-header-right {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}

@@ -198,17 +198,17 @@ select:focus {
 
 .content-wrapper,
 .form-container,
-.pdb-list-container{
-  display: flex;
-  flex-direction: column;
+.pdb-list-container {
+    display: flex;
+    flex-direction: column;
 }
 
-.pdb-list-container h3{
-  position: sticky;
-  top: 0;
-  background: #fff;
-  padding-bottom: .5rem;
-  z-index: 1;
+.pdb-list-container h3 {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    padding-bottom: .5rem;
+    z-index: 1;
 }
 
 /* This selector was corrected to target the direct child (.content-wrapper) */
@@ -308,13 +308,15 @@ select:focus {
     box-shadow: 0 4px 15px var(--shadow-color);
 }
 
-.list-scroll{
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
+.list-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
 }
 
-.with-help{ position: relative; }
+.with-help {
+    position: relative;
+}
 
 .alert-notification.warning {
     background-color: #ff9800;
@@ -371,4 +373,66 @@ select:focus {
 .alert-notification.warning {
     background-color: #ff9800;
     border-left: 5px solid #e65100;
+}
+
+/* PDB molecule link (hover tooltip like ChEMBL) */
+.pdb-molecule-link {
+    cursor: pointer !important;
+    text-decoration: underline !important;
+    color: var(--primary-color) !important;
+    transition: color 0.2s;
+    position: relative;
+}
+
+.pdb-molecule-link:hover {
+    color: var(--primary-hover-color) !important;
+}
+
+.pdb-molecule-link:hover::after {
+    content: 'Visualizar molécula em 3D';
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+    margin-bottom: 6px;
+}
+
+.pdb-molecule-link:hover::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* Fix scrollbar overlapping icons */
+#pdb-list {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    padding: 0 2px;
+    box-sizing: border-box;
+}
+
+.pdb-file-item {
+    padding: 10px 12px !important;
+    box-sizing: border-box;
+}
+
+.file-actions {
+    flex-shrink: 0 !important;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }

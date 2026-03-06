@@ -14,7 +14,7 @@ export default function ChemblPage() {
 
   const fetchFiles = async () => {
     try {
-      const res = await fetch('${API_BASE_URL}/api/files/list/ChEMBL');
+      const res = await fetch(`${API_BASE_URL}/api/files/list/ChEMBL`);
       setDatasets(await res.json());
     } catch (e) { }
   };
@@ -31,7 +31,7 @@ export default function ChemblPage() {
       similarity: fd.get('similarity'), molecule_weight: fd.get('molecule_weight'),
       natural_product_molecules: fd.get('natural_product_molecules') === 'on'
     };
-    await fetch('${API_BASE_URL}/api/chembl/search', {
+    await fetch(`${API_BASE_URL}/api/chembl/search`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
     setIsLoading(false);

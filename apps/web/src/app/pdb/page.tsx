@@ -11,7 +11,7 @@ export default function PdbPage() {
 
   const fetchFiles = async () => {
     try {
-      const res = await fetch('${API_BASE_URL}/api/files/list/PDB');
+      const res = await fetch(`${API_BASE_URL}/api/files/list/PDB`);
       setDatasets(await res.json());
     } catch (e) { }
   };
@@ -25,7 +25,7 @@ export default function PdbPage() {
     const payload = Object.fromEntries(formData.entries());
     payload.must_have_ligand = payload.must_have_ligand === 'on' ? 'true' : 'false';
 
-    await fetch('${API_BASE_URL}/api/pdb/search', {
+    await fetch(`${API_BASE_URL}/api/pdb/search`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
     setIsLoading(false);

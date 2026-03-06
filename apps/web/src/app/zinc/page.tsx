@@ -1,5 +1,6 @@
 'use client';
 import { useState, FormEvent, useEffect } from 'react';
+import { API_BASE_URL } from '../../config';
 
 export default function ZincPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -8,7 +9,7 @@ export default function ZincPage() {
 
   const fetchFiles = async () => {
     try {
-      const res = await fetch('${API_BASE_URL}/api/files/list/ZINC');
+      const res = await fetch(`${API_BASE_URL}/api/files/list/ZINC`);
       setDatasets(await res.json());
     } catch (e) { }
   };
@@ -18,7 +19,7 @@ export default function ZincPage() {
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
-    await fetch('${API_BASE_URL}/api/zinc/upload', {
+    await fetch(`${API_BASE_URL}/api/zinc/upload`, {
       method: 'POST', body: new FormData(e.currentTarget)
     });
     setIsLoading(false);

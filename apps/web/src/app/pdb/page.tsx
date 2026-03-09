@@ -2,25 +2,20 @@
 import { useState, FormEvent, useEffect } from 'react';
 import './pdb.css';
 import { API_BASE_URL } from '../../config';
+import LoadingOverlay from '../../components/LoadingOverlay';
+
+import { useFiles } from '../../hooks/useFiles';
 
 export default function PdbPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [datasets, setDatasets] = useState<Record<string, string[]>>({});
+  const { datasets, fetchFiles } = useFiles<Record<string, string[]>>('/api/files/list/PDB');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
   const [viewer, setViewer] = useState({ isOpen: false, file: '' });
-
-  const fetchFiles = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/files/list/PDB`);
-      setDatasets(await res.json());
-    } catch (e) { }
-  };
-
-  useEffect(() => { fetchFiles(); }, []);
 
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
+    // Parse form data and normalize boolean inputs
     const formData = new FormData(e.currentTarget);
     const payload = Object.fromEntries(formData.entries());
     payload.must_have_ligand = payload.must_have_ligand === 'on' ? 'true' : 'false';
@@ -34,18 +29,20 @@ export default function PdbPage() {
 
   const toggleAccordion = (t: string) => setOpenTargets(p => ({ ...p, [t]: !p[t] }));
 
+  // Deletes all data corresponding to a target
   const handleDelete = async (target: string) => {
-    if (!confirm(`Excluir todos os dados de ${target}?`)) return;
+    if (!confirm(`Delete all data for ${target}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/PDB/${target}`, { method: 'DELETE' });
     fetchFiles();
   };
 
+  // Triggers downloading the complete target folder as a ZIP file
   const handleDownloadTarget = (target: string) => {
     window.open(`${API_BASE_URL}/api/files/download/PDB/zip/${target}`, '_blank');
   };
 
   const handleDeleteFile = async (target: string, file: string) => {
-    if (!confirm(`Excluir arquivo ${file}?`)) return;
+    if (!confirm(`Delete file ${file}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/PDB/file/${target}/${file}`, { method: 'DELETE' });
     fetchFiles();
   };
@@ -54,6 +51,7 @@ export default function PdbPage() {
     window.open(`${API_BASE_URL}/api/files/download/PDB/${target}/${file}`, '_blank');
   };
 
+  // Fetches the specific PDB content as text and displays the 3D Viewer Modal
   const open3DViewer = async (target: string, file: string) => {
     setViewer({ isOpen: true, file });
     const res = await fetch(`${API_BASE_URL}/api/files/pdb_content/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
@@ -118,10 +116,10 @@ export default function PdbPage() {
                       <span>{target} ({files.length})</span>
                     </div>
                     <div className="target-header-right">
-                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Baixar Alvo">
+                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target">
                         <i className="fas fa-download"></i>
                       </span>
-                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Excluir Alvo" style={{ marginLeft: '10px' }}>
+                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Delete Target" style={{ marginLeft: '10px' }}>
                         <i className="fas fa-trash-alt"></i>
                       </span>
                     </div>
@@ -133,7 +131,7 @@ export default function PdbPage() {
                         <div key={file} className="pdb-file-item">
                           <span
                             className="pdb-molecule-link"
-                            title="Visualizar molécula em 3D"
+                            title="View molecule in 3D"
                             onClick={() => open3DViewer(target, file)}
                           >
                             <i className="fas fa-file-alt" style={{ color: '#888', marginRight: '8px' }}></i>
@@ -144,7 +142,7 @@ export default function PdbPage() {
                               <i className="fas fa-download"></i>
                             </button>
                             <span>|</span>
-                            <button type="button" title="Excluir" onClick={() => handleDeleteFile(target, file)} className="delete-btn">
+                            <button type="button" title="Delete" onClick={() => handleDeleteFile(target, file)} className="delete-btn">
                               <i className="fas fa-trash-alt"></i>
                             </button>
                           </div>
@@ -169,7 +167,7 @@ export default function PdbPage() {
           </div>
         </div>
       )}
-      {isLoading && <div id="loading-overlay" style={{ display: 'flex' }}><div className="loader"></div><p>Downloading PDB data...</p></div>}
+      <LoadingOverlay isLoading={isLoading} message="Downloading PDB data..." />
     </>
   );
 }

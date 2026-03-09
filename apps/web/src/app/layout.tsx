@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "BioMolExplorer",
-  description: "Exploração Molecular Avançada",
+  description: "Advanced Molecular Exploration",
   icons: {
     icon: "/img/icon.png",
   },

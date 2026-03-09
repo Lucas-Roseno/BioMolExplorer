@@ -2,28 +2,23 @@
 import { useState, FormEvent, useEffect } from 'react';
 import './chembl.css';
 import { API_BASE_URL } from '../../config';
+import LoadingOverlay from '../../components/LoadingOverlay';
+
+import { useFiles } from '../../hooks/useFiles';
 
 type ChemblData = { molecules?: string[]; similars?: string[] };
 
 export default function ChemblPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [datasets, setDatasets] = useState<Record<string, ChemblData>>({});
+  const { datasets, fetchFiles } = useFiles<Record<string, ChemblData>>('/api/files/list/ChEMBL');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
   const [openSubdirs, setOpenSubdirs] = useState<Record<string, boolean>>({});
   const [viewer, setViewer] = useState({ isOpen: false, file: '', imgBase64: '', molBlock: '', mode: 'both' });
 
-  const fetchFiles = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/files/list/ChEMBL`);
-      setDatasets(await res.json());
-    } catch (e) { }
-  };
-
-  useEffect(() => { fetchFiles(); }, []);
-
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
+    // Transform form data into a structured payload for ChEMBL search
     const fd = new FormData(e.currentTarget);
     const payload = {
       target_name: fd.get('target_name'), organism: fd.get('organism'),
@@ -42,7 +37,7 @@ export default function ChemblPage() {
   const toggleSubdir = (t: string, s: string) => setOpenSubdirs(p => ({ ...p, [`${t}-${s}`]: !p[`${t}-${s}`] }));
 
   const handleDeleteTarget = async (target: string) => {
-    if (!confirm(`Excluir todos os dados de ${target}?`)) return;
+    if (!confirm(`Delete all data for ${target}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/target/${target}`, { method: 'DELETE' });
     fetchFiles();
   };
@@ -52,7 +47,7 @@ export default function ChemblPage() {
   };
 
   const handleDeleteSubdir = async (subdir: string, target: string) => {
-    if (!confirm(`Excluir pasta ${subdir} de ${target}?`)) return;
+    if (!confirm(`Delete folder ${subdir} from ${target}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/category/${subdir}/${target}`, { method: 'DELETE' });
     fetchFiles();
   };
@@ -62,15 +57,17 @@ export default function ChemblPage() {
   };
 
   const handleDeleteFile = async (subdir: string, target: string, file: string) => {
-    if (!confirm(`Excluir arquivo ${file}?`)) return;
+    if (!confirm(`Delete file ${file}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/file/${subdir}/${target}/${file}`, { method: 'DELETE' });
     fetchFiles();
   };
 
+  // Initiates download of a single file.
   const handleDownloadFile = (subdir: string, target: string, file: string) => {
     window.open(`${API_BASE_URL}/api/files/download/ChEMBL/${subdir}/${target}/${file}`, '_blank');
   };
 
+  // Fetches the 2D SVG rendering from backend and initializes the 3D viewer modal
   const openMoleculeViewer = async (subdir: string, target: string, file: string) => {
     setIsLoading(true);
     try {
@@ -148,10 +145,10 @@ export default function ChemblPage() {
                       <span>{target}</span>
                     </div>
                     <div className="target-header-right">
-                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Baixar Alvo" style={{ marginRight: '10px' }}>
+                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target" style={{ marginRight: '10px' }}>
                         <i className="fas fa-download"></i>
                       </span>
-                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDeleteTarget(target); }} title="Excluir Alvo">
+                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDeleteTarget(target); }} title="Delete Target">
                         <i className="fas fa-trash-alt"></i>
                       </span>
                     </div>
@@ -171,10 +168,10 @@ export default function ChemblPage() {
                                 <span style={{ textTransform: 'capitalize' }}>{subdir}</span>
                               </div>
                               <div className="target-header-right">
-                                <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadSubdir(subdir, target); }} title="Baixar Pasta" style={{ marginRight: '10px' }}>
+                                <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadSubdir(subdir, target); }} title="Download Folder" style={{ marginRight: '10px' }}>
                                   <i className="fas fa-download"></i>
                                 </span>
-                                <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDeleteSubdir(subdir, target); }} title="Excluir Pasta">
+                                <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDeleteSubdir(subdir, target); }} title="Delete Folder">
                                   <i className="fas fa-trash-alt"></i>
                                 </span>
                               </div>
@@ -185,7 +182,7 @@ export default function ChemblPage() {
                                   <div key={file} className="pdb-file-item">
                                     <span
                                       className="molecule-link"
-                                      title="Visualizar molécula em 2D/3D"
+                                      title="View molecule in 2D/3D"
                                       onClick={() => openMoleculeViewer(subdir, target, file)}
                                     >
                                       <i className="fas fa-file-csv" style={{ color: '#888', marginRight: '8px' }}></i>
@@ -196,7 +193,7 @@ export default function ChemblPage() {
                                         <i className="fas fa-download"></i>
                                       </button>
                                       <span>|</span>
-                                      <button type="button" title="Excluir" onClick={() => handleDeleteFile(subdir, target, file)} className="delete-btn">
+                                      <button type="button" title="Delete" onClick={() => handleDeleteFile(subdir, target, file)} className="delete-btn">
                                         <i className="fas fa-trash-alt"></i>
                                       </button>
                                     </div>
@@ -237,7 +234,7 @@ export default function ChemblPage() {
         </div>
       )}
 
-      {isLoading && <div id="loading-overlay" style={{ display: 'flex' }}><div className="loader"></div><p>Processando, aguarde...</p></div>}
+      <LoadingOverlay isLoading={isLoading} />
     </>
   );
 }

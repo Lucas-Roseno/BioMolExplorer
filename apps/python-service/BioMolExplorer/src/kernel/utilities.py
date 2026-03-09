@@ -200,6 +200,7 @@ class fileHandling(MyUtilities):
         
         except Exception as e:
             self.logger.error(f'Error during to perform {file} file in csv_to_dataframe function', exc_info=True)
+            return DataFrame()
                
 
 

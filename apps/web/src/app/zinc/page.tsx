@@ -1,24 +1,19 @@
 'use client';
 import { useState, FormEvent, useEffect } from 'react';
 import { API_BASE_URL } from '../../config';
+import LoadingOverlay from '../../components/LoadingOverlay';
+
+import { useFiles } from '../../hooks/useFiles';
 
 export default function ZincPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [datasets, setDatasets] = useState<Record<string, string[]>>({});
+  const { datasets, fetchFiles } = useFiles<Record<string, string[]>>('/api/files/list/ZINC');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
-
-  const fetchFiles = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/files/list/ZINC`);
-      setDatasets(await res.json());
-    } catch (e) { }
-  };
-
-  useEffect(() => { fetchFiles(); }, []);
 
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
+    // Uploads a .uri file to the backend proxy
     await fetch(`${API_BASE_URL}/api/zinc/upload`, {
       method: 'POST', body: new FormData(e.currentTarget)
     });
@@ -28,7 +23,7 @@ export default function ZincPage() {
 
   const toggleAccordion = (t: string) => setOpenTargets(p => ({ ...p, [t]: !p[t] }));
   const handleDelete = async (target: string) => {
-    if (!confirm(`Excluir dados de ${target}?`)) return;
+    if (!confirm(`Delete data for ${target}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/ZINC/${target}`, { method: 'DELETE' });
     fetchFiles();
   };
@@ -39,7 +34,7 @@ export default function ZincPage() {
     window.open(`${API_BASE_URL}/api/files/download/ZINC/${file}`, '_blank');
   };
   const handleDeleteFile = async (target: string, file: string) => {
-    if (!confirm(`Excluir arquivo ${file}?`)) return;
+    if (!confirm(`Delete file ${file}?`)) return;
     await fetch(`${API_BASE_URL}/api/files/delete/ZINC/${file}`, { method: 'DELETE' });
     fetchFiles();
   };
@@ -53,7 +48,7 @@ export default function ZincPage() {
             <form id="zinc-form" onSubmit={handleSearch}>
               <fieldset><legend>Upload (.uri)</legend>
                 <div className="form-group compact-form-group">
-                  <label>Arquivo URI:</label><input type="file" name="zinc_file" accept=".uri" required />
+                  <label>URI File:</label><input type="file" name="zinc_file" accept=".uri" required />
                 </div>
                 <div className="form-group"><label><input type="checkbox" name="verbose" /> Verbose Mode</label></div>
                 <button type="submit" style={{ width: '100%', marginTop: '10px' }}>Download</button>
@@ -62,7 +57,7 @@ export default function ZincPage() {
           </div>
 
           <div className="pdb-list-container">
-            <h3>Dados ZINC</h3>
+            <h3>ZINC Data</h3>
             <div id="zinc-list">
               {Object.entries(datasets).map(([target, files]) => (
                 <div key={target} style={{ marginBottom: '5px' }}>
@@ -71,10 +66,10 @@ export default function ZincPage() {
                       <span>{target} ({files.length})</span>
                     </div>
                     <div className="target-header-right">
-                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Baixar Alvo" style={{ marginRight: '10px' }}>
+                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target" style={{ marginRight: '10px' }}>
                         <i className="fas fa-download"></i>
                       </span>
-                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Excluir Alvo">
+                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Delete Target">
                         <i className="fas fa-trash-alt"></i>
                       </span>
                     </div>
@@ -89,7 +84,7 @@ export default function ZincPage() {
                               <i className="fas fa-download"></i>
                             </button>
                             <span>|</span>
-                            <button type="button" onClick={() => handleDeleteFile(target, file)} className="delete-btn" title="Excluir">
+                            <button type="button" onClick={() => handleDeleteFile(target, file)} className="delete-btn" title="Delete">
                               <i className="fas fa-trash-alt"></i>
                             </button>
                           </div>
@@ -103,7 +98,7 @@ export default function ZincPage() {
           </div>
         </div>
       </div>
-      {isLoading && <div id="loading-overlay" style={{ display: 'flex' }}><div className="loader"></div><p>Baixando ZINC...</p></div>}
+      <LoadingOverlay isLoading={isLoading} />
     </>
   );
 }

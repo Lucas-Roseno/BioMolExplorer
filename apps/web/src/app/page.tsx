@@ -1,4 +1,4 @@
-import Image from 'next/image';
+
 
 export default function Home() {
   return (
@@ -6,10 +6,9 @@ export default function Home() {
     <main>
       <div className="container">
         <section className="welcome-section">
-          <h2>Welcome to BioMolExplorer</h2>
-          <p>Your integrated platform for exploring and analyzing molecular data.</p>
-          <p>Use the menu above to navigate to the <strong>PDB LOADER</strong> tool and start your search for PDB
-            structures.</p>
+          <h2>Welcome to BioMolExplorer 2.0</h2>
+          <p>Your comprehensive platform for exploring, searching, and analyzing molecular structures.</p>
+          <p>Use the navigation menu above to access our dedicated tools: <strong>PDB Explorer</strong> for protein structures, <strong>ChEMBL Browser</strong> for bioactive molecules, and <strong>ZINC Archive</strong> for commercially available compounds. Easily fetch datasets for your research straight into your local environment.</p>
         </section>
       </div>
 

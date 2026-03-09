@@ -63,27 +63,6 @@ app.get('/api/files/list/ChEMBL', async (req, res) => {
   try { res.json(await (await fetch(`${PYTHON_URL}/chembl_files`)).json()); } catch (e) { res.status(500).json({}); }
 });
 
-// Downloads (Proxy)
-app.get('/api/files/download/PDB/:target/:file', async (req, res) => {
-  try {
-    const { target, file } = req.params;
-    const pythonRes = await fetch(`${PYTHON_URL}/download_pdb/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
-    if (!pythonRes.ok) throw new Error('Not found');
-    res.set('Content-Disposition', `attachment; filename="${file}"`);
-    res.send(Buffer.from(await pythonRes.arrayBuffer()));
-  } catch (e) { res.status(404).send('Not found'); }
-});
-
-app.get('/api/files/download/ChEMBL/:subdir/:target/:file', async (req, res) => {
-  try {
-    const { subdir, target, file } = req.params;
-    const pythonRes = await fetch(`${PYTHON_URL}/download_chembl/${encodeURIComponent(subdir)}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
-    if (!pythonRes.ok) throw new Error('Not found');
-    res.set('Content-Disposition', `attachment; filename="${file}"`);
-    res.send(Buffer.from(await pythonRes.arrayBuffer()));
-  } catch (e) { res.status(404).send('Not found'); }
-});
-
 // Downloads em lote (ZIP)
 app.get('/api/files/download/PDB/zip/:target', async (req, res) => {
   try {
@@ -112,21 +91,43 @@ app.get('/api/files/download/ChEMBL/category/zip/:subdir/:target', async (req, r
     res.send(Buffer.from(await pythonRes.arrayBuffer()));
   } catch (e) { res.status(404).send('Not found'); }
 });
-app.get('/api/files/download/ZINC/:file', async (req, res) => {
-  try {
-    const { file } = req.params;
-    const pythonRes = await fetch(`${PYTHON_URL}/download_zinc/${encodeURIComponent(file)}`);
-    if (!pythonRes.ok) throw new Error('Not found');
-    res.set('Content-Disposition', `attachment; filename="${file}"`);
-    res.send(Buffer.from(await pythonRes.arrayBuffer()));
-  } catch (e) { res.status(404).send('Not found'); }
-});
 app.get('/api/files/download/ZINC/zip/:target', async (req, res) => {
   try {
     const { target } = req.params;
     const pythonRes = await fetch(`${PYTHON_URL}/download_zinc_zip/${encodeURIComponent(target)}`);
     if (!pythonRes.ok) throw new Error('Not found');
     res.set('Content-Disposition', `attachment; filename="ZINC_data.zip"`);
+    res.send(Buffer.from(await pythonRes.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
+});
+
+// Downloads (Proxy)
+app.get('/api/files/download/PDB/:target/:file', async (req, res) => {
+  try {
+    const { target, file } = req.params;
+    const pythonRes = await fetch(`${PYTHON_URL}/download_pdb/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+    if (!pythonRes.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="${file}"`);
+    res.send(Buffer.from(await pythonRes.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
+});
+
+app.get('/api/files/download/ChEMBL/:subdir/:target/:file', async (req, res) => {
+  try {
+    const { subdir, target, file } = req.params;
+    const pythonRes = await fetch(`${PYTHON_URL}/download_chembl/${encodeURIComponent(subdir)}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+    if (!pythonRes.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="${file}"`);
+    res.send(Buffer.from(await pythonRes.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
+});
+
+app.get('/api/files/download/ZINC/:file', async (req, res) => {
+  try {
+    const { file } = req.params;
+    const pythonRes = await fetch(`${PYTHON_URL}/download_zinc/${encodeURIComponent(file)}`);
+    if (!pythonRes.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="${file}"`);
     res.send(Buffer.from(await pythonRes.arrayBuffer()));
   } catch (e) { res.status(404).send('Not found'); }
 });

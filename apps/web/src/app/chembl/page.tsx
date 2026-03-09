@@ -124,11 +124,11 @@ export default function ChemblPage() {
                   <label><input type="checkbox" name="standard_type__in" value="Ratio IC50" />Ratio IC50</label>
                 </div>
 
-              </div><div className="form-group"><label>Max Value (nM)</label><input type="number" name="max_value_ref" defaultValue="1000" /></div>
+              </div><div className="form-group"><label>Max Value (nM)</label><input type="number" name="max_value_ref" defaultValue="100" /></div>
               </fieldset>
               <div className="fieldset-row">
                 <fieldset><legend>Molecules</legend><div className="form-group"><label>Natural Product</label><input type="checkbox" name="natural_product_molecules" /></div></fieldset>
-                <fieldset><legend>Similar Mols</legend><div className="form-group"><label>Similarity (%)</label><input type="number" name="similarity" defaultValue="60" /><label>Max Weight</label><input type="number" name="molecule_weight" defaultValue="500" /></div></fieldset>
+                <fieldset><legend>Similar Mols</legend><div className="form-group"><label>Similarity (%)</label><input type="number" name="similarity" defaultValue="80" /><label>Max Weight</label><input type="number" name="molecule_weight" defaultValue="500" /></div></fieldset>
               </div>
               <button type="submit">Download</button>
             </form>

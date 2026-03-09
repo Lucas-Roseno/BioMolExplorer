@@ -266,7 +266,8 @@ class fileHandling(MyUtilities):
             df = DataFrame(columns=['molecule_chembl_id', 'canonical_smiles', 'molecule_properties'])
             explorer = MolExplorer()
 
-            molecules = [mol.rsplit('.')[0] for mol in os.listdir(self.inputpath[1:]) if mol.endswith('.csv')]
+            full_input_path = os.path.join(self.path, self.inputpath.lstrip('/'))
+            molecules = [mol.rsplit('.')[0] for mol in os.listdir(full_input_path) if mol.endswith('.csv')]
             for mol in molecules:
                 tmp = self.csv_to_dataframe(mol)
                 tmp['canonical_smiles'] = self.convert_str_to_dict(tmp, 'molecule_structures', 'canonical_smiles')

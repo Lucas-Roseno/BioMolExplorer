@@ -15,8 +15,25 @@ cd /app && ts-node apps/api/src/server.ts &
 # Inicia o Python Flask em background (porta 5000 interna)
 cd /app/apps/python-service && python app.py &
 
-# Aguarda um pouco para os serviços de backend subirem
-sleep 3
+# Aguarda o Node.js API estar pronto (porta 3001)
+echo "Aguardando API Node.js na porta 3001..."
+for i in $(seq 1 30); do
+  if curl -s http://localhost:3001/ > /dev/null 2>&1 || curl -s http://localhost:3001/api/files/list/PDB > /dev/null 2>&1; then
+    echo "API Node.js pronta!"
+    break
+  fi
+  sleep 1
+done
+
+# Aguarda o Flask estar pronto (porta 5000)
+echo "Aguardando Flask na porta 5000..."
+for i in $(seq 1 30); do
+  if curl -s http://localhost:5000/pdb_files > /dev/null 2>&1; then
+    echo "Flask pronto!"
+    break
+  fi
+  sleep 1
+done
 
 # Inicia o Next.js standalone na porta principal (definida pelo Render via $PORT)
 cd /app/apps/web/.next/standalone/apps/web

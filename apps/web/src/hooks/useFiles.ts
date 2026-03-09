@@ -6,7 +6,7 @@ export function useFiles<T>(endpoint: string) {
 
     const fetchFiles = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE_URL}${endpoint}`);
+            const res = await fetch(`${API_BASE_URL}${endpoint}`, { cache: 'no-store' });
             if (res.ok) {
                 setDatasets(await res.json());
             }

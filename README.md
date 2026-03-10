@@ -1,6 +1,9 @@
 <div align="center">
   <img src="https://img.shields.io/badge/Status-Em%20Andamento-yellow?style=for-the-badge" alt="Status" />
   <img src="https://img.shields.io/badge/Vers%C3%A3o-2.0-blue?style=for-the-badge" alt="Version" />
+  <a href="https://biomolexplorer.onrender.com" target="_blank">
+    <img src="https://img.shields.io/badge/🌐%20Live%20Demo-biomolexplorer.onrender.com-8A2BE2?style=for-the-badge" alt="Live Demo" />
+  </a>
 </div>
 
 <br/>

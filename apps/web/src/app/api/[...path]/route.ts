@@ -15,7 +15,6 @@ async function proxyRequest(request: Request) {
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
         init.body = await request.arrayBuffer();
-        init.duplex = 'half' as any;
     }
 
     try {

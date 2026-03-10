@@ -10,7 +10,6 @@ async function proxyRequest(request: Request) {
     const init: RequestInit = {
         method: request.method,
         headers,
-        // @ts-expect-error - Node.js fetch supports signal with no timeout
         signal: AbortSignal.timeout(300_000), // 5 minutes timeout
     };
 

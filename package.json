@@ -6,9 +6,10 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=api\" \"npm run dev --workspace=web\" \"cd apps/python-service && /home/lucas-roseno/anaconda3/envs/BioMolExplorer/bin/python app.py\"",
-    "start": "concurrently \"npm run start --workspace=api\" \"npm run start --workspace=web\" \"cd apps/python-service && python app.py\""
-  },
+    "python": "cd apps/python-service && conda run -n BioMolExplorer python app.py",
+    "dev": "concurrently \"npm run dev --workspace=api\" \"npm run dev --workspace=web\" \"npm run python\"",
+    "start": "concurrently \"npm run start --workspace=api\" \"npm run start --workspace=web\" \"npm run python\""
+    },
   "dependencies": {
     "concurrently": "^9.2.1"
   }

@@ -25,7 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="header-link-home">
               <img src="/img/icon.png" alt="Logo" className="header-logo" />
             </Link>
-            <h1>BioMolExplorer</h1>
+            <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+              <h1>BioMolExplorer</h1>
+            </Link>
           </div>
           <nav className="main-nav">
             <ul>
@@ -33,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <li><Link href="/pdb">PDB</Link></li>
               <li><Link href="/chembl">ChEMBL</Link></li>
               <li><Link href="/zinc">ZINC</Link></li>
+              <li><Link href="/analysis">Analysis</Link></li>
             </ul>
           </nav>
         </header>
@@ -41,11 +44,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <footer className="site-footer">
           <div className="footer-inner">
-            <div className="footer-left"><strong>BioMolExplorer</strong> · Version 2.0</div>
+            <div className="footer-left">
+              <Link href="/references" style={{ color: 'inherit', textDecoration: 'none', fontWeight: 'bold' }}>
+                BioMolExplorer
+              </Link> · Version 2.0
+            </div>
             <nav className="footer-links">
               <Link href="/about">About</Link>
-              <Link href="#">References</Link>
-              <Link href="#">Contact</Link>
+              <Link href="/references">References</Link>
+              <Link href="/contact">Contact</Link>
             </nav>
             <div className="footer-right">Copyright © 2024 BioMolExplorer. All Rights Reserved.</div>
           </div>

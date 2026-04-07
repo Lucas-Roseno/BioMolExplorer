@@ -345,23 +345,47 @@ class ZincMols(MyMolecules):
 
     def __search_in_zinc(self, idx, url, verbose) -> DataFrame:
         
-        url = url.strip() 
+        url = url.strip()
+        # Upgrade http to https to avoid 301 redirect overhead
+        if url.startswith('http://'):
+            url = url.replace('http://', 'https://', 1)
+        
         mol = DataFrame(columns=['smile', 'zinc_id'])
+        
+        # User-Agent header required by files.docking.org (returns 403 without it)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
             
         try:
                 
-            response = requests.get(url, timeout=120)
+            response = requests.get(url, timeout=120, headers=headers)
                 
             if response.status_code == 200:
                 conteudo = response.text.splitlines()[1:]
                 conteudo = [token.split(' ') for token in conteudo]
                 mol = DataFrame(conteudo, columns=['smile', 'zinc_id'])
-                print('File number:', idx, ' URL:', url) if verbose else None 
+                print('File number:', idx, ' URL:', url) if verbose else None
+            elif response.status_code == 403:
+                print(f'[ZINC] Access denied (403) for URL: {url} — the ZINC server may be blocking automated requests.')
+                self.logger.warning(f'403 Forbidden for {url}')
+            else:
+                print(f'[ZINC] HTTP {response.status_code} for URL: {url}')
+                self.logger.warning(f'HTTP {response.status_code} for {url}')
             
             return mol
-                    
+        
+        except requests.exceptions.ConnectionError:
+            print(f'[ZINC] Connection error — the ZINC server (files.docking.org) may be offline or unreachable.')
+            self.logger.error(f'Connection error for {url}', exc_info=True)
+            return mol
+        except requests.exceptions.Timeout:
+            print(f'[ZINC] Timeout — the ZINC server did not respond within 120s for URL: {url}')
+            self.logger.error(f'Timeout for {url}', exc_info=True)
+            return mol
         except Exception as e:
             self.logger.error(f'Error during to perform {idx} molecule in {url} url in __search_in_zinc function', exc_info=True)
+            return mol
             
          
 

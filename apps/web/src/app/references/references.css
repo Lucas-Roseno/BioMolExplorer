@@ -1,0 +1,116 @@
+.references-container {
+    max-width: 1000px;
+    margin: 2rem auto;
+    background: #fff;
+    padding: 3rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    line-height: 1.7;
+    color: #333;
+}
+
+.references-header {
+    border-bottom: 2px solid var(--primary-color);
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+}
+
+.references-title {
+    font-size: 2.2rem;
+    color: var(--primary-color);
+    margin: 0 0 1rem 0;
+}
+
+.meta-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    background: #f9f9f9;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+}
+
+.meta-item {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.meta-label {
+    font-weight: bold;
+    color: var(--primary-color);
+    min-width: 140px;
+}
+
+.section-title {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin: 2.5rem 0 1.2rem 0;
+    border-left: 4px solid var(--primary-color);
+    padding-left: 1rem;
+}
+
+.subsection-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin: 1.5rem 0 0.8rem 0;
+    color: #444;
+}
+
+.abstract-box {
+    font-style: italic;
+    background: #fdfdfd;
+    border: 1px solid #eee;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    border-radius: 4px;
+}
+
+.keywords {
+    margin-top: 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.report-content p {
+    margin-bottom: 1.2rem;
+    text-align: justify;
+}
+
+.ods-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.ods-list li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.8rem;
+}
+
+.ods-list li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.bib-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.bib-item {
+    margin-bottom: 1rem;
+    padding-left: 2rem;
+    text-indent: -2rem;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .references-container {
+        padding: 1.5rem;
+    }
+}

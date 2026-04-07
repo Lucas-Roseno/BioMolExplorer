@@ -104,7 +104,6 @@ class PDBComplex():
     def get_pdb_ids_with_filters(self, filter_params:dict) -> list:
         
         try:
-
             queries = []
             if 'ec_target' in filter_params and filter_params['ec_target']:
                 queries.append(AttributeQuery("rcsb_polymer_entity.rcsb_ec_lineage.id", "exact_match", filter_params['ec_target'], STRUCTURE_ATTRIBUTE_SEARCH_SERVICE))
@@ -140,7 +139,8 @@ class PDBComplex():
                 return None
         
         except Exception as e:
-            self.logger.error(f"Error during to perform {filter_params.get('ec_target', 'unknown')} in get_pdb_ids_with_filters function", exc_info=True)
+            self.logger.error(f"Error during search in RCSB PDB: {str(e)}", exc_info=True)
+            raise RuntimeError("Não foi possível conectar ao banco de dados do RCSB PDB. Verifique sua conexão com a internet ou tente novamente mais tarde.")
     
 
     def __identify_ligands(self, pdb_file):
@@ -167,11 +167,19 @@ class PDBComplex():
 
     def get_pdb_files(self, filters:dict):
         pdb_crawler = PDBList()
-        pdb_codes = self.get_pdb_ids_with_filters(filters)
+        try:
+            pdb_codes = self.get_pdb_ids_with_filters(filters)
+        except Exception as e:
+            raise e # Repassa o erro de conexão amigável
+
         warnings = []
 
         if pdb_codes:
-            pdb_crawler.download_pdb_files(pdb_codes, pdir=self.__outputpath, file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
+            try:
+                pdb_crawler.download_pdb_files(pdb_codes, pdir=self.__outputpath, file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
+            except Exception as e:
+                self.logger.error(f"Error downloading PDB files: {str(e)}")
+                raise RuntimeError("Erro ao baixar arquivos do PDB. O serviço do RCSB PDB pode estar instável. Tente novamente.")
 
             datain  = [os.path.join(self.__outputpath, 'pdb' + code.lower() + '.ent') for code in pdb_codes]
             dataout = [os.path.join(self.__outputpath, code + '.pdb') for code in pdb_codes]
@@ -199,7 +207,7 @@ class PDBComplex():
                     codes[idx] = tmp
             
             if not codes:
-                raise ValueError("No PDB file can be downloaded. Check the logs.")
+                raise ValueError("Nenhum arquivo PDB pôde ser baixado após a busca. Verifique os filtros ou tente outros parâmetros.")
 
             with open(os.path.join(self.__outputpath, 'pdb_codes.csv'), 'w') as fp:
                 fp.write('PDB_CODE,LIGAND,RESNUM,CHAIN,RESOLUTION\n')
@@ -211,4 +219,4 @@ class PDBComplex():
             print('[INFO]: ATTENTION: If you need to use DOCK6 functions, you must resolve the non-existent loops in the complexes before!')
             return warnings # another change here
         else:
-            raise ValueError('The filter combination is invalid. No PDB found. Please adjust and try again.')
+            raise ValueError('Nenhuma estrutura PDB foi encontrada com essa combinação de filtros. Por favor, ajuste os parâmetros (ex: EC Number ou Resolução) e tente novamente.')

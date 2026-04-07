@@ -32,8 +32,16 @@ app.post('/api/pdb/search', async (req, res) => {
     const response = await fetch(`${PYTHON_URL}/load_pdb`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
-    res.json({ success: true, data: await response.json() });
-  } catch (error) { res.status(500).json({ success: false, message: 'Erro PDB.' }); }
+
+    const data = await response.json();
+    if (response.ok) {
+      res.json({ success: true, data });
+    } else {
+      res.status(response.status).json({ success: false, message: data.message || 'Erro PDB.' });
+    }
+  } catch (error: any) { 
+    res.status(500).json({ success: false, message: error.message || 'Erro PDB.' }); 
+  }
 });
 
 app.post('/api/chembl/search', async (req, res) => {
@@ -50,6 +58,113 @@ app.post('/api/chembl/search', async (req, res) => {
     });
     res.json({ success: true, data: await response.json() });
   } catch (error) { res.status(500).json({ success: false, message: 'Erro ChEMBL.' }); }
+});
+
+// ZINC Upload (forwards .uri file to Flask)
+app.post('/api/zinc/upload', upload.single('zinc_file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado.' });
+    }
+
+    const formData = new FormData();
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+    formData.append('zinc_file', blob, req.file.originalname);
+
+    if (req.body.verbose === 'on') {
+      formData.append('verbose', 'on');
+    }
+
+    const response = await fetch(`${PYTHON_URL}/load_zinc`, {
+      method: 'POST',
+      body: formData
+    });
+
+    // Clean up uploaded temp file
+    fs.unlinkSync(req.file.path);
+
+    const data = await response.json();
+    if (response.ok) {
+      res.json({ success: true, data });
+    } else {
+      res.status(response.status).json({ success: false, message: data.message || 'Erro ao processar ZINC.' });
+    }
+  } catch (error: any) {
+    // Clean up temp file on error
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ success: false, message: error.message || 'Erro ao processar ZINC.' });
+  }
+});
+
+// ZINC File List
+app.get('/api/files/list/ZINC', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/zinc_files`);
+    const files: string[] = await response.json();
+    // Transform flat array to Record<string, string[]> grouped by type
+    const grouped: Record<string, string[]> = {};
+    for (const f of files) {
+      // Group by extension or prefix (e.g., ZINC2D.csv -> "ZINC Data")
+      const key = 'ZINC Data';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(f);
+    }
+    res.json(grouped);
+  } catch (e) { res.status(500).json({}); }
+});
+
+// ==========================================
+// ROTAS DE ANÁLISE DE SIMILARIDADE
+// ==========================================
+
+app.get('/api/analysis/graph-data', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/graph-data`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Erro ao buscar dados do grafo.' });
+  }
+});
+
+app.get('/api/analysis/plots', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/plots`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Erro ao listar plots.' });
+  }
+});
+
+app.get('/api/analysis/plot/:filename', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/plot/${req.params.filename}`);
+    if (response.ok) {
+      res.setHeader('Content-Type', 'image/png');
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } else {
+      res.status(response.status).json({ success: false, message: 'Plot não encontrado.' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Erro ao carregar o plot.' });
+  }
+});
+
+app.post('/api/analysis/molecule-image', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/molecule-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Erro ao gerar imagem da molécula.' });
+  }
 });
 
 // ==========================================

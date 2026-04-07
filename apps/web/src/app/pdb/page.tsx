@@ -12,6 +12,12 @@ export default function PdbPage() {
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
   const [viewer, setViewer] = useState({ isOpen: false, file: '' });
 
+  // Inputs para validação do botão
+  const [targetName, setTargetName] = useState('');
+  const [pdbEc, setPdbEc] = useState('');
+
+  const isFormValid = targetName.trim() !== '' && pdbEc.trim() !== '';
+
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -20,11 +26,21 @@ export default function PdbPage() {
     const payload = Object.fromEntries(formData.entries());
     payload.must_have_ligand = payload.must_have_ligand === 'on' ? 'true' : 'false';
 
-    await fetch(`${API_BASE_URL}/api/pdb/search`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-    });
-    setIsLoading(false);
-    fetchFiles();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/pdb/search`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Erro ao baixar PDB: ${data.message || 'Erro desconhecido'}`);
+      }
+    } catch (error: any) {
+      alert(`Erro de conexão: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+      fetchFiles();
+    }
   };
 
   const toggleAccordion = (t: string) => setOpenTargets(p => ({ ...p, [t]: !p[t] }));
@@ -75,8 +91,28 @@ export default function PdbPage() {
         <div className="pdb-flex-layout">
           <div className="form-container">
             <form id="pdb-form" onSubmit={handleSearch}>
-              <div className="form-group"><label>Target Name</label><input type="text" name="target" placeholder="e.g., Acetylcholinesterase" required /></div>
-              <div className="form-group"><label>PDB EC Number</label><input type="text" name="pdb_ec" placeholder="e.g., 3.1.1.7" required /></div>
+              <div className="form-group">
+                <label>Target Name</label>
+                <input 
+                  type="text" 
+                  name="target" 
+                  placeholder="e.g., Acetylcholinesterase" 
+                  required 
+                  value={targetName}
+                  onChange={(e) => setTargetName(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label>PDB EC Number</label>
+                <input 
+                  type="text" 
+                  name="pdb_ec" 
+                  placeholder="e.g., 3.1.1.7" 
+                  required 
+                  value={pdbEc}
+                  onChange={(e) => setPdbEc(e.target.value)}
+                />
+              </div>
               <div className="form-group"><label>Polymer Entity Type</label>
                 <select name="polymer_entity_type">
                   <option value="PROTEIN">Protein</option>
@@ -101,7 +137,9 @@ export default function PdbPage() {
                 </select></div>
               <div className="form-group"><label>Max Resolution (Å)</label><input type="number" name="max_resolution" step="0.1" defaultValue="1.8" required /></div>
               <div className="form-group"><label><input type="checkbox" name="must_have_ligand" defaultChecked /> Must Have Ligand</label></div>
-              <button type="submit">Download</button>
+              <button type="submit" disabled={!isFormValid || isLoading}>
+                {isLoading ? 'Downloading...' : 'Download'}
+              </button>
             </form>
           </div>
           <div className="pdb-list-container">

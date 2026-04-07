@@ -9,14 +9,31 @@ export default function ZincPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { datasets, fetchFiles } = useFiles<Record<string, string[]>>('/api/files/list/ZINC');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
-    // Uploads a .uri file to the backend proxy
-    await fetch(`${API_BASE_URL}/api/zinc/upload`, {
-      method: 'POST', body: new FormData(e.currentTarget)
-    });
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/zinc/upload`, {
+        method: 'POST', body: new FormData(e.currentTarget)
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMessage({ type: 'success', text: data.data?.message || 'Download do ZINC concluído com sucesso!' });
+      } else {
+        const errMsg = data.message || 'Erro ao processar o arquivo ZINC.';
+        // Check for common server-down patterns
+        if (errMsg.toLowerCase().includes('connection') || errMsg.toLowerCase().includes('unreachable') || errMsg.toLowerCase().includes('offline')) {
+          setMessage({ type: 'error', text: '⚠️ O servidor do ZINC (files.docking.org) está indisponível. Tente novamente mais tarde.' });
+        } else {
+          setMessage({ type: 'error', text: errMsg });
+        }
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: '⚠️ Não foi possível conectar ao servidor. Verifique se os serviços estão rodando.' });
+    }
     setIsLoading(false);
     fetchFiles();
   };
@@ -54,6 +71,19 @@ export default function ZincPage() {
                 <button type="submit" style={{ width: '100%', marginTop: '10px' }}>Download</button>
               </fieldset>
             </form>
+            {message && (
+              <div style={{
+                marginTop: '12px',
+                padding: '10px 14px',
+                borderRadius: '6px',
+                backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
+                color: message.type === 'success' ? '#155724' : '#721c24',
+                border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
+                fontSize: '14px'
+              }}>
+                {message.text}
+              </div>
+            )}
           </div>
 
           <div className="pdb-list-container">

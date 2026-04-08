@@ -3,54 +3,48 @@ set -e
 
 echo "=== BioMolExplorer Production Server ==="
 
-# Ativar Conda Environment
-CONDA_BASE=$(conda info --base 2>/dev/null)
-if [ -n "$CONDA_BASE" ]; then
+# Ativar Conda Environment (Otimizado para Docker)
+CONDA_BASE=$(conda info --base 2>/dev/null || echo "/opt/conda")
+if [ -f "$CONDA_BASE/etc/profile.d/conda.sh" ]; then
     source "$CONDA_BASE/etc/profile.d/conda.sh"
-    conda activate BioMolExplorer
+    conda activate BioMolExplorer || echo "Aviso: Não foi possível ativar o ambiente BioMolExplorer. Usando ambiente padrão."
 else
-    echo "Conda não encontrado no PATH. Tentando carregar o ambiente manualmente..."
-    # Fallback se o conda não estiver no PATH mas o ambiente estiver instalado
-    export PATH="/home/lucas-roseno/anaconda3/bin:$PATH"
-    source "/home/lucas-roseno/anaconda3/etc/profile.d/conda.sh"
-    conda activate BioMolExplorer
+    echo "Aviso: Script do Conda não encontrado em $CONDA_BASE. Continuando com ambiente global..."
 fi
 
-echo "Iniciando os 3 serviços (Next.js + API Node + Python Flask)..."
+echo "Iniciando os 3 serviços (Produção)..."
 
-# Limpar processos antigos nas portas 3001 e 5000 (opcional, mas evita erro de porta em uso)
-echo "Limpando processos nas portas 3001 e 5000..."
-fuser -k 3001/tcp 5000/tcp || true
-
-# Inicia a API Node.js em background (porta 3001 interna)
+# 1. Inicia a API Node.js em background (porta 3001 interna)
+# Usando node diretamente em vez de ts-node para performance se estiver compilado, 
+# mas se não estiver, npx ts-node resolve.
 npx ts-node apps/api/src/server.ts &
 
-# Inicia o Python Flask em background (porta 5000 interna)
+# 2. Inicia o Python Flask em background (porta 5000 interna)
 python apps/python-service/app.py &
 
 # Aguarda o Node.js API estar pronto (porta 3001)
 echo "Aguardando API Node.js na porta 3001..."
-for i in $(seq 1 30); do
-  if curl -s http://localhost:3001/ > /dev/null 2>&1 || curl -s http://localhost:3001/api/files/list/PDB > /dev/null 2>&1; then
-    echo "API Node.js pronta!"
-    break
-  fi
-  sleep 1
-done
+timeout 60 bash -c 'until curl -s http://localhost:3001/ > /dev/null; do sleep 1; done' || echo "Aviso: Timeout aguardando API Node.js"
 
 # Aguarda o Flask estar pronto (porta 5000)
 echo "Aguardando Flask na porta 5000..."
-for i in $(seq 1 30); do
-  if curl -s http://localhost:5000/pdb_files > /dev/null 2>&1; then
-    echo "Flask pronto!"
-    break
-  fi
-  sleep 1
-done
+timeout 60 bash -c 'until curl -s http://localhost:5000/pdb_files > /dev/null; do sleep 1; done' || echo "Aviso: Timeout aguardando Flask"
 
-# Build do Front-end (necessário para Next.js start)
-echo "Construindo aplicação web..."
-npm run build --workspace=web
+echo "Serviços de background prontos! Iniciando Servidor Web..."
 
-# Inicia o Next.js na porta principal (definida pelo Render via $PORT)
-HOSTNAME="0.0.0.0" PORT=${PORT:-3000} npm start --workspace=web
+# 3. Inicia o Next.js via Standalone Server (Porta 3000)
+# Isso é MUITO mais rápido e eficiente que o 'npm start'
+export HOSTNAME="0.0.0.0"
+export PORT=${PORT:-3000}
+
+# Verifica se o standalone existe, caso contrário usa o modo padrão
+if [ -f "apps/web/.next/standalone/server.js" ]; then
+    echo "Executando via Next.js Standalone..."
+    node apps/web/.next/standalone/server.js
+elif [ -f "apps/web/.next/standalone/apps/web/server.js" ]; then
+    # Estrutura comum em monorepos
+    node apps/web/.next/standalone/apps/web/server.js
+else
+    echo "Standalone não encontrado. Tentando npm start..."
+    npm start --workspace=web
+fi

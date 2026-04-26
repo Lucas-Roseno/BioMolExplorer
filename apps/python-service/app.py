@@ -991,4 +991,4 @@ def get_analysis_molecule_image():
 
 if __name__ == '__main__':
     # Disable debug mode to prevent the Werkzeug reloader from doubling RAM usage
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

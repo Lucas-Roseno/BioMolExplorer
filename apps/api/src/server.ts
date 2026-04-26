@@ -373,7 +373,7 @@ app.get('/api/files/pdb_content/:target/:file', async (req, res) => {
   } catch (e) { res.status(500).send(''); }
 });
 
-const server = app.listen(3001, () => console.log(`🚀 Node.js Maestro online on port 3001`));
+const server = app.listen(3001, '127.0.0.1', () => console.log(`🚀 Node.js Maestro online on port 3001`));
 
 // Increase HTTP server timeout to 30 minutes
 server.setTimeout(1800000); 

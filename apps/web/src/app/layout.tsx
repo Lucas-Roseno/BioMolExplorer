@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <head>
         <Script src="https://3Dmol.org/build/3Dmol-min.js" strategy="beforeInteractive" />
-        {/* A Mágica dos Ícones Antigos */}
+        {/* The Magic of Old Icons */}
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
       </head>
       <body>

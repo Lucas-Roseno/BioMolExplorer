@@ -21,18 +21,18 @@ export default function ZincPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage({ type: 'success', text: data.data?.message || 'Download do ZINC concluído com sucesso!' });
+        setMessage({ type: 'success', text: data.data?.message || 'ZINC download completed successfully!' });
       } else {
-        const errMsg = data.message || 'Erro ao processar o arquivo ZINC.';
+        const errMsg = data.message || 'Error processing ZINC file.';
         // Check for common server-down patterns
         if (errMsg.toLowerCase().includes('connection') || errMsg.toLowerCase().includes('unreachable') || errMsg.toLowerCase().includes('offline')) {
-          setMessage({ type: 'error', text: '⚠️ O servidor do ZINC (files.docking.org) está indisponível. Tente novamente mais tarde.' });
+          setMessage({ type: 'error', text: '⚠️ The ZINC server (files.docking.org) is unavailable. Please try again later.' });
         } else {
           setMessage({ type: 'error', text: errMsg });
         }
       }
     } catch (err) {
-      setMessage({ type: 'error', text: '⚠️ Não foi possível conectar ao servidor. Verifique se os serviços estão rodando.' });
+      setMessage({ type: 'error', text: '⚠️ Unable to connect to the server. Check if the services are running.' });
     }
     setIsLoading(false);
     fetchFiles();

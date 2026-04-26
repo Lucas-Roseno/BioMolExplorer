@@ -5,26 +5,26 @@ export default function ReferencesPage() {
     <div className="container">
       <div className="references-container">
         <header className="references-header">
-          <h1 className="references-title">Relatório de Pesquisa: BioMolExplorer</h1>
-          <p className="subtitle">Interface Integrada para Extração e Visualização de Dados Biológicos</p>
+          <h1 className="references-title">Research Report: BioMolExplorer</h1>
+          <p className="subtitle">Integrated Interface for Biological Data Extraction and Visualization</p>
         </header>
 
         <section>
-          <h2 className="section-title">Objetivos de Desenvolvimento Sustentável (Agenda 2030)</h2>
+          <h2 className="section-title">Sustainable Development Goals (2030 Agenda)</h2>
           <ul className="ods-list">
-            <li>Assegurar uma vida saudável e promover o bem-estar para todos, em todas as idades.</li>
-            <li>Construir infraestruturas resilientes, promover a industrialização inclusiva e sustentável e fomentar a inovação.</li>
+            <li>Ensure healthy lives and promote well-being for all at all ages.</li>
+            <li>Build resilient infrastructure, promote inclusive and sustainable industrialization, and foster innovation.</li>
           </ul>
         </section>
 
         <section>
-          <h2 className="section-title">Resumo</h2>
+          <h2 className="section-title">Summary</h2>
           <div className="abstract-box">
             <p>
-              O desenvolvimento de fármacos para doenças neurodegenerativas, como o Alzheimer, enfrenta desafios significativos devido ao alto custo e tempo demandado. A modelagem molecular assistida por computador (CADD) e a triagem virtual são abordagens promissoras para otimizar essas etapas iniciais. O presente plano de trabalho, inserido no projeto NeuroPharmIA, teve como objetivo desenvolver o BioMolExplorer, uma interface computacional integrada para automatizar a extração, mineração e visualização de dados biológicos estruturais e químicos. A metodologia baseou-se no desenvolvimento de uma aplicação web (Front-end em HTML/JS/CSS e Back-end em Python), integrando scripts de coleta de dados (crawlers) de bases renomadas como PDB, ChEMBL e ZINC. Ao longo do projeto, foram implementados módulos interativos que permitem aos pesquisadores buscar alvos terapêuticos e compostos, visualizar moléculas em 2D e 3D utilizando a biblioteca RDKit, e gerenciar arquivos através de uma interface amigável com tratamento de erros, telas de carregamento e downloads em lote. Por fim, a aplicação foi conteinerizada utilizando Docker, garantindo fácil reprodutibilidade do ambiente. Os resultados obtidos demonstram que a plataforma reduz a barreira técnica para pesquisadores da área de bioinformática, centralizando o fluxo de trabalho e acelerando a seleção inicial de compostos multi-alvo com potencial terapêutico.
+              Drug development for neurodegenerative diseases, such as Alzheimer's, faces significant challenges due to high costs and time demands. Computer-aided drug design (CADD) and virtual screening are promising approaches to optimize these early stages. This work, part of the NeuroPharmIA project, aimed to develop BioMolExplorer, an integrated computational interface to automate the extraction, mining, and visualization of structural and chemical biological data. The methodology was based on developing a web application (HTML/JS/CSS Frontend and Python Backend), integrating data collection scripts (crawlers) from renowned databases such as PDB, ChEMBL, and ZINC. Throughout the project, interactive modules were implemented, allowing researchers to search for therapeutic targets and compounds, visualize molecules in 2D and 3D using the RDKit library, and manage files through a user-friendly interface with error handling, loading screens, and batch downloads. Finally, the application was containerized using Docker, ensuring easy environment reproducibility. The results demonstrate that the platform lowers the technical barrier for bioinformatics researchers, centralizing the workflow and accelerating the initial selection of multi-target compounds with therapeutic potential.
             </p>
             <div className="keywords">
-              Palavras-chave: Bioinformática; Triagem Virtual; Automação; Doença de Alzheimer.
+              Keywords: Bioinformatics; Virtual Screening; Automation; Alzheimer's Disease.
             </div>
           </div>
         </section>
@@ -43,72 +43,72 @@ export default function ReferencesPage() {
         </section>
 
         <section className="report-content">
-          <h2 className="section-title">Corpo do Relatório</h2>
-          
-          <h3 className="subsection-title">Introdução</h3>
+          <h2 className="section-title">Report Body</h2>
+
+          <h3 className="subsection-title">Introduction</h3>
           <p>
-            A compreensão das condições neuronais e das alterações associadas ao envelhecimento exige uma análise detalhada do cérebro humano. Alterações funcionais ou estruturais frequentemente conduzem ao desenvolvimento de diferentes formas de demência, com a doença de Alzheimer (AD) destacando-se como a forma mais prevalente. A elevada prevalência da doença, aliada à sua complexa fisiopatologia, motiva esforços intensos para o desenvolvimento de estratégias terapêuticas eficazes.
+            Understanding neuronal conditions and changes associated with aging requires a detailed analysis of the human brain. Functional or structural changes often lead to the development of different forms of dementia, with Alzheimer's disease (AD) standing out as the most prevalent form. The high prevalence of the disease, combined with its complex pathophysiology, motivates intense efforts to develop effective therapeutic strategies.
           </p>
           <p>
-            Contudo, a descoberta e o reposicionamento de fármacos são processos marcados por elevados custos e baixa taxa de sucesso. Uma estratégia promissora para contornar tais desafios é a aplicação de técnicas computacionais na fase exploratória, como a modelagem molecular assistida por computador (CADD) e a triagem virtual de alto desempenho (HTVS). Estas metodologias avaliam propriedades críticas, como afinidade de ligação, toxicidade e biodisponibilidade em bancos de dados vastos.
+            However, drug discovery and repositioning are processes marked by high costs and low success rates. A promising strategy to circumvent such challenges is the application of computational techniques in the exploratory phase, such as computer-aided drug design (CADD) and high-throughput virtual screening (HTVS). These methodologies evaluate critical properties, such as binding affinity, toxicity, and bioavailability across vast databases.
           </p>
           <p>
-            O desafio prático, no entanto, reside na fragmentação das ferramentas de bioinformática. A extração de dados de bancos como PDB, ChEMBL e ZINC exige frequentemente a execução manual de scripts complexos. Nesse contexto, o presente plano de trabalho visou projetar e implementar a interface do BioMolExplorer, um módulo central do projeto NeuroPharmIA. O objetivo foi desenvolver uma plataforma web amigável que automatizasse as etapas de extração, análise prévia e visualização de compostos e enzimas, democratizando o acesso a essas ferramentas computacionais e otimizando o fluxo de trabalho na busca por inibidores voltados a alvos como AChE, BChE e BACE1.
+            The practical challenge, however, resides in the fragmentation of bioinformatics tools. Data extraction from databases like PDB, ChEMBL, and ZINC often requires the manual execution of complex scripts. In this context, this work aimed to design and implement the BioMolExplorer interface, a core module of the NeuroPharmIA project. The goal was to develop a user-friendly web platform that would automate the stages of extraction, preliminary analysis, and visualization of compounds and enzymes, democratizing access to these computational tools and optimizing the workflow in the search for inhibitors targeting sites such as AChE, BChE, and BACE1.
           </p>
 
-          <h3 className="subsection-title">Metodologia</h3>
+          <h3 className="subsection-title">Methodology</h3>
           <p>
-            O desenvolvimento do BioMolExplorer adotou um processo ágil e iterativo, com reuniões semanais de acompanhamento e definição de metas. A arquitetura do projeto foi estruturada na separação entre uma interface de usuário (Front-end) e um servidor de processamento (Back-end).
+            The development of BioMolExplorer adopted an agile and iterative process, with weekly follow-up meetings and goal definition. The project architecture was structured on the separation between a user interface (Frontend) and a processing server (Backend).
           </p>
           <p>
-            <strong>Ambiente e Ferramentas:</strong> Inicialmente, o ambiente de desenvolvimento foi configurado utilizando o gerenciador de pacotes Anaconda, permitindo a instalação de dependências isoladas a partir do arquivo requirements.yml. O back-end foi desenvolvido em linguagem Python, servindo como ponte para a execução dos scripts de coleta de dados (crawlers). O front-end foi estruturado em HTML, CSS e JavaScript.
+            <strong>Environment and Tools:</strong> Initially, the development environment was configured using the Anaconda package manager, allowing the installation of isolated dependencies from the requirements.yml file. The backend was developed in Python, serving as a bridge for the execution of data collection scripts (crawlers). The frontend was structured in HTML, CSS, and JavaScript.
           </p>
           <p>
-            <strong>Desenvolvimento de Módulos (Crawlers):</strong> Foram integrados sequencialmente três grandes módulos de mineração de dados:
+            <strong>Module Development (Crawlers):</strong> Three major data mining modules were sequentially integrated:
           </p>
           <ul className="ods-list">
-            <li><strong>PDB Loader (11-pdb.py):</strong> Módulo para extração de dados do Protein Data Bank. Foi implementada lógica para exigir parâmetros específicos do usuário (como o PDB EC number), evitando buscas genéricas e custosas.</li>
-            <li><strong>ChEMBL Loader (12-chembl.py):</strong> Integração com o banco ChEMBL para busca de bioativos.</li>
-            <li><strong>ZINC Loader (13-zinc.py):</strong> Módulo para captura de moléculas similares e expansão da biblioteca de compostos.</li>
+            <li><strong>PDB Loader (11-pdb.py):</strong> Module for data extraction from the Protein Data Bank. Logic was implemented to require specific user parameters (such as the PDB EC number), avoiding generic and costly searches.</li>
+            <li><strong>ChEMBL Loader (12-chembl.py):</strong> Integration with the ChEMBL database to search for bioactives.</li>
+            <li><strong>ZINC Loader (13-zinc.py):</strong> Module to capture similar molecules and expand the compound library.</li>
           </ul>
           <p>
-            <strong>Interface e Experiência do Usuário (UX):</strong> Para garantir o bom funcionamento durante tarefas assíncronas (downloads demorados de dados biológicos), foram implementadas telas de bloqueio temporário (lock screens) informando ao usuário o progresso da requisição, além de pop-ups para tratamento de erros. Tabelas dinâmicas foram desenvolvidas para apresentar arquivos .csv processados, permitindo a exclusão ou download em lote (.zip) de arquivos gerados.
+            <strong>Interface and User Experience (UX):</strong> To ensure proper functioning during asynchronous tasks (time-consuming downloads of biological data), temporary lock screens were implemented to inform the user of the request progress, along with pop-ups for error handling. Dynamic tables were developed to present processed .csv files, allowing for the deletion or batch download (.zip) of generated files.
           </p>
           <p>
-            <strong>Visualização Molecular e Infraestrutura:</strong> Para agregação de valor analítico, a biblioteca RDKit foi acoplada ao sistema para renderização gráfica de moléculas em 2D e 3D diretamente no navegador. Por fim, visando a portabilidade e escalabilidade do software, todo o ambiente da aplicação foi encapsulado em contêineres utilizando a tecnologia Docker.
-          </p>
-
-          <h3 className="subsection-title">Resultados e Discussões</h3>
-          <p>
-            Os resultados obtidos refletem a concretização de uma plataforma funcional e integrada. A evolução do projeto demonstrou um ganho significativo na usabilidade das ferramentas de triagem virtual do NeuroPharmIA.
-          </p>
-          <p>
-            A integração do módulo PDB permitiu que os dados estruturais de proteínas fossem baixados de forma organizada, exibidos em uma interface em formato de tabela colapsável, facilitando a visualização por alvo terapêutico. O sistema de gerenciamento de arquivos provou ser eficiente, permitindo que o usuário apague pastas e arquivos desnecessários com feedback imediato em tela, ou realize o download completo do projeto em um arquivo compactado.
-          </p>
-          <p>
-            Na aba do ChEMBL, a adição de telas de carregamento (lock screens) resolveu problemas de concorrência onde múltiplos cliques do usuário causavam sobrecarga nos scripts de requisição. Além disso, as rotinas de tratamento de exceção (try/except) acopladas a alertas em tela garantiram que erros de conexão com os bancos biológicos não causassem falhas silenciosas na aplicação.
-          </p>
-          <p>
-            O módulo ZINC foi implementado com sucesso para a busca de ligantes. Um dos principais diferenciais alcançados na interface final foi a integração com o RDKit, que viabilizou a exibição interativa das estruturas tridimensionais (3D) das enzimas e das configurações 2D das moléculas pequenas diretamente no front-end.
-          </p>
-          <p>
-            A conteinerização via Docker consolidou o sistema, empacotando o back-end em Python e os assets web em uma única imagem. Isso elimina a complexidade da instalação do ambiente e dependências (como RDKit e bibliotecas científicas) por novos pesquisadores, bastando executar o contêiner para que o sistema esteja operante e pronto para conduzir as etapas de avaliação in silico.
+            <strong>Molecular Visualization and Infrastructure:</strong> To add analytical value, the RDKit library was coupled to the system for graphical rendering of molecules in 2D and 3D directly in the browser. Finally, aiming at software portability and scalability, the entire application environment was encapsulated in containers using Docker technology.
           </p>
 
-          <h3 className="subsection-title">Conclusões</h3>
+          <h3 className="subsection-title">Results and Discussion</h3>
           <p>
-            O desenvolvimento do BioMolExplorer cumpriu os objetivos estabelecidos no plano de trabalho, entregando uma plataforma computacional robusta, modular e de fácil utilização. A criação da interface eliminou a necessidade de interação direta via linha de comando para a coleta e o pré-processamento de dados de repositórios como PDB, ChEMBL e ZINC.
+            The results obtained reflect the construction of a functional and integrated platform. The project's evolution demonstrated a significant gain in the usability of NeuroPharmIA's virtual screening tools.
           </p>
           <p>
-            Durante o percurso, superaram-se desafios de integração entre linguagens web e rotinas pesadas de back-end em Python. A implementação de visualizações moleculares 2D/3D e a posterior conteinerização via Docker agregaram valor considerável, tornando a ferramenta não apenas um utilitário de download, mas um verdadeiro painel de controle (dashboard) para biologia computacional.
+            The integration of the PDB module allowed protein structural data to be downloaded in an organized way, displayed in a collapsible table interface, facilitating visualization by therapeutic target. The file management system proved efficient, allowing the user to delete unnecessary folders and files with immediate feedback on screen, or perform the full project download in a compressed file.
           </p>
           <p>
-            Do ponto de vista acadêmico e profissional, o plano de trabalho propiciou o amadurecimento técnico do discente no ecossistema de desenvolvimento de software aplicado à bioinformática, solidificando conhecimentos em versionamento, arquitetura web e tratamento de dados biológicos. Como trabalhos futuros, espera-se que a plataforma integre os módulos subsequentes de inteligência artificial propostos pelo projeto NeuroPharmIA, fechando o ciclo automatizado de seleção e classificação de inibidores para doenças neurodegenerativas.
+            In the ChEMBL tab, the addition of loading screens resolved concurrency issues where multiple user clicks caused overload on the request scripts. Furthermore, exception handling routines (try/except) coupled with screen alerts ensured that connection errors with biological databases did not cause silent failures in the application.
+          </p>
+          <p>
+            The ZINC module was successfully implemented for ligand searching. One of the main differentiators achieved in the final interface was the integration with RDKit, which allowed the interactive display of three-dimensional (3D) structures of enzymes and 2D configurations of small molecules directly on the frontend.
+          </p>
+          <p>
+            Containerization via Docker consolidated the system, packaging the Python backend and web assets into a single image. This eliminates the complexity of environment and dependency installation (such as RDKit and scientific libraries) for new researchers; just running the container is enough to have the system operational and ready to conduct in silico evaluation stages.
+          </p>
+
+          <h3 className="subsection-title">Conclusions</h3>
+          <p>
+            The development of BioMolExplorer fulfilled the objectives established in the work plan, delivering a robust, modular, and easy-to-use computational platform. The creation of the interface eliminated the need for direct interaction via command line for the collection and preprocessing of data from repositories such as PDB, ChEMBL, and ZINC.
+          </p>
+          <p>
+            During the process, integration challenges between web languages and heavy Python backend routines were overcome. The implementation of 2D/3D molecular visualizations and subsequent containerization via Docker added considerable value, making the tool not just a download utility, but a true dashboard for computational biology.
+          </p>
+          <p>
+            From an academic and professional perspective, the work plan enabled the technical growth of the student in the software development ecosystem applied to bioinformatics, solidifying knowledge in versioning, web architecture, and biological data handling. As future work, it is expected that the platform will integrate the subsequent artificial intelligence modules proposed by the NeuroPharmIA project, closing the automated cycle of selecting and classifying inhibitors for neurodegenerative diseases.
           </p>
         </section>
 
         <section>
-          <h2 className="section-title">Referências</h2>
+          <h2 className="section-title">References</h2>
           <ul className="bib-list">
             <li className="bib-item">Cereto-Massagué, A., Ojeda, M. J., Valls, C., Mulero, M., Garcia-Vallvé, S., & Pujadas, G. (2015). Molecular fingerprint similarity search in virtual screening. Methods, 71, 58–63. https://doi.org/10.1016/j.ymeth.2014.09.014</li>
             <li className="bib-item">Lipinski, C. A. (2000). Drug-like properties and the causes of poor solubility and poor permeability. Journal of Pharmacological and Toxicological Methods, 44(1), 235–249. https://doi.org/10.1016/S1056-8719(00)00011-X</li>

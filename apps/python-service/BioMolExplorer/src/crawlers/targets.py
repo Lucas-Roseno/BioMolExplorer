@@ -62,7 +62,7 @@ class Targets(CrawlerSettings):
 
     def __init__(self, path=None, extension='csv') -> None:
         super().__init__()
-        self.__target    = super().get_client_connection().target
+        self.__target    = None
         self.__path      = str(Path.cwd())
         self.__extension = extension
         self.logger      = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/targets.log')
@@ -77,6 +77,13 @@ class Targets(CrawlerSettings):
      
        
     def search(self, target_name:str, filter_params:dict) -> None:
+        if self.__target is None:
+            conn = self.get_client_connection()
+            if conn is None:
+                self.logger.error("Could not connect to ChEMBL API. Target search failed.")
+                return
+            self.__target = conn.target
+
         files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
         target_name = target_name.upper()
         infile  =  files.isFile(target_name)[0]

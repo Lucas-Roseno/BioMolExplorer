@@ -79,7 +79,7 @@ class Molecule(CrawlerSettings, MyMolecules):
     def __init__(self, path=None, bioactivity_path=None, extension='csv') -> None:
         CrawlerSettings.__init__(self)
         MyMolecules.__init__(self)
-        self.__molecule    = self.get_client_connection().molecule
+        self.__molecule    = None
         self.__extension   = extension
         self.set_outputpath(path) if path != None else None
         self.set_bioactivitypath(bioactivity_path) if bioactivity_path != None else None
@@ -121,7 +121,13 @@ class Molecule(CrawlerSettings, MyMolecules):
 
 
     def __search_mol(self, molecule_id:str, filter_params:dict, np_filter:int, mol_filter:str, mwt_filter:float) -> None:
-        
+        if self.__molecule is None:
+            conn = self.get_client_connection()
+            if conn is None:
+                self.logger.error(f"Could not connect to ChEMBL API. Molecule search for {molecule_id} failed.")
+                return
+            self.__molecule = conn.molecule
+            
         try:
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(molecule_id)[0]
@@ -206,7 +212,7 @@ class SimilarMols(CrawlerSettings, MyMolecules):
     def __init__(self, path:Optional[str]=None,  bioactivity_path:Optional[str]=None, extension:Optional[str]='csv') -> None:
         CrawlerSettings.__init__(self)
         MyMolecules.__init__(self)
-        self.__similarity  = self.get_client_connection().similarity
+        self.__similarity  = None
         self.__extension   = extension
         self.set_outputpath(path) if path != None else None
         self.set_bioactivitypath(bioactivity_path) if bioactivity_path != None else None
@@ -247,7 +253,13 @@ class SimilarMols(CrawlerSettings, MyMolecules):
 
 
     def __search_similar_mols(self, molecule_id:str, filter_params:dict, np_filter:int, mol_filter:str, mwt_filter:float) -> None:
-        
+        if self.__similarity is None:
+            conn = self.get_client_connection()
+            if conn is None:
+                self.logger.error(f"Could not connect to ChEMBL API. Similarity search for {molecule_id} failed.")
+                return
+            self.__similarity = conn.similarity
+
         try:
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(molecule_id)[0]

@@ -4,7 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import { setGlobalDispatcher, Agent } from 'undici';
 
-// Tira o limite de timeout para buscas pesadas
+// Remove timeout limit for heavy searches
 setGlobalDispatcher(new Agent({ headersTimeout: 0, connectTimeout: 0, bodyTimeout: 0 }));
 
 const app = express();
@@ -15,7 +15,7 @@ const upload = multer({ dest: 'uploads/' });
 const PYTHON_URL = process.env.PYTHON_URL || 'http://127.0.0.1:5000';
 
 // ==========================================
-// ROTAS DE BUSCA
+// SEARCH ROUTES
 // ==========================================
 app.post('/api/pdb/search', async (req, res) => {
   try {
@@ -37,10 +37,10 @@ app.post('/api/pdb/search', async (req, res) => {
     if (response.ok) {
       res.json({ success: true, data });
     } else {
-      res.status(response.status).json({ success: false, message: data.message || 'Erro PDB.' });
+      res.status(response.status).json({ success: false, message: data.message || 'PDB Error.' });
     }
   } catch (error: any) { 
-    res.status(500).json({ success: false, message: error.message || 'Erro PDB.' }); 
+    res.status(500).json({ success: false, message: error.message || 'PDB Error.' }); 
   }
 });
 
@@ -57,14 +57,81 @@ app.post('/api/chembl/search', async (req, res) => {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
     });
     res.json({ success: true, data: await response.json() });
-  } catch (error) { res.status(500).json({ success: false, message: 'Erro ChEMBL.' }); }
+  } catch (error) { res.status(500).json({ success: false, message: 'ChEMBL Error.' }); }
+});
+
+// ==========================================
+// ANALYSIS ROUTES (FORWARDING TO PYTHON)
+// ==========================================
+app.get('/api/analysis/graph-data', async (req, res) => {
+  try {
+    const target = req.query.target ? `target=${encodeURIComponent(req.query.target.toString())}` : '';
+    const datasetType = req.query.datasetType ? `datasetType=${encodeURIComponent(req.query.datasetType.toString())}` : 'datasetType=MOLS';
+    const query = [target, datasetType].filter(Boolean).join('&');
+    const response = await fetch(`${PYTHON_URL}/api/analysis/graph-data${query ? '?' + query : ''}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/analysis/plots', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/plots`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/analysis/molecule-image', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/molecule-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+// Proxy de imagem PNG — pipe binário direto do Python
+app.get('/api/analysis/plot/:filename', async (req, res) => {
+  try {
+    const filename = encodeURIComponent(req.params.filename);
+    const response = await fetch(`${PYTHON_URL}/api/analysis/plot/${filename}`);
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, message: 'Plot not found.' });
+    }
+    const contentType = response.headers.get('content-type') || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    const arrayBuffer = await response.arrayBuffer();
+    res.end(Buffer.from(arrayBuffer));
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/chembl_files', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/chembl_files`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
 });
 
 // ZINC Upload (forwards .uri file to Flask)
 app.post('/api/zinc/upload', upload.single('zinc_file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: 'Nenhum arquivo enviado.' });
+      return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
 
     const formData = new FormData();
@@ -88,12 +155,12 @@ app.post('/api/zinc/upload', upload.single('zinc_file'), async (req, res) => {
     if (response.ok) {
       res.json({ success: true, data });
     } else {
-      res.status(response.status).json({ success: false, message: data.message || 'Erro ao processar ZINC.' });
+      res.status(response.status).json({ success: false, message: data.message || 'Error processing ZINC.' });
     }
   } catch (error: any) {
     // Clean up temp file on error
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(500).json({ success: false, message: error.message || 'Erro ao processar ZINC.' });
+    res.status(500).json({ success: false, message: error.message || 'Error processing ZINC.' });
   }
 });
 
@@ -115,18 +182,10 @@ app.get('/api/files/list/ZINC', async (req, res) => {
 });
 
 // ==========================================
-// ROTAS DE ANÁLISE DE SIMILARIDADE
+// SIMILARITY ANALYSIS ROUTES
 // ==========================================
 
-app.get('/api/analysis/graph-data', async (req, res) => {
-  try {
-    const response = await fetch(`${PYTHON_URL}/api/analysis/graph-data`);
-    const data = await response.json();
-    res.status(response.status).json(data);
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Erro ao buscar dados do grafo.' });
-  }
-});
+
 
 app.get('/api/analysis/plots', async (req, res) => {
   try {
@@ -134,7 +193,7 @@ app.get('/api/analysis/plots', async (req, res) => {
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Erro ao listar plots.' });
+    res.status(500).json({ success: false, message: 'Error listing plots.' });
   }
 });
 
@@ -146,10 +205,10 @@ app.get('/api/analysis/plot/:filename', async (req, res) => {
       const buffer = await response.arrayBuffer();
       res.send(Buffer.from(buffer));
     } else {
-      res.status(response.status).json({ success: false, message: 'Plot não encontrado.' });
+      res.status(response.status).json({ success: false, message: 'Plot not found.' });
     }
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Erro ao carregar o plot.' });
+    res.status(500).json({ success: false, message: 'Error loading plot.' });
   }
 });
 
@@ -163,12 +222,12 @@ app.post('/api/analysis/molecule-image', async (req, res) => {
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Erro ao gerar imagem da molécula.' });
+    res.status(500).json({ success: false, message: 'Error generating molecule image.' });
   }
 });
 
 // ==========================================
-// ROTAS DE ARQUIVOS (Adaptadas ao seu Flask)
+// FILE ROUTES (Adapted to your Flask service)
 // ==========================================
 // Listagem
 app.get('/api/files/list/PDB', async (req, res) => {
@@ -297,7 +356,7 @@ app.delete('/api/files/delete/ZINC/:target', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false }); }
 });
 
-// Inteligência 2D/3D
+// 2D/3D Intelligence
 app.get('/api/files/molecule/:subdir/:target/:file', async (req, res) => {
   try {
     const { subdir, target, file } = req.params;
@@ -314,4 +373,9 @@ app.get('/api/files/pdb_content/:target/:file', async (req, res) => {
   } catch (e) { res.status(500).send(''); }
 });
 
-app.listen(3001, () => console.log(`🚀 Node.js Maestro online na porta 3001`));
+const server = app.listen(3001, () => console.log(`🚀 Node.js Maestro online on port 3001`));
+
+// Increase HTTP server timeout to 30 minutes
+server.setTimeout(1800000); 
+server.keepAliveTimeout = 1800000;
+server.headersTimeout = 1801000;

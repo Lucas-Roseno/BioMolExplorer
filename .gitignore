@@ -5,3 +5,5 @@ logs/
 .dat
 venv
 node_modules/
+**/resultados/
+apps/python-service/BioMolExplorer/resultados/

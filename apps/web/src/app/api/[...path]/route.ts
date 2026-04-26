@@ -10,7 +10,7 @@ async function proxyRequest(request: Request) {
     const init: RequestInit = {
         method: request.method,
         headers,
-        signal: AbortSignal.timeout(300_000), // 5 minutes timeout
+        signal: AbortSignal.timeout(1_800_000), // 30 minutes timeout
     };
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -30,7 +30,19 @@ async function proxyRequest(request: Request) {
         });
     } catch (error: any) {
         console.error(`Proxy error for ${targetUrl}:`, error.message);
-        return new Response(JSON.stringify({ error: 'Backend unavailable' }), {
+        
+        // Tratar Timeout específico
+        if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('aborted')) {
+            return new Response(JSON.stringify({ 
+                success: false, 
+                message: 'A operação excedeu o tempo limite de 30 minutos na tela. O processamento da base ChEMBL pode ser muito pesado e continuará rodando em segundo plano no terminal.' 
+            }), {
+                status: 504,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+
+        return new Response(JSON.stringify({ success: false, message: 'Backend unavailable' }), {
             status: 502,
             headers: { 'Content-Type': 'application/json' },
         });

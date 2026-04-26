@@ -66,7 +66,7 @@ class Bioactivity(CrawlerSettings):
 
     def __init__(self, target_path=None, path=None, extension='csv') -> None:
         super().__init__()
-        self.__bioactivity = super().get_client_connection().activity
+        self.__bioactivity = None
         self.__path = str(Path.cwd())
         self.__extension   = extension
         self.set_outputpath(path) if path != None else None
@@ -92,7 +92,13 @@ class Bioactivity(CrawlerSettings):
     
             
     def __search_bioactivity(self, target_id:str, filter_params:dict) -> None:
-        
+        if self.__bioactivity is None:
+            conn = self.get_client_connection()
+            if conn is None:
+                self.logger.error(f"Could not connect to ChEMBL API. Bioactivity search for {target_id} failed.")
+                return
+            self.__bioactivity = conn.activity
+            
         try:
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(target_id)[0]

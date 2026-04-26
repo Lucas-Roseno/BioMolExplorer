@@ -86,9 +86,14 @@ def load_chembl(target_name:str, base_output_path:str):
     similar_output_path = f'{base_output_path}/ChEMBL/similars/{target_name.replace(' ','')}/'
 
     target = Targets()
+    if target.get_client_connection() is None:
+        raise Exception("ChEMBL API is currently unreachable (EBI might be down). Please try again later.")
+
     bioact = Bioactivity()
     mols = Molecule()
     sims = SimilarMols()
+    
+    # ... rest of the function ...
 
     script_path = '/src/scripts/crawlers/target.json'
     filters = read_filters(script_path)

@@ -32,7 +32,7 @@ ZINC_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ZINC')
 def run_load_pdb():
     data = request.json
     try:
-        # Lógica revertida para o básico
+        # Logic reverted to basics
         if 'PolymerEntityTypeID' in data and data['PolymerEntityTypeID']:
             data['PolymerEntityTypeID'] = [PolymerEntityType[item] for item in data['PolymerEntityTypeID'] if item]
         if 'ExperimentalMethodID' in data and data['ExperimentalMethodID']:
@@ -42,7 +42,7 @@ def run_load_pdb():
         
         warnings = load_pdb(
             target=data.get('target'),
-            base_output_path=os.path.join('BioMolExplorer', 'datasets'),
+            base_output_path='/BioMolExplorer/datasets',
             pdb_ec=data.get('pdb_ec'),
             PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
             ExperimentalMethodID=data.get('ExperimentalMethodID'),
@@ -145,7 +145,7 @@ def delete_pdb_target():
     if not target:
         return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
 
-    # Verificação básica de segurança
+    # Basic security check
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
 
@@ -153,7 +153,7 @@ def delete_pdb_target():
     
     try:
         if os.path.exists(target_dir_path) and os.path.isdir(target_dir_path):
-            shutil.rmtree(target_dir_path) # Remove a pasta inteira e seu conteúdo
+            shutil.rmtree(target_dir_path) # Remove the entire folder and its contents
             return jsonify({'status': 'success', 'message': f'Target {target} deleted successfully'})
         else:
             return jsonify({'status': 'error', 'message': 'Target directory not found'}), 404
@@ -541,8 +541,8 @@ def run_load_zinc():
             # CORREÇÃO: Passar run_2d e run_3d em vez das variáveis baseadas apenas no nome
             load_zinc(
                 base_output_path='/datasets', 
-                zinc2d=run_2d,  # Usa a flag que corresponde ao arquivo salvo
-                zinc3d=run_3d,  # Usa a flag que corresponde ao arquivo salvo
+                zinc2d=run_2d,  # Use flag corresponding to saved file
+                zinc3d=run_3d,  # Use flag corresponding to saved file
                 verbose=verbose_flag
             )
         finally:
@@ -551,7 +551,7 @@ def run_load_zinc():
         return jsonify({'status': 'success', 'message': f'ZINC processing for {filename_original} completed.'})
 
     except requests.exceptions.ConnectionError:
-        return jsonify({'status': 'error', 'message': 'O servidor do ZINC (files.docking.org) está indisponível. Tente novamente mais tarde.'}), 503
+        return jsonify({'status': 'error', 'message': 'The ZINC server (files.docking.org) is unavailable. Please try again later.'}), 503
     except Exception as e:
         print(f"ZINC Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -646,13 +646,13 @@ def delete_zinc():
 @app.route('/get_molecule_data/<sub_dir_name>/<target>/<csv_file>', methods=['GET'])
 def get_molecule_data(sub_dir_name, target, csv_file):
     """
-    Busca o SMILES de um arquivo CSV de molécula, gera a imagem 2D
-    e uma conformação 3D (MolBlock) para visualização.
+    Finds the SMILES from a molecule CSV file, generates the 2D image
+    and a 3D conformation (MolBlock) for visualization.
 
-    Esta função tenta encontrar o SMILES de três formas:
-    1. Coluna 'canonical_smiles'
-    2. Coluna 'smiles'
-    3. Chave 'canonical_smiles' dentro da coluna 'molecule_structures'
+    This function attempts to find the SMILES in three ways:
+    1. 'canonical_smiles' column
+    2. 'smiles' column
+    3. 'canonical_smiles' key within the 'molecule_structures' column
     """
     if not all([sub_dir_name, target, csv_file]):
         return jsonify({'status': 'error', 'message': 'Path components not specified'}), 400
@@ -736,7 +736,7 @@ def get_molecule_data(sub_dir_name, target, csv_file):
     
 @app.route('/get_pdb_content/<target>/<pdb_file>', methods=['GET'])
 def get_pdb_content(target, pdb_file):
-    """Envia o conteúdo de um arquivo PDB como texto plano."""
+    """Sends the content of a PDB file as plain text."""
     if not target or not pdb_file:
         return jsonify({'status': 'error', 'message': 'Target or PDB file not specified'}), 400
     if '..' in target or '..' in pdb_file:
@@ -746,7 +746,7 @@ def get_pdb_content(target, pdb_file):
     
     try:
         if os.path.exists(file_path):
-            # Envia o arquivo como texto, não como anexo
+            # Sends the file as text, not as an attachment
             return send_file(file_path, mimetype='text/plain')
         else:
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
@@ -757,8 +757,8 @@ def get_pdb_content(target, pdb_file):
 @app.route('/get_target_pdb/<target_name>', methods=['GET'])
 def get_target_pdb(target_name):
     """
-    Encontra o primeiro arquivo PDB disponível para um determinado alvo
-    e envia seu conteúdo como texto.
+    Finds the first available PDB file for a given target
+    and sends its content as text.
     """
     if not target_name:
         return jsonify({'status': 'error', 'message': 'Target name not specified'}), 400
@@ -791,76 +791,99 @@ def get_target_pdb(target_name):
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 # ==========================================
-# ROTAS DE ANÁLISE DE SIMILARIDADE
+# SIMILARITY ANALYSIS ROUTES
 # ==========================================
 
 @app.route('/api/analysis/graph-data', methods=['GET'])
 def get_graph_data():
     """
-    Executa o pipeline de análise (para garantir dados sempre novos)
-    e retorna os dados do grafo (nós e arestas).
+    Runs the analysis pipeline (to ensure fresh data)
+    and returns the graph data (nodes and edges).
     """
+    original_cwd = os.getcwd()
     try:
-        # --- 0. Rodar Pipeline de Análise (conforme solicitado pelo usuário) ---
-        # Definindo caminhos relativos ao proximo de Path.cwd() que é apps/python-service
-        rel_db_path = '/BioMolExplorer/datasets/ChEMBL/DrugBank'
+        target = request.args.get('target', 'Acetylcholinesterase')
         
-        # Otimização: se os datasets não existirem, ignora o processamento
-        full_db_path = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank')
+        # --- 0. Run Analysis Pipeline (as requested by user) ---
+        target_dir = os.path.join(BASE_DIR, 'BioMolExplorer')
+        os.chdir(target_dir)
+
+        # Defining paths relative to CWD
+        rel_db_path = '/datasets/ChEMBL/DrugBank'
+        
+        # Optimization: if datasets do not exist, skip processing
+        full_db_path = os.path.join(target_dir, 'datasets', 'ChEMBL', 'DrugBank')
         if not os.path.exists(full_db_path):
              return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
 
-        # Executando funções do workflow original (21-dataAnalysis.py)
-        # Note: essas funções usam Path.cwd() interneamente, então passamos caminhos relativos.
+        # Executing original workflow functions (21-dataAnalysis.py)
+        # Note: these functions use Path.cwd() internally
         generate_fingerprints(base_input_path=rel_db_path, morgan=True, maccs=True, pharmacophore=True)
         compute_similarity(base_input_path=rel_db_path + '/Fingerprints',
                            base_output_path=rel_db_path,
                            metric=similarityFunctions.TanimotoSimilarity,
-                           fingerprint=fingerprints.Morgan)
+                            fingerprint=fingerprints.Morgan)
         analyze_graphs(base_input_path=rel_db_path,
-                        base_output_path='/BioMolExplorer/resultados/grafos',
-                        metric=similarityFunctions.TanimotoSimilarity.value, # analyze_graphs as vezes espera string ou enum, conferindo...
+                        base_output_path='/resultados/grafos',
+                        metric=similarityFunctions.TanimotoSimilarity,
                         fingerprint=fingerprints.Morgan)
 
-        # --- 1. Carregar Dados Processados ---
+        dataset_type = request.args.get('datasetType', 'MOLS')
+        if dataset_type not in ['MOLS', 'SIMS']:
+            dataset_type = 'MOLS'
+
+        # --- 1. Load Processed Data ---
         maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
-        csv_file = os.path.join(maxcomp_dir, 'Tanimoto_morgan_Acetylcholinesterase_MOLS.csv')
         
-        if not os.path.exists(csv_file):
-            return jsonify({'success': False, 'message': 'Arquivo de dados do grafo não encontrado.'}), 404
+        # Find corresponding file flexibly (ignoring spaces in target name)
+        csv_file = None
+        target_normalized = target.replace(" ", "").lower()
+        correct_alvo = target # fallback
+        
+        if os.path.exists(maxcomp_dir):
+            for filename in os.listdir(maxcomp_dir):
+                if filename.startswith('Tanimoto_morgan_') and filename.endswith(f'_{dataset_type}.csv'):
+                    alvo = filename.replace('Tanimoto_morgan_', '').replace(f'_{dataset_type}.csv', '')
+                    if alvo.replace(" ", "").lower() == target_normalized:
+                        csv_file = os.path.join(maxcomp_dir, filename)
+                        correct_alvo = alvo
+                        break
+                        
+        if not csv_file or not os.path.exists(csv_file):
+            return jsonify({'success': False, 'message': f'Graph data file not found for {dataset_type} dataset.'}), 404
             
-        # Lẽ as arestas (source, target, value)
+        # Read edges (source, target, value)
         edges_df = pd.read_csv(csv_file)
         
-        # Lê os dados das moléculas (para mapear ID -> SMILES)
-        # Vamos usar o DrugBank Acetylcholinesterase como exemplo base
-        mols_file = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank', 'Acetylcholinesterase_MOLS.csv')
+        # Read molecule data (to map ID -> SMILES) flexibly
+        mols_file = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank', f'{correct_alvo}_{dataset_type}.csv')
         
         smiles_map = {}
         if os.path.exists(mols_file):
             mols_df = pd.read_csv(mols_file)
             for _, row in mols_df.iterrows():
-                smiles_map[row['molecule_chembl_id']] = row['canonical_smiles']
+                if 'molecule_chembl_id' in row and 'canonical_smiles' in row:
+                    smiles_map[row['molecule_chembl_id']] = row['canonical_smiles']
                 
         # Constrói o JSON para o react-force-graph
         nodes_set = set()
         links = []
         
-        # A coluna value pode não estar presente em maxcomp, mas estaria na similaridade bruta.
-        # Se não houver 'value', usaremos um peso padrão.
+        # The value column might not be present in maxcomp, but it would be in raw similarity.
+        # If there is no 'value', we will use a default weight.
         has_value = 'value' in edges_df.columns
         
         for _, row in edges_df.iterrows():
             source = str(row['source'])
-            target = str(row['target'])
+            edge_target = str(row['target'])
             value = float(row['value']) if has_value else 1.0
             
             nodes_set.add(source)
-            nodes_set.add(target)
+            nodes_set.add(edge_target)
             
             links.append({
                 'source': source,
-                'target': target,
+                'target': edge_target,
                 'value': value
             })
             
@@ -872,20 +895,49 @@ def get_graph_data():
                 'smiles': smiles_map.get(node_id, '')
             })
             
-        return jsonify({
+        # --- Calculate Full Graph Degree Distribution ---
+        full_graph_degrees = []
+        try:
+            # Reconstruct the full graph filename matching the maxcomp one
+            # It should be found in datasets/ChEMBL/DrugBank/Similarity/
+            if csv_file:
+                # The actual filename was picked up in the loop (e.g., Tanimoto_morgan_...csv)
+                filename = os.path.basename(csv_file)
+                full_graph_file = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank', 'Similarity', filename)
+                
+                if os.path.exists(full_graph_file):
+                    import networkx as nx
+                    from collections import Counter
+                    full_df = pd.read_csv(full_graph_file)
+                    G_full = nx.from_pandas_edgelist(full_df, source='source', target='target')
+                    degree_counts = Counter(dict(G_full.degree()).values())
+                    # Construct dict format expected by frontend
+                    full_graph_degrees = [{'degree': int(d), 'count': int(c)} for d, c in degree_counts.items()]
+                    full_graph_degrees.sort(key=lambda x: x['degree'])
+        except Exception as e:
+            print(f"Failed to calculate full graph degrees: {e}")
+
+        response_data = {
             'success': True,
             'data': {
                 'nodes': nodes,
-                'links': links
+                'links': links,
+                'fullGraphDegrees': full_graph_degrees
             }
-        })
+        }
+        return jsonify(response_data)
         
     except Exception as e:
+        print(f"Error in graph-data: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        os.chdir(original_cwd)
 
 @app.route('/api/analysis/plots', methods=['GET'])
 def list_analysis_plots():
-    """Retorna uma lista de nomes de arquivos das imagens geradas na análise."""
+    """Returns a list of filename names of the images generated in the analysis."""
     try:
         plots_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'plots')
         if not os.path.exists(plots_dir):
@@ -898,24 +950,24 @@ def list_analysis_plots():
 
 @app.route('/api/analysis/plot/<filename>', methods=['GET'])
 def get_analysis_plot(filename):
-    """Envia o arquivo PNG de um plot específico."""
+    """Sends the PNG file of a specific plot."""
     try:
-        # Segurança básica contra path traversal
+        # Basic security against path traversal
         if '..' in filename or '/' in filename:
-            return jsonify({'success': False, 'message': 'Nome de arquivo inválido.'}), 400
+            return jsonify({'success': False, 'message': 'Invalid filename.'}), 400
             
         file_path = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'plots', filename)
         
         if os.path.exists(file_path):
             return send_file(file_path, mimetype='image/png')
         else:
-            return jsonify({'success': False, 'message': 'Plot não encontrado.'}), 404
+            return jsonify({'success': False, 'message': 'Plot not found.'}), 404
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/analysis/molecule-image', methods=['POST'])
 def get_analysis_molecule_image():
-    """Retorna uma imagem SVG em base64 ou texto plano de uma molécula a partir do SMILES."""
+    """Returns a base64 SVG image or plain text of a molecule from a SMILES."""
     try:
         data = request.json
         smiles = data.get('smiles')

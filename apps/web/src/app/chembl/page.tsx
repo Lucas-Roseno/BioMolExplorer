@@ -26,11 +26,20 @@ export default function ChemblPage() {
       similarity: fd.get('similarity'), molecule_weight: fd.get('molecule_weight'),
       natural_product_molecules: fd.get('natural_product_molecules') === 'on'
     };
-    await fetch(`${API_BASE_URL}/api/chembl/search`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-    });
-    setIsLoading(false);
-    fetchFiles();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chembl/search`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        alert(data.message || 'Error processing ChEMBL search.');
+      }
+    } catch (error) {
+      alert('Failed to communicate with the server.');
+    } finally {
+      setIsLoading(false);
+      fetchFiles();
+    }
   };
 
   const toggleTarget = (t: string) => setOpenTargets(p => ({ ...p, [t]: !p[t] }));
@@ -87,10 +96,10 @@ export default function ChemblPage() {
           }
         }, 200);
       } else {
-        alert("Erro ao gerar visualização: " + data.message);
+        alert("Error generating visualization: " + data.message);
       }
     } catch (e) {
-      alert("Erro de conexão ao gerar molécula.");
+      alert("Connection error while generating molecule.");
     }
     setIsLoading(false);
   };

@@ -12,7 +12,7 @@ export default function PdbPage() {
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
   const [viewer, setViewer] = useState({ isOpen: false, file: '' });
 
-  // Inputs para validação do botão
+  // Inputs for button validation
   const [targetName, setTargetName] = useState('');
   const [pdbEc, setPdbEc] = useState('');
 
@@ -33,10 +33,10 @@ export default function PdbPage() {
       
       const data = await res.json();
       if (!res.ok) {
-        alert(`Erro ao baixar PDB: ${data.message || 'Erro desconhecido'}`);
+        alert(`Error downloading PDB: ${data.message || 'Unknown error'}`);
       }
     } catch (error: any) {
-      alert(`Erro de conexão: ${error.message}`);
+      alert(`Connection error: ${error.message}`);
     } finally {
       setIsLoading(false);
       fetchFiles();
@@ -147,7 +147,7 @@ export default function PdbPage() {
             <div id="pdb-list">
               {Object.entries(datasets).map(([target, files]) => (
                 <div key={target} style={{ marginBottom: '5px' }}>
-                  {/* Cabeçalho do Acordeão Clássico */}
+                  {/* Classic Accordion Header */}
                   <button className={`collapsible-header ${openTargets[target] ? 'active' : ''}`} type="button" onClick={() => toggleAccordion(target)}>
                     <div className="target-header-left">
                       <i className={`fas fa-chevron-${openTargets[target] ? 'up' : 'down'} accordion-icon`}></i>

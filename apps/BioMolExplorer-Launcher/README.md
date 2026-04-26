@@ -22,9 +22,8 @@ A pasta que a ser entregue ao usuário final deve ter exatamente esta estrutura:
 
 ```
 BioMolExplorer-Launcher/
-├── iniciar.sh           ← Linux / macOS
-├── iniciar.bat          ← Windows (duplo clique)
-├── iniciar.ps1          ← Windows PowerShell (mais robusto)
+├── init.sh              ← Linux / macOS
+├── init.bat             ← Windows (duplo clique)
 └── biomolexplorer.tar   ← Imagem Docker (gerada no Passo 1)
 ```
 
@@ -36,16 +35,14 @@ Comprima em `.zip` e estará pronto para distribuir.
 
 ### Windows
 1. Descompacte a pasta em qualquer lugar
-2. Clique com o botão **direito** em `iniciar.bat`
+2. Clique com o botão **direito** em `init.bat`
 3. Selecione **"Executar como Administrador"**
 4. O navegador abrirá automaticamente em `http://localhost:3000`
 
-> Se o .bat não funcionar, tente o `iniciar.ps1`:
-> Clique direito → "Executar com PowerShell"
 ### macOS
 1. Descompacte a pasta
 2. Abra o **Terminal** (Cmd + Espaço → "Terminal")
-3. Arraste o arquivo `iniciar.sh` para o terminal e pressione ENTER
+3. Arraste o arquivo `init.sh` para o terminal e pressione ENTER
 4. Na primeira execução, precisará de internet para instalar o Docker Desktop
 
 ### Linux
@@ -53,6 +50,6 @@ Comprima em `.zip` e estará pronto para distribuir.
 2. Abra o terminal na pasta
 3. Execute:
    ```bash
-   chmod +x iniciar.sh
-   ./iniciar.sh
+   chmod +x init.sh
+   ./init.sh
    ```

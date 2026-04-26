@@ -207,7 +207,7 @@ echo   [OK] BioMolExplorer pronto!
 
 :abrir_navegador
 echo.
-echo   [>>] Abrindo o navegador...
+echo   [OK] Abrindo o navegador...
 timeout /t 2 /nobreak >nul
 start "" "http://localhost:%PORT%"
 

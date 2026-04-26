@@ -27,8 +27,8 @@ REM Verificar Administrador
 net session >nul 2>&1
 if %errorLevel% equ 0 goto :admin_ok
 
-echo   [!] Este script precisa de permissao de Administrador.
-echo   [!] Clique com o botao direito e selecione "Executar como Administrador".
+echo   [!!] Este script precisa de permissao de Administrador.
+echo   [!!] Clique com o botao direito e selecione "Executar como Administrador".
 echo.
 pause
 exit /b 1
@@ -48,7 +48,7 @@ if %errorLevel% equ 0 (
 
 echo   [!!] Docker instalado mas nao esta rodando. Iniciando...
 start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-echo   [>>] Aguardando Docker Desktop - 30 segundos...
+echo   [!!] Aguardando Docker Desktop - 30 segundos...
 timeout /t 30 /nobreak >nul
 goto :check_docker_running
 
@@ -61,27 +61,27 @@ echo.
 winget --version >nul 2>&1
 if %errorLevel% neq 0 goto :docker_download_direto
 
-echo   [>>] Instalando Docker Desktop via winget...
+echo   [!!] Instalando Docker Desktop via winget...
 winget install -e --id Docker.DockerDesktop --accept-source-agreements --accept-package-agreements
 if %errorLevel% neq 0 goto :docker_download_direto
 echo   [OK] Docker Desktop instalado!
 start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-echo   [>>] Aguardando Docker inicializar - 60 segundos...
+echo   [!!] Aguardando Docker inicializar - 60 segundos...
 timeout /t 60 /nobreak >nul
 goto :check_docker_running
 
 :docker_download_direto
-echo   [>>] Baixando Docker Desktop - instalador oficial...
+echo   [!!] Baixando Docker Desktop - instalador oficial...
 set DOCKER_INSTALLER=%TEMP%\DockerDesktopInstaller.exe
 curl -L "https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe" -o "%DOCKER_INSTALLER%"
 if not exist "%DOCKER_INSTALLER%" goto :docker_manual_install
 
-echo   [>>] Executando instalador...
+echo   [!!] Executando instalador...
 "%DOCKER_INSTALLER%" install --quiet --accept-license
 del "%DOCKER_INSTALLER%" >nul 2>&1
 echo   [OK] Docker Desktop instalado!
 start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-echo   [>>] Aguardando Docker inicializar - 60 segundos...
+echo   [!!] Aguardando Docker inicializar - 60 segundos...
 timeout /t 60 /nobreak >nul
 goto :check_docker_running
 
@@ -131,7 +131,7 @@ if %errorLevel% equ 0 (
     goto :start_container
 )
 
-echo   [>>] Carregando imagem - pode levar 1 a 3 minutos...
+echo   [!!] Carregando imagem - pode levar 1 a 3 minutos...
 docker load -i "%TAR_PATH%"
 if %errorLevel% neq 0 (
     echo   [ERRO] Falha ao carregar a imagem.
@@ -224,7 +224,7 @@ echo.
 pause
 
 REM Encerrar
-echo   [>>] Encerrando BioMolExplorer...
+echo   [!!] Encerrando BioMolExplorer...
 docker stop %CONTAINER_NAME% >nul 2>&1
 docker rm   %CONTAINER_NAME% >nul 2>&1
 echo   [OK] BioMolExplorer encerrado. Ate logo!

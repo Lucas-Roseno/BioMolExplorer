@@ -990,4 +990,5 @@ def get_analysis_molecule_image():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Disable debug mode to prevent the Werkzeug reloader from doubling RAM usage
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)

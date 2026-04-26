@@ -16,7 +16,9 @@ echo "Iniciando os 3 serviços (Produção)..."
 
 # 1. Inicia a API Node.js em background (porta 3001 interna)
 # Usando node diretamente em vez de ts-node para performance se estiver compilado, 
-# mas se não estiver, npx ts-node resolve.
+# mas se não estiver, npx ts-node com flags de limite de memória resolve (para o Render Free Tier).
+export TS_NODE_TRANSPILE_ONLY=1
+export NODE_OPTIONS="--max-old-space-size=96"
 npx ts-node apps/api/src/server.ts &
 
 # 2. Inicia o Python Flask em background (porta 5000 interna)

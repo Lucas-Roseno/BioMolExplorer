@@ -45,25 +45,37 @@ function createWindow() {
     shell: true
   });
 
+  let serverCheckInterval = setInterval(() => {
+    fetch('http://localhost:3000')
+      .then(res => {
+        if (res.ok) {
+          clearInterval(serverCheckInterval);
+          if (!win.getURL().includes('localhost:3000')) {
+            console.log('Radar detectou o servidor online!');
+            win.loadURL('http://localhost:3000');
+          }
+        }
+      })
+      .catch(() => {
+      });
+  }, 2000);
+
+  batProcess.stdout.on('data', (data) => {
+    const log = data.toString();
+    if (log.includes('BioMolExplorer pronto')) {
+      clearInterval(serverCheckInterval);
+      if (!win.getURL().includes('localhost:3000')) {
+        win.loadURL('http://localhost:3000');
+      }
+    }
+  });
+
   batProcess.on('error', (err) => {
     win.loadURL(`data:text/html;charset=utf-8,
       <body style="background-color:%235b4382; color:white; padding: 40px; font-family:sans-serif; text-align:center;">
         <h2>Erro Interno</h2>
         <p>O aplicativo não conseguiu iniciar o motor do Docker.</p>
       </body>`);
-  });
-
-  batProcess.stdout.on('data', (data) => {
-    const log = data.toString();
-    console.log('LOG:', log);
-
-    if (log.includes('BioMolExplorer pronto')) {
-      win.loadURL('http://localhost:3000');
-    }
-  });
-
-  batProcess.stderr.on('data', (data) => {
-    console.log('ERRO CMD:', data.toString());
   });
 }
 

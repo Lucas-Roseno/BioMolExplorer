@@ -26,7 +26,7 @@ export default function Home() {
               </a>
             </li>
             <li>
-              <a href="http://www.ufsj.edu.br/" target="_blank" rel="noopener">
+              <a href="https://www.ufsj.edu.br/" target="_blank" rel="noopener">
                 <img loading="lazy" src="img/partness/ufsj.jpg" alt="INCT" />
               </a>
             </li>

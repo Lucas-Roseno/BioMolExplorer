@@ -40,23 +40,31 @@ def run_load_pdb():
             if any("NMR" in method.value for method in data['ExperimentalMethodID']):
                 data['max_resolution'] = None
         
-        warnings = load_pdb(
-            target=data.get('target'),
-            base_output_path='/BioMolExplorer/datasets',
-            pdb_ec=data.get('pdb_ec'),
-            PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
-            ExperimentalMethodID=data.get('ExperimentalMethodID'),
-            max_resolution=data.get('max_resolution'),
-            must_have_ligand=data.get('must_have_ligand', True)
-        )
+        original_cwd = os.getcwd()
+        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        os.chdir(biomol_explorer_path)
         
-        return jsonify({
-            'status': 'success', 
-            'message': f"PDB data for {data.get('target')} loaded successfully",
-            'warnings': warnings 
-        })
+        try:
+            warnings = load_pdb(
+                target=data.get('target'),
+                base_output_path='datasets',
+                pdb_ec=data.get('pdb_ec'),
+                PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
+                ExperimentalMethodID=data.get('ExperimentalMethodID'),
+                max_resolution=data.get('max_resolution'),
+                must_have_ligand=data.get('must_have_ligand', True)
+            )
+            
+            return jsonify({
+                'status': 'success', 
+                'message': f"PDB data for {data.get('target')} loaded successfully",
+                'warnings': warnings 
+            })
+        finally:
+            os.chdir(original_cwd)
     
     except Exception as e:
+        print(f"Error in load_pdb: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 @app.route('/pdb_files', methods=['GET'])

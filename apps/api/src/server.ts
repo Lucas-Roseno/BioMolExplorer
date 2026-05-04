@@ -236,6 +236,27 @@ app.get('/api/files/list/PDB', async (req, res) => {
 app.get('/api/files/list/ChEMBL', async (req, res) => {
   try { res.json(await (await fetch(`${PYTHON_URL}/chembl_files`)).json()); } catch (e) { res.status(500).json({}); }
 });
+app.get('/api/files/csv/PDB/:target/:file', async (req, res) => {
+  try {
+    const { target, file } = req.params;
+    const pythonRes = await fetch(`${PYTHON_URL}/pdb_csv/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+    const data = await pythonRes.json();
+    res.status(pythonRes.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'CSV read error.' });
+  }
+});
+app.post('/api/files/csv/delete-row', async (req, res) => {
+  try {
+    const pythonRes = await fetch(`${PYTHON_URL}/delete_pdb_csv_row`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body)
+    });
+    const data = await pythonRes.json();
+    res.status(pythonRes.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'CSV delete error.' });
+  }
+});
 
 // Downloads em lote (ZIP)
 app.get('/api/files/download/PDB/zip/:target', async (req, res) => {
@@ -244,6 +265,15 @@ app.get('/api/files/download/PDB/zip/:target', async (req, res) => {
     const pythonRes = await fetch(`${PYTHON_URL}/download_pdb_zip/${encodeURIComponent(target)}`);
     if (!pythonRes.ok) throw new Error('Not found');
     res.set('Content-Disposition', `attachment; filename="${target}_pdb.zip"`);
+    res.send(Buffer.from(await pythonRes.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
+});
+app.get('/api/files/download/PDB/csv/:target/:file', async (req, res) => {
+  try {
+    const { target, file } = req.params;
+    const pythonRes = await fetch(`${PYTHON_URL}/download_pdb_csv/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+    if (!pythonRes.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="${file}"`);
     res.send(Buffer.from(await pythonRes.arrayBuffer()));
   } catch (e) { res.status(404).send('Not found'); }
 });
@@ -320,8 +350,9 @@ app.delete('/api/files/delete/PDB/file/:target/:file', async (req, res) => {
     const response = await fetch(`${PYTHON_URL}/delete_pdb`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: req.params.target, pdb_file: req.params.file })
     });
-    res.json(await response.json());
-  } catch (e) { res.status(500).json({ success: false }); }
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) { res.status(500).json({ success: false, message: e.message }); }
 });
 app.delete('/api/files/delete/ChEMBL/target/:target', async (req, res) => {
   try {

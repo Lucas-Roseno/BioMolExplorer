@@ -4,6 +4,7 @@ import os
 import shutil
 import json
 import io
+import csv
 import base64
 import zipfile
 import requests
@@ -82,6 +83,87 @@ def get_pdb_list():
     
     return jsonify(pdb_data)
 
+@app.route('/pdb_csv/<target>/<csv_file>', methods=['GET'])
+def get_pdb_csv(target, csv_file):
+    if not target or not csv_file:
+        return jsonify({'status': 'error', 'message': 'Target or CSV file not specified'}), 400
+    if '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
+
+    try:
+        with open(file_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+        if not rows:
+            return jsonify({'status': 'success', 'headers': [], 'rows': []})
+
+        headers = rows[0]
+        data_rows = rows[1:]
+        return jsonify({'status': 'success', 'headers': headers, 'rows': data_rows})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/delete_pdb_csv_row', methods=['POST'])
+def delete_pdb_csv_row():
+    data = request.json
+    target = data.get('target')
+    csv_file = data.get('csv_file')
+    row_index = data.get('row_index')
+
+    if not target or not csv_file or row_index is None:
+        return jsonify({'status': 'error', 'message': 'Target, CSV file, and row index are required'}), 400
+    if not isinstance(row_index, int):
+        try:
+            row_index = int(row_index)
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': 'Row index must be an integer'}), 400
+    if '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
+
+    try:
+        with open(file_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+            rows = list(csv.reader(f))
+
+        if len(rows) <= 1 or row_index < 0 or row_index >= len(rows) - 1:
+            return jsonify({'status': 'error', 'message': 'Row index out of range'}), 400
+
+        rows.pop(row_index + 1)
+
+        with open(file_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerows(rows)
+
+        return jsonify({
+            'status': 'success',
+            'message': 'CSV row deleted successfully'
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/download_pdb_csv/<target>/<csv_file>', methods=['GET'])
+def download_pdb_csv(target, csv_file):
+    if not target or not csv_file:
+        return jsonify({'status': 'error', 'message': 'Target or CSV file not specified'}), 400
+    if '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
+
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/download_pdb_zip/<target>', methods=['GET'])
 def download_pdb_zip(target):
     if not target: return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
@@ -131,15 +213,50 @@ def delete_pdb():
         return jsonify({'status': 'error', 'message': 'Target or PDB file not specified'}), 400
 
     file_path = os.path.join(PDB_BASE_PATH, target, pdb_file)
+    target_dir = os.path.join(PDB_BASE_PATH, target)
     
     try:
+        # Extract PDB code from filename (remove extension)
+        pdb_code = os.path.splitext(pdb_file)[0].strip()
+
         if os.path.exists(file_path):
+            # Remove the .pdb file
             os.remove(file_path)
+            
+            # Cascade delete: Remove all rows with this PDB code from ALL CSVs in the target folder
+            if os.path.exists(target_dir):
+                for filename in os.listdir(target_dir):
+                    if filename.endswith('.csv'):
+                        csv_path = os.path.join(target_dir, filename)
+                        try:
+                            with open(csv_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+                                rows = list(csv.reader(f))
+                            
+                            if rows:
+                                headers = rows[0]
+                                # Filter out rows that contain the pdb_code in ANY column
+                                # (Case-insensitive comparison for safety)
+                                new_rows = [headers]
+                                for row in rows[1:]:
+                                    if not any(pdb_code.upper() in str(cell).upper() for cell in row):
+                                        new_rows.append(row)
+                                
+                                # Only write back if rows were actually removed
+                                if len(new_rows) < len(rows):
+                                    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                                        writer = csv.writer(f)
+                                        writer.writerows(new_rows)
+                        except Exception as e:
+                            print(f"Error updating CSV {filename} for {target}: {str(e)}", file=sys.stderr)
+            
             # If target folder is empty, remove it
-            target_dir_path = os.path.join(PDB_BASE_PATH, target)
-            if not os.listdir(target_dir_path):
-                 shutil.rmtree(target_dir_path)
-            return jsonify({'status': 'success', 'message': f'{pdb_file} deleted successfully'})
+            try:
+                if os.path.isdir(target_dir) and not os.listdir(target_dir):
+                    shutil.rmtree(target_dir)
+            except:
+                pass
+            
+            return jsonify({'status': 'success', 'message': f'{pdb_file} and all its references deleted successfully'})
         else:
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
@@ -455,7 +572,7 @@ def delete_chembl_target():
 
 @app.route('/delete_chembl', methods=['POST'])
 def delete_chembl():
-    """Deletes a specific ChEMBL CSV file."""
+    """Deletes a specific ChEMBL CSV file and all its references in other CSVs."""
     data = request.json
     sub_dir_name = data.get('sub_dir_name')
     target = data.get('target')
@@ -470,13 +587,50 @@ def delete_chembl():
     file_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target, csv_file)
     
     try:
+        # Identify the molecule ID (e.g., CHEMBL123) from the filename
+        molecule_id = os.path.splitext(csv_file)[0].strip()
+
         if os.path.exists(file_path):
+            # 1. Remove the specific .csv file
             os.remove(file_path)
+            
+            # 2. Cascade delete: Search and remove the ID from all CSVs in ChEMBL related folders for this target
+            search_dirs = [
+                os.path.join(CHEMBL_BASE_PATH, 'molecules', target),
+                os.path.join(CHEMBL_BASE_PATH, 'similars', target),
+                os.path.join(CHEMBL_BASE_PATH, 'bioactivity', target)
+            ]
+            
+            for directory in search_dirs:
+                if os.path.exists(directory) and os.path.isdir(directory):
+                    for filename in os.listdir(directory):
+                        if filename.endswith('.csv'):
+                            csv_path = os.path.join(directory, filename)
+                            try:
+                                with open(csv_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+                                    rows = list(csv.reader(f))
+                                
+                                if rows:
+                                    headers = rows[0]
+                                    # Remove any row that contains the molecule_id in any cell
+                                    new_rows = [headers]
+                                    for row in rows[1:]:
+                                        if not any(molecule_id.upper() in str(cell).upper() for cell in row):
+                                            new_rows.append(row)
+                                    
+                                    if len(new_rows) < len(rows):
+                                        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                                            writer = csv.writer(f)
+                                            writer.writerows(new_rows)
+                            except Exception as e:
+                                print(f"Error updating ChEMBL CSV {filename}: {str(e)}", file=sys.stderr)
+
+            # Cleanup empty folders
             target_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
-            # If target folder is empty, remove it
-            if not os.listdir(target_path):
+            if os.path.exists(target_path) and not os.listdir(target_path):
                  os.rmdir(target_path) 
-            return jsonify({'status': 'success', 'message': f'{csv_file} deleted successfully'})
+            
+            return jsonify({'status': 'success', 'message': f'{csv_file} and all its references deleted successfully'})
         else:
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:

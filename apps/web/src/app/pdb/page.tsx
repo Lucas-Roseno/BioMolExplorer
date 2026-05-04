@@ -1,5 +1,6 @@
 'use client';
 import { useState, FormEvent, useEffect } from 'react';
+import Link from 'next/link';
 import './pdb.css';
 import { API_BASE_URL } from '../../config';
 import LoadingOverlay from '../../components/LoadingOverlay';
@@ -59,8 +60,20 @@ export default function PdbPage() {
 
   const handleDeleteFile = async (target: string, file: string) => {
     if (!confirm(`Delete file ${file}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/PDB/file/${target}/${file}`, { method: 'DELETE' });
-    fetchFiles();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/files/delete/PDB/file/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok || data.status === 'error') {
+        alert(data.message || 'Failed to delete file.');
+        return;
+      }
+
+      setTimeout(() => {
+        fetchFiles();
+      }, 500);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete file.');
+    }
   };
 
   const handleDownload = (target: string, file: string) => {
@@ -150,16 +163,21 @@ export default function PdbPage() {
                   {/* Classic Accordion Header */}
                   <button className={`collapsible-header ${openTargets[target] ? 'active' : ''}`} type="button" onClick={() => toggleAccordion(target)}>
                     <div className="target-header-left">
-                      <i className={`fas fa-chevron-${openTargets[target] ? 'up' : 'down'} accordion-icon`}></i>
-                      <span>{target} ({files.length})</span>
-                    </div>
-                    <div className="target-header-right">
-                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target">
-                        <i className="fas fa-download"></i>
-                      </span>
-                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Delete Target" style={{ marginLeft: '10px' }}>
-                        <i className="fas fa-trash-alt"></i>
-                      </span>
+                      <div className="target-title">
+                        <i className={`fas fa-chevron-${openTargets[target] ? 'up' : 'down'} accordion-icon`}></i>
+                        <span>{target} ({files.length})</span>
+                      </div>
+                      <div className="target-actions">
+                        <Link href={`/pdb/${encodeURIComponent(target)}`} onClick={(e) => e.stopPropagation()} className="csv-target-btn" title="View CSV Table">
+                          <i className="fas fa-table" aria-hidden="true"></i>
+                        </Link>
+                        <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target">
+                          <i className="fas fa-download"></i>
+                        </span>
+                        <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Delete Target">
+                          <i className="fas fa-trash-alt"></i>
+                        </span>
+                      </div>
                     </div>
                   </button>
 

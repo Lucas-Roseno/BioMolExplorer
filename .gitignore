@@ -9,3 +9,4 @@ node_modules/
 apps/python-service/BioMolExplorer/resultados/
 apps/desktop/BioMolExplorer-Launcher/*.tar
 apps/desktop/wrapper/dist
+apps/desktop/BioMolExplorer-Launcher.zip

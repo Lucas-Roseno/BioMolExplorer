@@ -56,15 +56,25 @@ O arquivo gerado estará em `wrapper/dist/BioMolExplorer.exe`.
 
 ### Passo 3: Montar o Pacote Final (Release)
 
-Para entregar ao usuário, a pasta final comprimida em .zip deve conter exatamente esta estrutura:
+O comando `npm run build:win` já cuida de tudo: gera o `.exe`, valida os arquivos auxiliares e produz o `.zip` final pronto para entrega.
+
+O pacote estará em:
+
+```text
+desktop/BioMolExplorer-Launcher.zip
+```
+
+Já contendo a estrutura correta:
 
 ```text
 BioMolExplorer-Launcher.zip/
-├── BioMolExplorer.exe       ← (Copiado da pasta wrapper/dist)
+├── BioMolExplorer.exe       ← (Gerado em wrapper/dist)
 ├── biomolexplorer.tar       ← (Gerado no Passo 1)
 ├── init.bat                 ← (Script base do Windows)
 └── init.sh                  ← (Script base do Linux/Mac)
 ```
+
+⚠️ **Pré-requisito:** o `biomolexplorer.tar` (gerado no Passo 1) precisa estar em `apps/desktop/BioMolExplorer-Launcher/` antes de rodar o build, senão o script falha avisando.
 
 ⚠️ Atenção: O .exe e o init.bat devem obrigatoriamente estar na mesma pasta para que a integração funcione.
 

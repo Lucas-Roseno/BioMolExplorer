@@ -1,22 +1,40 @@
 const { app, BrowserWindow } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
-const os = require('os');
 
 // =============================================================================
 //  Detecta o caminho base onde estao init.bat / init.sh / biomolexplorer.tar
-//  Funciona tanto em modo dev (npm start) quanto empacotado (portable/AppImage/dmg)
+//
+//  IMPORTANTE: cada formato de empacotamento expoe o "diretorio do executavel"
+//  de uma forma diferente:
+//    - Windows portable -> PORTABLE_EXECUTABLE_DIR
+//    - Linux AppImage   -> APPIMAGE (caminho do .AppImage)
+//    - macOS .dmg/.app  -> process.execPath aponta para .../Contents/MacOS/
+//    - Dev (npm start)  -> process.cwd()
 // =============================================================================
 function resolveBasePath() {
-  // Windows portable: variavel de ambiente exclusiva do electron-builder
+  // Windows portable
   if (process.env.PORTABLE_EXECUTABLE_DIR) {
     return process.env.PORTABLE_EXECUTABLE_DIR;
   }
-  // Empacotado (AppImage, dmg, etc): pasta onde esta o executavel
+
+  // Linux AppImage: variavel APPIMAGE = caminho do .AppImage em si
+  if (process.env.APPIMAGE) {
+    return path.dirname(process.env.APPIMAGE);
+  }
+
+  // macOS empacotado: subir do Contents/MacOS/ ate a pasta que contem o .app
+  if (app.isPackaged && process.platform === 'darwin') {
+    // process.execPath: .../BioMolExplorer.app/Contents/MacOS/BioMolExplorer
+    return path.resolve(path.dirname(process.execPath), '..', '..', '..');
+  }
+
+  // Empacotado em geral (fallback)
   if (app.isPackaged) {
     return path.dirname(process.execPath);
   }
-  // Modo dev (npm start): cwd
+
+  // Modo dev
   return process.cwd();
 }
 
@@ -77,6 +95,23 @@ function createWindow() {
   console.log(`[main] OS: ${process.platform} | basePath: ${basePath}`);
   console.log(`[main] Script motor: ${launcher.script}`);
 
+  // Acumulador de log completo do motor (para mostrar em caso de erro)
+  let motorLogs = '';
+  let appReady = false;
+  let failMessage = null;
+  let failHint = null;
+
+  // Validacao prematura: se o script motor nao existe, falha cedo com mensagem util.
+  const fs = require('fs');
+  if (!fs.existsSync(launcher.script)) {
+    showErrorScreen(win,
+      `Script de inicializacao nao encontrado: ${launcher.script}`,
+      'Verifique se o AppImage foi extraido junto com init.sh e biomolexplorer.tar na mesma pasta.',
+      `basePath resolvido: ${basePath}\nprocess.execPath: ${process.execPath}\nprocess.env.APPIMAGE: ${process.env.APPIMAGE || '(nao definido)'}`
+    );
+    return;
+  }
+
   const launcherProcess = spawn(
     launcher.command,
     launcher.args(launcher.script),
@@ -92,6 +127,7 @@ function createWindow() {
       .then((res) => {
         if (res.ok) {
           clearInterval(serverCheckInterval);
+          appReady = true;
           if (!win.getURL().includes('localhost:3000')) {
             console.log('[main] Servidor detectado via polling.');
             win.loadURL('http://localhost:3000');
@@ -101,49 +137,79 @@ function createWindow() {
       .catch(() => { /* servidor ainda nao subiu */ });
   }, 2000);
 
-  // Sinal primario: sai do .bat/.sh
-  launcherProcess.stdout.on('data', (data) => {
+  const handleOutput = (data, channel = 'stdout') => {
     const log = data.toString();
-    process.stdout.write(`[motor] ${log}`);
+    motorLogs += log;
+    process.stdout.write(`[motor:${channel}] ${log}`);
 
     if (log.includes('BioMolExplorer pronto')) {
       clearInterval(serverCheckInterval);
+      appReady = true;
       if (!win.getURL().includes('localhost:3000')) {
         win.loadURL('http://localhost:3000');
       }
     }
 
-    if (log.includes('[FAIL]')) {
-      clearInterval(serverCheckInterval);
-      showErrorScreen(win, log);
-    }
-  });
+    const failMatch = log.match(/\[FAIL\]\s*(.+)/);
+    if (failMatch) failMessage = failMatch[1].trim();
 
-  launcherProcess.stderr.on('data', (data) => {
-    process.stderr.write(`[motor:err] ${data.toString()}`);
-  });
+    const hintMatch = log.match(/\[HINT\]\s*(.+)/);
+    if (hintMatch) failHint = hintMatch[1].trim();
+  };
+
+  launcherProcess.stdout.on('data', (data) => handleOutput(data, 'stdout'));
+  launcherProcess.stderr.on('data', (data) => handleOutput(data, 'stderr'));
 
   launcherProcess.on('error', (err) => {
     clearInterval(serverCheckInterval);
-    showErrorScreen(win, `Falha ao executar o script motor: ${err.message}`);
+    showErrorScreen(win,
+      'Falha ao executar o script de inicializacao.',
+      err.message,
+      motorLogs
+    );
+  });
+
+  launcherProcess.on('close', (code) => {
+    clearInterval(serverCheckInterval);
+    if (appReady) return;
+
+    const title = failMessage || `O script encerrou inesperadamente (codigo ${code}).`;
+    const hint = failHint || 'Tente novamente ou verifique se o Docker esta instalado e em execucao.';
+    showErrorScreen(win, title, hint, motorLogs);
   });
 }
 
-function showErrorScreen(win, message) {
-  // escapar caracteres pra inserir no data URL com seguranca
-  const safe = String(message).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+function showErrorScreen(win, title, hint, logs) {
+  const escape = (s) => String(s || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+
   win.loadURL(`data:text/html;charset=utf-8,
-    <body style="background-color:%235b4382; color:white; padding: 40px; font-family:sans-serif;">
-      <h2 style="margin-top:0;">Erro na Inicializacao</h2>
-      <p>O BioMolExplorer nao conseguiu iniciar.</p>
-      <pre style="background:rgba(0,0,0,0.3); padding:15px; border-radius:6px; white-space:pre-wrap;">${safe}</pre>
-      <p style="margin-top:30px; opacity:0.8;">Verifique se o Docker esta instalado e funcionando, e tente novamente.</p>
+    <body style="margin:0; padding:0; background-color:%23F4F6F8; font-family:'Segoe UI', Roboto, sans-serif;">
+      <div style="background-color:%235b4382; color:white; padding: 15px 30px; display:flex; align-items:center;">
+        <div style="font-size:26px; font-weight:500; display:flex; align-items:center;">
+          <span style="font-size:32px; margin-right: 12px;">⬡</span>BioMolExplorer
+        </div>
+      </div>
+      <div style="padding: 40px; max-width: 800px; margin: 0 auto;">
+        <h2 style="color:%23c0392b; margin-top:0;">Erro na Inicializacao</h2>
+        <p style="color:%23333; font-size:16px; line-height:1.5;">${escape(title)}</p>
+
+        <div style="background:%23fff5e6; border-left:4px solid %23f39c12; padding: 15px 20px; margin: 25px 0; border-radius: 4px;">
+          <strong style="color:%23d35400;">O que fazer:</strong>
+          <p style="margin: 8px 0 0 0; color:%23333; line-height:1.5;">${escape(hint)}</p>
+        </div>
+
+        <details style="margin-top: 30px;">
+          <summary style="cursor:pointer; color:%23666; font-size:13px; user-select:none;">Ver detalhes tecnicos</summary>
+          <pre style="background:%23272822; color:%23f8f8f2; padding:15px; border-radius:6px; font-size:12px; max-height:300px; overflow:auto; margin-top:10px;">${escape(logs) || '(sem logs disponiveis)'}</pre>
+        </details>
+
+        <p style="margin-top: 30px; color:%23999; font-size:13px;">Apos resolver o problema, feche esta janela e abra o BioMolExplorer novamente.</p>
+      </div>
     </body>`);
 }
 
 app.whenReady().then(createWindow);
 
-// Cleanup do container ao fechar a janela (cross-platform)
 app.on('window-all-closed', () => {
   const cleanupCmd = process.platform === 'win32'
     ? 'docker rm -f biomolexplorer_app'

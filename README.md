@@ -80,7 +80,7 @@ BioMolExplorer/
 É possível rodar a aplicação através do *Docker* (Maneira mais fácil e recomendada) ou pelo Ambiente de Desenvolvimento Nativo.
 
 ### Pré-requisitos
-- Git e [Node.js](https://nodejs.org/) instalados.
+- Git e [Node.js](https://nodejs.org/) **(versão 20 ou superior)** instalados.
 - [Docker](https://www.docker.com/) (Para o método Container).
 - [Anaconda / Miniconda](https://www.anaconda.com/) (Para o método Nativo).
 
@@ -111,13 +111,14 @@ Ideal se você quiser contribuir com modificações no código.
 ```bash
 # 1. Entre no repositório back-end e crie o ambiente Anaconda dedicado
 cd apps/python-service
-conda create -n BioMolExplorer python=3.12 -y
+conda create -n BioMolExplorer python=3.12 nodejs=20 -c conda-forge -y
 conda activate BioMolExplorer
 
 # 2. Instale as bibliotecas e ferramentas do Python
-pip install -r requirements.txt
+cd BioMolExplorer
+conda env update -f requirements.yml
 # (Volte para a raiz do repositório)
-cd ../../ 
+cd ../../../
 
 # 3. Na raiz do projeto, instale as dependências Node/Javascript para Web e Proxy
 npm install

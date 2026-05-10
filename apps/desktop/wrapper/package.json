@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win portable"
+    "build:win": "electron-builder --win portable && node scripts/pack-release.js"
   },
   "build": {
     "appId": "com.onrender.biomolexplorer",
@@ -15,7 +15,8 @@
     },
     "win": {
       "target": "portable",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "artifactName": "BioMolExplorer.exe"
     },
     "mac": {
       "icon": "assets/icon.icns"
@@ -28,6 +29,7 @@
   "license": "MIT",
   "devDependencies": {
     "7zip-bin": "^5.2.0",
+    "archiver": "^7.0.1",
     "electron": "^32.3.3",
     "electron-builder": "^24.13.3"
   }

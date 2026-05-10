@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # =============================================================================
 #  BioMolExplorer - Inicializador Linux / macOS
 #  Uso: chmod +x init.sh && ./init.sh
@@ -10,20 +11,25 @@ IMAGE_NAME="biomolexplorer"
 CONTAINER_NAME="biomolexplorer_app"
 PORT=3000
 
+# Tempos limite (em segundos)
+DOCKER_TIMEOUT=180
+APP_TIMEOUT=240
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Detectar se precisa de sudo para docker
 DOCKER_CMD="docker"
 if ! docker info >/dev/null 2>&1; then
-  if sudo docker info >/dev/null 2>&1; then
+  if sudo -n docker info >/dev/null 2>&1; then
     DOCKER_CMD="sudo docker"
   fi
 fi
 
-step() { printf '[->] %s\n' "$1"; }
-ok()   { printf '[OK] %s\n' "$1"; }
-warn() { printf '[!!] %s\n' "$1"; }
-fail() { printf '[ERRO] %s\n' "$1"; exit 1; }
+# -------- Helpers de log --------
+step() { printf '  [..] %s\n' "$1"; }
+ok()   { printf '  [OK] %s\n' "$1"; }
+warn() { printf '  [!!] %s\n' "$1"; }
+fail() { printf '  [FAIL] %s\n' "$1"; exit 1; }
 
 banner() {
   printf '\n'
@@ -42,6 +48,9 @@ detect_os() {
   esac
 }
 
+# =============================================================================
+#  [1/4] Verificar e instalar Docker
+# =============================================================================
 install_docker_linux() {
   warn "Docker nao encontrado. Instalando (requer internet apenas nesta etapa)..."
   if command -v apt-get >/dev/null 2>&1; then
@@ -71,38 +80,51 @@ install_docker_linux() {
 }
 
 install_docker_mac() {
-  warn "Docker nao encontrado no macOS."
-  printf '\n'
-  printf '  Instale o Docker Desktop manualmente:\n'
-  printf '  -> https://www.docker.com/products/docker-desktop/\n'
-  printf '\n'
-  printf '  Apos instalar, abra o Docker Desktop e execute este script novamente.\n'
-  read -p "  Pressione ENTER para abrir o site e sair..." _
-  open "https://www.docker.com/products/docker-desktop/" 2>/dev/null || true
-  exit 0
+  fail "Docker Desktop nao encontrado. Instale: https://www.docker.com/products/docker-desktop/"
+}
+
+wait_docker_ready() {
+  step "Aguardando Docker ficar pronto (max ${DOCKER_TIMEOUT}s)..."
+  local count=0
+  while true; do
+    sleep 5
+    count=$((count + 5))
+    if $DOCKER_CMD info >/dev/null 2>&1; then
+      ok "Docker esta pronto!"
+      return
+    fi
+    if [ "$count" -ge "$DOCKER_TIMEOUT" ]; then
+      fail "Docker nao ficou pronto em ${DOCKER_TIMEOUT}s. Inicie o Docker e tente novamente."
+    fi
+    printf '  ... Docker carregando %ds / %ds\n' "$count" "$DOCKER_TIMEOUT"
+  done
 }
 
 check_and_install_docker() {
   step "Verificando Docker..."
-  if command -v docker >/dev/null 2>&1; then
-    if ! docker info >/dev/null 2>&1; then
-      if sudo docker info >/dev/null 2>&1; then
-        DOCKER_CMD="sudo docker"
-        warn "Usando sudo para comandos Docker."
-      else
-        fail "Docker instalado mas nao esta rodando. Inicie o servico e tente novamente."
-      fi
+  if ! command -v docker >/dev/null 2>&1; then
+    if [ "$OS" = "linux" ]; then
+      install_docker_linux
+    else
+      install_docker_mac
     fi
+  fi
+  if $DOCKER_CMD info >/dev/null 2>&1; then
     ok "Docker encontrado e funcionando!"
     return
   fi
-  if [ "$OS" = "linux" ]; then
-    install_docker_linux
-  else
-    install_docker_mac
+  warn "Docker instalado mas nao esta rodando."
+  if [ "$OS" = "mac" ]; then
+    open -a Docker 2>/dev/null || true
+  elif command -v systemctl >/dev/null 2>&1; then
+    sudo systemctl start docker 2>/dev/null || true
   fi
+  wait_docker_ready
 }
 
+# =============================================================================
+#  [2/4] Carregar imagem
+# =============================================================================
 load_image() {
   TAR_PATH="$SCRIPT_DIR/$IMAGE_TAR"
   step "Verificando imagem do aplicativo..."
@@ -111,13 +133,16 @@ load_image() {
   fi
   if $DOCKER_CMD image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
     ok "Imagem ja carregada. Pulando importacao."
-  else
-    step "Carregando imagem (pode levar 1 a 3 minutos)..."
-    $DOCKER_CMD load -i "$TAR_PATH"
-    ok "Imagem carregada!"
+    return
   fi
+  step "Carregando imagem (pode levar 1 a 3 minutos)..."
+  $DOCKER_CMD load -i "$TAR_PATH" || fail "Falha ao carregar a imagem."
+  ok "Imagem carregada!"
 }
 
+# =============================================================================
+#  [3/4] Iniciar container
+# =============================================================================
 start_container() {
   step "Iniciando o BioMolExplorer..."
   if $DOCKER_CMD ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -128,95 +153,65 @@ start_container() {
     -p 3000:3000 \
     -p 3001:3001 \
     -p 5000:5000 \
+    -e HOSTNAME="0.0.0.0" \
     --restart unless-stopped \
-    "$IMAGE_NAME" >/dev/null
+    "$IMAGE_NAME" >/dev/null || fail "Falha ao iniciar o container."
   ok "Container iniciado!"
 }
 
+# =============================================================================
+#  [4/4] Aguardar app responder
+# =============================================================================
 wait_for_app() {
-  step "Aguardando o aplicativo ficar pronto (max 120s)..."
-  warn "O primeiro inicio pode demorar mais - aguarde..."
-  sleep 10
-  COUNT=0
+  step "Aguardando o aplicativo ficar pronto (max ${APP_TIMEOUT}s)..."
+  warn "O primeiro inicio pode demorar - aguarde..."
+  local count=0
   while true; do
     sleep 3
-    COUNT=$((COUNT + 3))
-    STATUS=$($DOCKER_CMD inspect --format='{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "gone")
-    if [ "$STATUS" != "running" ]; then
-      printf '\n'
-      printf '[ERRO] O container encerrou inesperadamente. Ultimos logs:\n'
-      $DOCKER_CMD logs --tail 30 "$CONTAINER_NAME" 2>&1
+    count=$((count + 3))
+
+    local status
+    status=$($DOCKER_CMD inspect --format='{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "gone")
+    if [ "$status" = "exited" ] || [ "$status" = "dead" ] || [ "$status" = "gone" ]; then
+      printf '\n  [FAIL] O container encerrou inesperadamente. Ultimos logs:\n'
+      $DOCKER_CMD logs --tail 30 "$CONTAINER_NAME" 2>&1 || true
       exit 1
     fi
+
     if curl -s --max-time 2 "http://localhost:$PORT" >/dev/null 2>&1; then
-      printf '\n'
-      ok "BioMolExplorer pronto!"
       return
     fi
-    if [ "$COUNT" -ge 120 ]; then
-      printf '\n'
-      warn "Tempo limite atingido. Abrindo navegador mesmo assim..."
-      return
+
+    if [ "$count" -ge "$APP_TIMEOUT" ]; then
+      printf '\n  [!!] Tempo limite atingido. Logs do container:\n'
+      $DOCKER_CMD logs --tail 20 "$CONTAINER_NAME" 2>&1 || true
+      fail "Servidor demorou demais para responder."
     fi
-    printf '  ... %ds / 120s\r' "$COUNT"
+    printf '  ... %ds / %ds\n' "$count" "$APP_TIMEOUT"
   done
 }
 
-open_browser() {
-  URL="http://localhost:$PORT"
-  step "Abrindo o navegador em $URL ..."
-  sleep 1
-  if [ "$OS" = "mac" ]; then
-    open "$URL"
-  elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$URL" >/dev/null 2>&1 &
-  else
-    warn "Abra manualmente: $URL"
-  fi
-}
-
-cleanup() {
-  printf '\n'
-  warn "Encerrando BioMolExplorer..."
-  $DOCKER_CMD stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
-  $DOCKER_CMD rm   "$CONTAINER_NAME" >/dev/null 2>&1 || true
-  ok "BioMolExplorer encerrado. Ate logo!"
-  exit 0
-}
-trap cleanup INT TERM
-
-# MAIN
-clear
+# =============================================================================
+#  MAIN
+# =============================================================================
 banner
 detect_os
 
-printf '[1/4] Verificando Docker...\n'
+printf '  [1/4] Verificando Docker...\n'
 check_and_install_docker
 printf '\n'
 
-printf '[2/4] Carregando imagem...\n'
+printf '  [2/4] Carregando imagem...\n'
 load_image
 printf '\n'
 
-printf '[3/4] Iniciando container...\n'
+printf '  [3/4] Iniciando container...\n'
 start_container
 printf '\n'
 
-printf '[4/4] Aguardando app...\n'
+printf '  [4/4] Aguardando app...\n'
 wait_for_app
-open_browser
 
-printf '\n'
-printf '  ----------------------------------------------------\n'
-printf '  [OK] BioMolExplorer esta rodando!\n'
-printf '  ----------------------------------------------------\n'
-printf '  Acesse: http://localhost:%s\n' "$PORT"
-printf '\n'
-printf '  NAO feche esta janela enquanto usar o aplicativo.\n'
-printf '  Pressione ENTER para encerrar.\n'
-printf '  ----------------------------------------------------\n'
-printf '\n'
-
-read -r _
-
-cleanup
+# Sinal final que o Electron escuta para trocar a tela de splash:
+printf '  [OK] BioMolExplorer pronto!\n'
+exit 0

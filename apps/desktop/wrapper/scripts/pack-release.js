@@ -2,49 +2,76 @@
 //  pack-release.js
 //  Monta o .zip final de distribuicao do BioMolExplorer.
 //
-//  Pre-requisitos (gerados antes deste script):
-//    - dist/BioMolExplorer.exe              (do electron-builder portable)
-//    - ../BioMolExplorer-Launcher/init.bat
-//    - ../BioMolExplorer-Launcher/init.sh
-//    - ../BioMolExplorer-Launcher/biomolexplorer.tar
+//  Uso: node scripts/pack-release.js <win|linux|mac>
 //
-//  Saida: dist/BioMolExplorer-Launcher.zip
+//  Pre-requisitos por plataforma:
+//    win   -> wrapper/dist/BioMolExplorer.exe
+//    linux -> wrapper/dist/BioMolExplorer.AppImage
+//    mac   -> wrapper/dist/BioMolExplorer.dmg
+//
+//  Auxiliares (todos as plataformas):
+//    ../BioMolExplorer-Launcher/init.bat
+//    ../BioMolExplorer-Launcher/init.sh
+//    ../BioMolExplorer-Launcher/biomolexplorer.tar
+//
+//  Saida: ../BioMolExplorer-Launcher-<plataforma>.zip
 // =============================================================================
 
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-const WRAPPER_DIR = path.resolve(__dirname, '..');
-const DIST_DIR = path.join(WRAPPER_DIR, 'dist');
-const LAUNCHER_DIR = path.resolve(WRAPPER_DIR, '..', 'BioMolExplorer-Launcher');
+const PLATFORM = process.argv[2];
+const VALID_PLATFORMS = ['win', 'linux', 'mac'];
 
-const EXE_PATH = path.join(DIST_DIR, 'BioMolExplorer.exe');
-const DESKTOP_DIR = path.resolve(WRAPPER_DIR, '..');
-const OUTPUT_ZIP = path.join(DESKTOP_DIR, 'BioMolExplorer-Launcher.zip');
-
-// Pasta-raiz dentro do zip (para "Extrair aqui" produzir uma pasta organizada)
-const ZIP_ROOT = 'BioMolExplorer-Launcher';
-
-// Arquivos auxiliares: { caminho_origem, nome_no_zip }
-const AUX_FILES = [
-  { from: path.join(LAUNCHER_DIR, 'init.bat'),           name: 'init.bat' },
-  { from: path.join(LAUNCHER_DIR, 'init.sh'),            name: 'init.sh' },
-  { from: path.join(LAUNCHER_DIR, 'biomolexplorer.tar'), name: 'biomolexplorer.tar' },
-];
-
-function log(msg)  { console.log(`[pack-release] ${msg}`); }
-function fail(msg) { console.error(`[pack-release] ERRO: ${msg}`); process.exit(1); }
-
-// 1. Validar que o .exe foi gerado
-log('Validando .exe gerado pelo electron-builder...');
-if (!fs.existsSync(EXE_PATH)) {
-  fail(`Nao encontrei: ${EXE_PATH}\n        O electron-builder rodou com sucesso? Verifique 'artifactName' no package.json.`);
+if (!VALID_PLATFORMS.includes(PLATFORM)) {
+  console.error(`[pack-release] ERRO: plataforma invalida ou ausente.`);
+  console.error(`[pack-release]        Uso: node pack-release.js <${VALID_PLATFORMS.join('|')}>`);
+  process.exit(1);
 }
 
-// 2. Validar que os auxiliares existem na pasta do Launcher
+const WRAPPER_DIR = path.resolve(__dirname, '..');
+const DESKTOP_DIR = path.resolve(WRAPPER_DIR, '..');
+const DIST_DIR = path.join(WRAPPER_DIR, 'dist');
+const LAUNCHER_DIR = path.join(DESKTOP_DIR, 'BioMolExplorer-Launcher');
+
+const ZIP_ROOT = 'BioMolExplorer-Launcher';
+const OUTPUT_ZIP = path.join(DESKTOP_DIR, `BioMolExplorer-Launcher-${PLATFORM}.zip`);
+
+// Configuracao por plataforma
+const PLATFORM_CONFIG = {
+  win: {
+    executable: { from: path.join(DIST_DIR, 'BioMolExplorer.exe'), name: 'BioMolExplorer.exe' },
+    aux: ['init.bat', 'biomolexplorer.tar'],
+  },
+  linux: {
+    executable: { from: path.join(DIST_DIR, 'BioMolExplorer.AppImage'), name: 'BioMolExplorer.AppImage', mode: 0o755 },
+    aux: ['init.sh', 'biomolexplorer.tar'],
+  },
+  mac: {
+    executable: { from: path.join(DIST_DIR, 'BioMolExplorer.dmg'), name: 'BioMolExplorer.dmg' },
+    aux: ['init.sh', 'biomolexplorer.tar'],
+  },
+};
+
+const config = PLATFORM_CONFIG[PLATFORM];
+
+function log(msg)  { console.log(`[pack-release:${PLATFORM}] ${msg}`); }
+function fail(msg) { console.error(`[pack-release:${PLATFORM}] ERRO: ${msg}`); process.exit(1); }
+
+// 1. Validar executavel
+log('Validando executavel gerado pelo electron-builder...');
+if (!fs.existsSync(config.executable.from)) {
+  fail(`Nao encontrei: ${config.executable.from}\n        Verifique 'artifactName' no package.json e se o build foi concluido.`);
+}
+
+// 2. Validar auxiliares
 log('Validando arquivos auxiliares...');
-for (const f of AUX_FILES) {
+const auxFiles = config.aux.map((name) => ({
+  from: path.join(LAUNCHER_DIR, name),
+  name,
+}));
+for (const f of auxFiles) {
   if (!fs.existsSync(f.from)) {
     fail(`Arquivo ausente: ${f.from}\n        Garanta que o biomolexplorer.tar foi gerado (Passo 1 do README).`);
   }
@@ -70,7 +97,7 @@ output.on('close', () => {
 });
 
 archive.on('warning', (err) => {
-  if (err.code === 'ENOENT') console.warn('[pack-release] Aviso:', err.message);
+  if (err.code === 'ENOENT') console.warn(`[pack-release:${PLATFORM}] Aviso:`, err.message);
   else fail(err.message);
 });
 
@@ -78,12 +105,17 @@ archive.on('error', (err) => fail(err.message));
 
 archive.pipe(output);
 
-// .exe na raiz do zip
-archive.file(EXE_PATH, { name: `${ZIP_ROOT}/BioMolExplorer.exe` });
+// Executavel principal (com permissao de execucao em Linux/Mac)
+const execEntry = { name: `${ZIP_ROOT}/${config.executable.name}` };
+if (config.executable.mode) execEntry.mode = config.executable.mode;
+archive.file(config.executable.from, execEntry);
 
-// Auxiliares na raiz do zip
-for (const f of AUX_FILES) {
-  archive.file(f.from, { name: `${ZIP_ROOT}/${f.name}` });
+// Auxiliares
+for (const f of auxFiles) {
+  // .sh precisa de bit de execucao
+  const entry = { name: `${ZIP_ROOT}/${f.name}` };
+  if (f.name.endsWith('.sh')) entry.mode = 0o755;
+  archive.file(f.from, entry);
 }
 
 archive.finalize();

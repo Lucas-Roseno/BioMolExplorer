@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import Head from "next/head";
 import dynamic from 'next/dynamic';
+import Link from "next/link";
 import { API_BASE_URL } from "../../config";
 import LoadingOverlay from "../../components/LoadingOverlay";
 
@@ -122,7 +123,10 @@ export default function SimilarityAnalysis() {
 
   useEffect(() => {
     async function loadData() {
-      if (!selectedTarget) return;
+      if (!selectedTarget) {
+        setLoading(false);
+        return;
+      }
       try {
         setLoading(true);
         setErrorMsg(null);
@@ -287,6 +291,37 @@ export default function SimilarityAnalysis() {
           Molecular Similarity Network
         </h2>
 
+        {!loading && targets.length === 0 && (
+          <div style={{
+            backgroundColor: '#fff3cd',
+            color: '#856404',
+            padding: '30px',
+            borderRadius: '12px',
+            border: '1px solid #ffeeba',
+            marginBottom: '40px',
+            textAlign: 'center',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
+          }}>
+            <h3 style={{ marginBottom: '15px', fontSize: '1.5rem' }}>No ChEMBL Data Available</h3>
+            <p style={{ fontSize: '1.1rem', marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px' }}>
+              We couldn't find any downloaded bioactivity datasets. To generate a similarity network and perform molecular analysis, you need to download data for at least one target first.
+            </p>
+            <Link href="/chembl" style={{
+              display: 'inline-block',
+              padding: '12px 25px',
+              backgroundColor: '#856404',
+              color: '#fff',
+              borderRadius: '8px',
+              textDecoration: 'none',
+              fontWeight: 'bold',
+              transition: 'transform 0.2s',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}>
+              Go to ChEMBL Search
+            </Link>
+          </div>
+        )}
+
         {targets.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <div>
@@ -377,7 +412,7 @@ export default function SimilarityAnalysis() {
         </div>
 
         {loading && <p style={{ textAlign: 'center', margin: '40px 0', fontSize: '1.2rem', color: 'var(--primary-color)' }}>Loading similarity graph...</p>}
-        {errorMsg && <div id="response" className="error" style={{ maxWidth: "100%" }}>{errorMsg}</div>}
+        {targets.length > 0 && errorMsg && <div id="response" className="error" style={{ maxWidth: "100%" }}>{errorMsg}</div>}
 
         {/* GRAPH CONTAINER */}
         {!loading && graphData && (

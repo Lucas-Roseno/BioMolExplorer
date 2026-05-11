@@ -107,6 +107,58 @@ def get_pdb_csv(target, csv_file):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+def _perform_pdb_cascade_delete(target, pdb_code):
+    """
+    Helper to remove a .pdb file and its references from all CSVs in a target folder.
+    """
+    target_dir = os.path.join(PDB_BASE_PATH, target)
+    pdb_file = f"{pdb_code}.pdb"
+    file_path = os.path.join(target_dir, pdb_file)
+    
+    # 1. Remove the .pdb file if it exists
+    print(f"DEBUG: Checking for PDB file: {file_path}", file=sys.stderr)
+    if os.path.exists(file_path):
+        try:
+            print(f"DEBUG: Removing PDB file: {file_path}", file=sys.stderr)
+            os.remove(file_path)
+        except Exception as e:
+            print(f"Error removing PDB file {file_path}: {str(e)}", file=sys.stderr)
+    else:
+        print(f"DEBUG: PDB file NOT FOUND: {file_path}", file=sys.stderr)
+    
+    # 2. Cascade delete: Remove all rows with this PDB code from ALL CSVs in the target folder
+    if os.path.exists(target_dir):
+        for filename in os.listdir(target_dir):
+            if filename.endswith('.csv'):
+                csv_path = os.path.join(target_dir, filename)
+                try:
+                    with open(csv_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+                        rows = list(csv.reader(f))
+                    
+                    if rows:
+                        headers = rows[0]
+                        # Filter out rows that contain the pdb_code in ANY column
+                        # (Case-insensitive comparison for safety)
+                        new_rows = [headers]
+                        for row in rows[1:]:
+                            if not any(pdb_code.upper() in str(cell).upper() for cell in row):
+                                new_rows.append(row)
+                        
+                        # Only write back if rows were actually removed
+                        if len(new_rows) < len(rows):
+                            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                                writer = csv.writer(f)
+                                writer.writerows(new_rows)
+                except Exception as e:
+                    print(f"Error updating CSV {filename} for {target}: {str(e)}", file=sys.stderr)
+    
+    # 3. Cleanup: If target folder is empty, remove it
+    try:
+        if os.path.isdir(target_dir) and not os.listdir(target_dir):
+            shutil.rmtree(target_dir)
+    except:
+        pass
+
 @app.route('/delete_pdb_csv_row', methods=['POST'])
 def delete_pdb_csv_row():
     data = request.json
@@ -135,15 +187,40 @@ def delete_pdb_csv_row():
         if len(rows) <= 1 or row_index < 0 or row_index >= len(rows) - 1:
             return jsonify({'status': 'error', 'message': 'Row index out of range'}), 400
 
+        # Identify PDB code to check for sync deletion
+        headers = rows[0]
+        pdb_code_idx = -1
+        for i, h in enumerate(headers):
+            if h.upper() == 'PDB_CODE':
+                pdb_code_idx = i
+                break
+        
+        pdb_code_to_sync = None
+        if pdb_code_idx != -1:
+            pdb_code_to_sync = rows[row_index + 1][pdb_code_idx].strip()
+
+        # Remove the row
         rows.pop(row_index + 1)
 
+        # Save the updated CSV
         with open(file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerows(rows)
 
+        # If it was the last row for this PDB code, trigger cascade delete of the .pdb file
+        sync_message = ""
+        if pdb_code_to_sync:
+            # Check if any other row still has this PDB code
+            still_exists = any(len(row) > pdb_code_idx and row[pdb_code_idx].strip().upper() == pdb_code_to_sync.upper() for row in rows[1:])
+            print(f"DEBUG: PDB code {pdb_code_to_sync} still exists: {still_exists}", file=sys.stderr)
+            if not still_exists:
+                print(f"DEBUG: Triggering cascade delete for {pdb_code_to_sync}", file=sys.stderr)
+                _perform_pdb_cascade_delete(target, pdb_code_to_sync)
+                sync_message = f" and last representative sync-deleted {pdb_code_to_sync}.pdb"
+
         return jsonify({
             'status': 'success',
-            'message': 'CSV row deleted successfully'
+            'message': f'CSV row deleted successfully{sync_message}'
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -219,46 +296,9 @@ def delete_pdb():
         # Extract PDB code from filename (remove extension)
         pdb_code = os.path.splitext(pdb_file)[0].strip()
 
-        if os.path.exists(file_path):
-            # Remove the .pdb file
-            os.remove(file_path)
-            
-            # Cascade delete: Remove all rows with this PDB code from ALL CSVs in the target folder
-            if os.path.exists(target_dir):
-                for filename in os.listdir(target_dir):
-                    if filename.endswith('.csv'):
-                        csv_path = os.path.join(target_dir, filename)
-                        try:
-                            with open(csv_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
-                                rows = list(csv.reader(f))
-                            
-                            if rows:
-                                headers = rows[0]
-                                # Filter out rows that contain the pdb_code in ANY column
-                                # (Case-insensitive comparison for safety)
-                                new_rows = [headers]
-                                for row in rows[1:]:
-                                    if not any(pdb_code.upper() in str(cell).upper() for cell in row):
-                                        new_rows.append(row)
-                                
-                                # Only write back if rows were actually removed
-                                if len(new_rows) < len(rows):
-                                    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                                        writer = csv.writer(f)
-                                        writer.writerows(new_rows)
-                        except Exception as e:
-                            print(f"Error updating CSV {filename} for {target}: {str(e)}", file=sys.stderr)
-            
-            # If target folder is empty, remove it
-            try:
-                if os.path.isdir(target_dir) and not os.listdir(target_dir):
-                    shutil.rmtree(target_dir)
-            except:
-                pass
-            
-            return jsonify({'status': 'success', 'message': f'{pdb_file} and all its references deleted successfully'})
-        else:
-            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+        _perform_pdb_cascade_delete(target, pdb_code)
+        
+        return jsonify({'status': 'success', 'message': f'{pdb_file} and all its references deleted successfully'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -1152,5 +1192,5 @@ def get_analysis_molecule_image():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    # Disable debug mode to prevent the Werkzeug reloader from doubling RAM usage
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    # Enabled debug mode for development hot-reload
+    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=True)

@@ -55,7 +55,11 @@ function getViridisColor(val: number, minVal: number, maxVal: number) {
   return viridis[idx];
 }
 
-export default function SimilarityAnalysis() {
+// ==========================================
+// SIMILARITY TAB COMPONENT
+// ==========================================
+
+function SimilarityTab() {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [maxDegree, setMaxDegree] = useState<number>(1);
   const [minDegree, setMinDegree] = useState<number>(0);
@@ -98,10 +102,7 @@ export default function SimilarityAnalysis() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [loading, graphData]);
-  // ==========================================
-  // LOAD API DATA
-  // ==========================================
-  // Fetch available targets once
+
   useEffect(() => {
     async function fetchTargets() {
       try {
@@ -130,14 +131,11 @@ export default function SimilarityAnalysis() {
       try {
         setLoading(true);
         setErrorMsg(null);
-        // Fetch Graph Data
         const graphRes = await fetch(`${API_BASE_URL}/api/analysis/graph-data?target=${encodeURIComponent(selectedTarget)}&datasetType=${datasetType}`);
         if (!graphRes.ok) throw new Error("Failed to load graph data.");
-
         const graphJson = await graphRes.json();
 
         if (graphJson.success && graphJson.data) {
-          // Calculate node degree (val)
           const nodeDegree: Record<string, number> = {};
           graphJson.data.links.forEach((link: any) => {
             nodeDegree[link.source] = (nodeDegree[link.source] || 0) + 1;
@@ -151,33 +149,22 @@ export default function SimilarityAnalysis() {
             if (node.val > currentMaxDegree) currentMaxDegree = node.val;
             if (node.val < currentMinDegree) currentMinDegree = node.val;
           });
-          
           if (currentMinDegree === Infinity) currentMinDegree = 0;
-
           setMaxDegree(currentMaxDegree);
           setMinDegree(currentMinDegree);
 
-          // Calculate Interactive Charts Data
           const degreeArray = Object.values(nodeDegree).sort((a,b) => b - a);
           const rData = degreeArray.map((val, index) => ({ rank: index + 1, degree: val }));
-
           const degreeCounts: Record<number, number> = {};
-          degreeArray.forEach(val => {
-             degreeCounts[val] = (degreeCounts[val] || 0) + 1;
-          });
-          const hData = Object.keys(degreeCounts)
-            .map(Number)
-            .sort((a,b) => a - b)
-            .map(deg => ({ degree: deg, count: degreeCounts[deg] }));
+          degreeArray.forEach(val => { degreeCounts[val] = (degreeCounts[val] || 0) + 1; });
+          const hData = Object.keys(degreeCounts).map(Number).sort((a,b) => a - b).map(deg => ({ degree: deg, count: degreeCounts[deg] }));
 
           setRankData(rData);
           setHistogramData(hData);
           setFullGraphDegrees(graphJson.data.fullGraphDegrees || []);
-          
           setGraphData(graphJson.data);
         }
 
-        // Fetch Plot Gallery
         const plotsRes = await fetch(`${API_BASE_URL}/api/analysis/plots`);
         if (plotsRes.ok) {
           const plotsJson = await plotsRes.json();
@@ -196,39 +183,23 @@ export default function SimilarityAnalysis() {
         setLoading(false);
       }
     }
-
     loadData();
   }, [selectedTarget, datasetType]);
 
-  // ==========================================
-  // GRAPH EVENTS
-  // ==========================================
-  const handleNodeClick = useCallback(
-    async (node: GraphNode) => {
+  const handleNodeClick = useCallback(async (node: GraphNode) => {
       setSelectedNode(node);
       setIsModalOpen(true);
       setMoleculeSvg(null);
-
-      // Center and Zoom
       if (graphRef.current) {
         if (is3D) {
-          // 3D Camera movement: move camera to look at node from a distance
           const distance = 40;
           const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, (node as any).z || 0);
-
-          graphRef.current.cameraPosition(
-            { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: ((node as any).z || 0) * distRatio }, // new position
-            { x: node.x || 0, y: node.y || 0, z: (node as any).z || 0 }, // lookAt
-            2000  // transition duration
-          );
+          graphRef.current.cameraPosition({ x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: ((node as any).z || 0) * distRatio }, { x: node.x || 0, y: node.y || 0, z: (node as any).z || 0 }, 2000);
         } else {
-          // 2D Centering
           graphRef.current.centerAt(node.x, node.y, 1000);
           graphRef.current.zoom(8, 2000);
         }
       }
-
-      // Fetch SVG from backend
       if (node.smiles) {
         setSvgLoading(true);
         try {
@@ -238,34 +209,17 @@ export default function SimilarityAnalysis() {
             body: JSON.stringify({ smiles: node.smiles })
           });
           const data = await res.json();
-          if (data.success && data.svg) {
-            setMoleculeSvg(data.svg);
-          } else {
-            console.error(data.message);
-          }
-        } catch (err) {
-          console.error("Failed to load SVG", err);
-        } finally {
-          setSvgLoading(false);
-        }
+          if (data.success && data.svg) setMoleculeSvg(data.svg);
+        } catch (err) { console.error("Failed to load SVG", err); } finally { setSvgLoading(false); }
       }
-    },
-    [is3D]
+    }, [is3D]
   );
 
-  // Automatically center graph when physics simulation ends or view changes
-  const handleEngineStop = useCallback(() => {
-    if (graphRef.current) {
-      graphRef.current.zoomToFit(800, 40);
-    }
-  }, []);
+  const handleEngineStop = useCallback(() => { if (graphRef.current) graphRef.current.zoomToFit(800, 40); }, []);
 
   useEffect(() => {
     if (!loading && graphData && graphRef.current) {
-      // Fallback: force center after 2s in case onEngineStop doesn't fire
-      const t = setTimeout(() => {
-        if (graphRef.current) graphRef.current.zoomToFit(800, 40);
-      }, 2000);
+      const t = setTimeout(() => { if (graphRef.current) graphRef.current.zoomToFit(800, 40); }, 2000);
       return () => clearTimeout(t);
     }
   }, [loading, graphData, is3D]);
@@ -273,111 +227,29 @@ export default function SimilarityAnalysis() {
   const targetNorm = selectedTarget.replace(/\s+/g, '').toLowerCase();
   const summaryImageUrl = plots.find((plotStr: string) => 
     plotStr.replace(/\s+/g, '').toLowerCase().includes(targetNorm) && 
-    plotStr.includes('Tanimoto_morgan') &&
-    plotStr.includes(datasetType)
+    plotStr.includes('Tanimoto_morgan') && plotStr.includes(datasetType)
   );
 
-  // ==========================================
-  // RENDER
-  // ==========================================
   return (
-    <>
-      <Head>
-        <title>Similarity Analysis | BioMolExplorer</title>
-      </Head>
-
-      <main className="container" style={{ maxWidth: '1400px', marginBottom: '40px' }}>
-        <h2 className="page-title" style={{ marginBottom: "10px", fontSize: "2.5rem" }}>
-          Molecular Similarity Network
-        </h2>
-
-        {!loading && targets.length === 0 && (
-          <div style={{
-            backgroundColor: '#fff3cd',
-            color: '#856404',
-            padding: '30px',
-            borderRadius: '12px',
-            border: '1px solid #ffeeba',
-            marginBottom: '40px',
-            textAlign: 'center',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
-          }}>
-            <h3 style={{ marginBottom: '15px', fontSize: '1.5rem' }}>No ChEMBL Data Available</h3>
-            <p style={{ fontSize: '1.1rem', marginBottom: '20px', maxWidth: '600px', margin: '0 auto 20px' }}>
-              We couldn't find any downloaded bioactivity datasets. To generate a similarity network and perform molecular analysis, you need to download data for at least one target first.
-            </p>
-            <Link href="/chembl" style={{
-              display: 'inline-block',
-              padding: '12px 25px',
-              backgroundColor: '#856404',
-              color: '#fff',
-              borderRadius: '8px',
-              textDecoration: 'none',
-              fontWeight: 'bold',
-              transition: 'transform 0.2s',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}>
-              Go to ChEMBL Search
-            </Link>
-          </div>
-        )}
-
+    <div style={{ marginTop: '20px' }}>
         {targets.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '20px', flexWrap: 'wrap' }}>
             <div>
               <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Select Target:</label>
-              <select
-                value={selectedTarget}
-                onChange={(e) => setSelectedTarget(e.target.value)}
-                style={{
-                  padding: '8px',
-                  borderRadius: '5px',
-                  border: '1px solid #ccc',
-                  fontSize: '1rem'
-                }}
-              >
-                {targets.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
+              <select value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)} style={{ padding: '8px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '1rem' }}>
+                {targets.map(t => ( <option key={t} value={t}>{t}</option> ))}
               </select>
             </div>
-            
             <div>
               <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Dataset Type:</label>
-              <select
-                value={datasetType}
-                onChange={(e) => setDatasetType(e.target.value as 'MOLS' | 'SIMS')}
-                style={{
-                  padding: '8px',
-                  borderRadius: '5px',
-                  border: '1px solid #ccc',
-                  fontSize: '1rem'
-                }}
-              >
+              <select value={datasetType} onChange={(e) => setDatasetType(e.target.value as 'MOLS' | 'SIMS')} style={{ padding: '8px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '1rem' }}>
                 <option value="MOLS">Molecular Data (MOLS)</option>
                 <option value="SIMS">Similar Molecules (SIMS)</option>
               </select>
             </div>
-            
             {summaryImageUrl && (
               <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
-                <a
-                  href={`${API_BASE_URL}/api/analysis/plot/${summaryImageUrl}`}
-                  target="_blank"
-                  download
-                  style={{
-                    padding: '8px 15px',
-                    backgroundColor: 'var(--primary-color)',
-                    color: '#fff',
-                    borderRadius: '5px',
-                    textDecoration: 'none',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                >
+                <a href={`${API_BASE_URL}/api/analysis/plot/${summaryImageUrl}`} target="_blank" download style={{ padding: '8px 15px', backgroundColor: 'var(--primary-color)', color: '#fff', borderRadius: '5px', textDecoration: 'none', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
                   <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                     <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
                     <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
@@ -390,206 +262,57 @@ export default function SimilarityAnalysis() {
         )}
 
         <div style={{ textAlign: "center", marginBottom: "30px", color: "#666" }}>
-          <p style={{ marginBottom: "10px" }}>
-            Explore connections between molecules based on Tanimoto Similarity (Morgan Fingerprints).
-            <br /><strong>Tip:</strong> Click a node to view its 2D structure. Drag to pan or use scroll to zoom.
-          </p>
-          <button
-            onClick={() => setIs3D(!is3D)}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: is3D ? '#26828e' : 'var(--primary-color)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-            }}
-          >
+          <p style={{ marginBottom: "10px" }}>Explore connections between molecules based on Tanimoto Similarity (Morgan Fingerprints).</p>
+          <button onClick={() => setIs3D(!is3D)} style={{ padding: '8px 16px', backgroundColor: is3D ? '#26828e' : 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>
             {is3D ? 'Switch to 2D View' : 'Switch to 3D View'}
           </button>
         </div>
 
         {loading && <p style={{ textAlign: 'center', margin: '40px 0', fontSize: '1.2rem', color: 'var(--primary-color)' }}>Loading similarity graph...</p>}
-        {targets.length > 0 && errorMsg && <div id="response" className="error" style={{ maxWidth: "100%" }}>{errorMsg}</div>}
+        {targets.length > 0 && errorMsg && <div className="error" style={{ maxWidth: "100%" }}>{errorMsg}</div>}
 
-        {/* GRAPH CONTAINER */}
         {!loading && graphData && (
-          <div
-            ref={containerRef}
-            style={{
-              height: '600px',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              backgroundColor: '#fff',
-              position: 'relative',
-              boxShadow: '0 4px 15px var(--shadow-color)'
-            }}
-          >
+          <div ref={containerRef} style={{ height: '600px', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fff', position: 'relative', boxShadow: '0 4px 15px var(--shadow-color)' }}>
             {is3D ? (
-              <ForceGraph3D
-                ref={graphRef}
-                graphData={graphData}
-                width={containerSize.width}
-                height={containerSize.height}
-                nodeLabel="id"
-                nodeColor={(node) => getViridisColor((node as GraphNode).val, minDegree, maxDegree)}
-                nodeRelSize={4}
-                backgroundColor="#ffffff"
-                linkColor={() => "rgba(100, 100, 100, 0.6)"}
-                linkWidth={(link) => (link.value * 2)}
-                onNodeClick={(node) => handleNodeClick(node as unknown as GraphNode)}
-                enableNodeDrag={true}
-                cooldownTicks={150}
-                onEngineStop={handleEngineStop}
-              />
+              <ForceGraph3D ref={graphRef} graphData={graphData} width={containerSize.width} height={containerSize.height} nodeLabel="id" nodeColor={(node) => getViridisColor((node as GraphNode).val, minDegree, maxDegree)} nodeRelSize={4} backgroundColor="#ffffff" linkColor={() => "rgba(100, 100, 100, 0.6)"} linkWidth={(link) => (link.value * 2)} onNodeClick={(node) => handleNodeClick(node as unknown as GraphNode)} enableNodeDrag={true} cooldownTicks={150} onEngineStop={handleEngineStop} />
             ) : (
-              <ForceGraph2D
-                ref={graphRef}
-                graphData={graphData}
-                width={containerSize.width}
-                height={containerSize.height}
-                nodeLabel="id"
-                nodeColor={(node) => getViridisColor((node as GraphNode).val, minDegree, maxDegree)}
-                nodeRelSize={4}
-                linkColor={() => "rgba(150, 134, 222, 0.2)"}
-                linkWidth={(link) => (link.value * 3)}
-                onNodeClick={(node) => handleNodeClick(node as unknown as GraphNode)}
-                enableNodeDrag={true}
-                enableZoomInteraction={true}
-                cooldownTicks={150}
-                onEngineStop={handleEngineStop}
-              />
+              <ForceGraph2D ref={graphRef} graphData={graphData} width={containerSize.width} height={containerSize.height} nodeLabel="id" nodeColor={(node) => getViridisColor((node as GraphNode).val, minDegree, maxDegree)} nodeRelSize={4} linkColor={() => "rgba(150, 134, 222, 0.2)"} linkWidth={(link) => (link.value * 3)} onNodeClick={(node) => handleNodeClick(node as unknown as GraphNode)} enableNodeDrag={true} enableZoomInteraction={true} cooldownTicks={150} onEngineStop={handleEngineStop} />
             )}
-
-            {/* FLOATING LEGEND */}
-            <div style={{
-              position: 'absolute',
-              bottom: 20,
-              left: 20,
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              padding: '10px 15px',
-              borderRadius: '5px',
-              border: '1px solid #ddd',
-              fontSize: '0.85rem'
-            }}>
-              <b>Legend:</b><br />
-              <span style={{ color: '#26828e' }}>●</span> Node: Molecule (ChEMBL ID)<br />
-              ━ Edge: Similarity<br />
+            <div style={{ position: 'absolute', bottom: 20, left: 20, backgroundColor: 'rgba(255, 255, 255, 0.95)', padding: '10px 15px', borderRadius: '5px', border: '1px solid #ddd', fontSize: '0.85rem' }}>
+              <b>Legend:</b><br /><span style={{ color: '#26828e' }}>●</span> Node: Molecule (ChEMBL ID)<br />━ Edge: Similarity<br />
             </div>
-
-            {/* COLOR SCALE / COLORBAR */}
-            <div style={{
-              position: 'absolute',
-              right: 20,
-              bottom: 20,
-              top: 20,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
+            <div style={{ position: 'absolute', right: 20, bottom: 20, top: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ display: 'flex', height: '80%', alignItems: 'center' }}>
-                <div style={{
-                  height: '100%',
-                  width: '20px',
-                  background: 'linear-gradient(to top, #440154, #482878, #3e4989, #31688e, #26828e, #1f9e89, #35b779, #6ece58, #b5de2b, #fde725)',
-                  borderRadius: '10px',
-                  border: '1px solid #ccc',
-                  boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                }}></div>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  height: '100%',
-                  marginLeft: '10px',
-                  fontWeight: 'bold',
-                  fontSize: '0.9rem',
-                  color: '#333'
-                }}>
-                  <span>{maxDegree}</span>
-                  <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center', flex: 1, margin: 'auto 0' }}>
-                    Node Degree
-                  </span>
-                  <span>{minDegree}</span>
+                <div style={{ height: '100%', width: '20px', background: 'linear-gradient(to top, #440154, #482878, #3e4989, #31688e, #26828e, #1f9e89, #35b779, #6ece58, #b5de2b, #fde725)', borderRadius: '10px', border: '1px solid #ccc', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}></div>
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', marginLeft: '10px', fontWeight: 'bold', fontSize: '0.9rem', color: '#333' }}>
+                  <span>{maxDegree}</span><span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', textAlign: 'center', flex: 1, margin: 'auto 0' }}>Node Degree</span><span>{minDegree}</span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* INTERACTIVE NETWORK CHARTS */}
         {!loading && rankData.length > 0 && (
           <div style={{ marginTop: '50px' }}>
-            <h3 style={{ color: 'var(--primary-color)', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px' }}>
-              Interactive Network Analysis
-            </h3>
-            
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '20px'
-            }}>
-              {/* Degree Rank Plot */}
+            <h3 style={{ color: 'var(--primary-color)', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px' }}>Interactive Network Analysis</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '15px', backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
                  <h4 style={{ fontSize: '1rem', color: '#555', marginBottom: '15px' }}>Degree Rank Plot</h4>
-                 <div style={{ width: '100%', height: 300 }}>
-                   <ResponsiveContainer>
-                     <LineChart data={rankData} margin={{ top: 20, right: 30, left: 35, bottom: 20 }}>
-                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                       <XAxis dataKey="rank" label={{ value: 'Rank', position: 'insideBottom', offset: -10 }} />
-                       <YAxis label={{ value: 'Degree', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
-                       <Tooltip />
-                       <Line type="stepAfter" dataKey="degree" stroke="#5c6bc0" strokeWidth={2} dot={false} />
-                     </LineChart>
-                   </ResponsiveContainer>
-                 </div>
+                 <div style={{ width: '100%', height: 300 }}><ResponsiveContainer><LineChart data={rankData} margin={{ top: 20, right: 30, left: 35, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="rank" label={{ value: 'Rank', position: 'insideBottom', offset: -10 }} /><YAxis label={{ value: 'Degree', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} /><Tooltip /><Line type="stepAfter" dataKey="degree" stroke="#5c6bc0" strokeWidth={2} dot={false} /></LineChart></ResponsiveContainer></div>
               </div>
-
-              {/* Degree Histogram */}
               <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '15px', backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
                  <h4 style={{ fontSize: '1rem', color: '#555', marginBottom: '15px' }}>Degree Histogram</h4>
-                 <div style={{ width: '100%', height: 300 }}>
-                   <ResponsiveContainer>
-                     <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 35, bottom: 20 }}>
-                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                       <XAxis dataKey="degree" label={{ value: 'Degree', position: 'insideBottom', offset: -10 }} />
-                       <YAxis label={{ value: 'Number of Nodes', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
-                       <Tooltip cursor={{fill: 'transparent'}} />
-                       <Bar dataKey="count" fill="#7986CB" />
-                     </BarChart>
-                   </ResponsiveContainer>
-                 </div>
+                 <div style={{ width: '100%', height: 300 }}><ResponsiveContainer><BarChart data={histogramData} margin={{ top: 20, right: 30, left: 35, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="degree" label={{ value: 'Degree', position: 'insideBottom', offset: -10 }} /><YAxis label={{ value: 'Number of Nodes', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} /><Tooltip cursor={{fill: 'transparent'}} /><Bar dataKey="count" fill="#7986CB" /></BarChart></ResponsiveContainer></div>
               </div>
-              
-              {/* Degree Distribution Scatter */}
               <div style={{ gridColumn: '1 / -1', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '15px', backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
                  {(() => {
                    const allDistDegrees = [...histogramData.map(d => d.degree), ...fullGraphDegrees.map(d => d.degree)];
                    const maxDistDegree = allDistDegrees.length > 0 ? Math.max(...allDistDegrees) : maxDegree;
                    const xTicks = Array.from({ length: maxDistDegree + 1 }, (_, i) => i);
-                   
                    return (
                      <>
                        <h4 style={{ fontSize: '1rem', color: '#555', marginBottom: '15px' }}>Degree Distribution</h4>
-                       <div style={{ width: '100%', height: 300 }}>
-                         <ResponsiveContainer>
-                           <ScatterChart margin={{ top: 20, right: 30, left: 35, bottom: 20 }}>
-                             <CartesianGrid strokeDasharray="3 3" />
-                             <XAxis type="number" dataKey="degree" name="Degree" label={{ value: 'Degree', position: 'insideBottom', offset: -10 }} ticks={xTicks} domain={[0, maxDistDegree]} />
-                             <YAxis type="number" dataKey="count" name="Nodes" label={{ value: 'Number of Nodes', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
-                             <Tooltip cursor={{strokeDasharray: '3 3'}} />
-                             <Legend verticalAlign="top" height={36} />
-                             {fullGraphDegrees.length > 0 && (
-                               <Scatter name="Graph Degree" data={fullGraphDegrees} fill="gray" shape="circle" />
-                             )}
-                             <Scatter name="MaxComp Degree" data={histogramData} fill="#7995c4" shape="circle" />
-                           </ScatterChart>
-                         </ResponsiveContainer>
-                       </div>
+                       <div style={{ width: '100%', height: 300 }}><ResponsiveContainer><ScatterChart margin={{ top: 20, right: 30, left: 35, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis type="number" dataKey="degree" name="Degree" label={{ value: 'Degree', position: 'insideBottom', offset: -10 }} ticks={xTicks} domain={[0, maxDistDegree]} /><YAxis type="number" dataKey="count" name="Nodes" label={{ value: 'Number of Nodes', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} /><Tooltip cursor={{strokeDasharray: '3 3'}} /><Legend verticalAlign="top" height={36} />{fullGraphDegrees.length > 0 && ( <Scatter name="Graph Degree" data={fullGraphDegrees} fill="gray" shape="circle" /> )}<Scatter name="MaxComp Degree" data={histogramData} fill="#7995c4" shape="circle" /></ScatterChart></ResponsiveContainer></div>
                      </>
                    );
                  })()}
@@ -598,71 +321,494 @@ export default function SimilarityAnalysis() {
           </div>
         )}
 
-      </main>
-
-      {/* 2D MOLECULE MODAL */}
       {isModalOpen && selectedNode && (
         <div className="modal-overlay" style={{ display: 'flex' }} onClick={() => setIsModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <span className="modal-close" onClick={() => setIsModalOpen(false)}>&times;</span>
             <div style={{ textAlign: 'center', marginTop: '10px' }}>
-              <h3 style={{ color: 'var(--primary-color)', marginBottom: '15px', fontSize: '1.5rem', wordBreak: 'break-all' }}>
-                {selectedNode.id}
-              </h3>
-
-              <div style={{
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                padding: '20px',
-                backgroundColor: '#fafafa',
-                minHeight: '250px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {selectedNode.smiles ? (
-                  svgLoading ? (
-                    <p>Loading SVG image...</p>
-                  ) : moleculeSvg ? (
-                    <div dangerouslySetInnerHTML={{ __html: moleculeSvg }} />
-                  ) : (
-                    <p style={{ color: 'red' }}>Failed to generate image.</p>
-                  )
-                ) : (
-                  <p style={{ color: '#999', fontStyle: 'italic' }}>Structure (SMILES) not found in the dataset (Missing or synthetic ID).</p>
-                )}
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '15px', fontSize: '1.5rem', wordBreak: 'break-all' }}>{selectedNode.id}</h3>
+              <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '20px', backgroundColor: '#fafafa', minHeight: '250px', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}>
+                {selectedNode.smiles ? ( svgLoading ? ( <p>Loading SVG image...</p> ) : moleculeSvg ? ( <div dangerouslySetInnerHTML={{ __html: moleculeSvg }} /> ) : ( <p style={{ color: 'red' }}>Failed to generate image.</p> ) ) : ( <p style={{ color: '#999', fontStyle: 'italic' }}>Structure (SMILES) not found in the dataset.</p> )}
               </div>
-
               <div style={{ marginTop: '20px', textAlign: 'left', backgroundColor: '#f2f4f8', padding: '15px', borderRadius: '5px' }}>
                 <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>SMILES:</p>
-                <p style={{ margin: 0, fontSize: '0.85rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                  {selectedNode.smiles || "N/A"}
-                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>{selectedNode.smiles || "N/A"}</p>
                 <p style={{ margin: '10px 0 0 0', fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>Node connections (Degree):</p>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                  {selectedNode.val} strong similarity link(s)
-                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem' }}>{selectedNode.val} strong similarity link(s)</p>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                style={{
-                  marginTop: '25px',
-                  padding: '10px 30px',
-                  backgroundColor: 'var(--primary-color)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Close
-              </button>
+              <button type="button" onClick={() => setIsModalOpen(false)} style={{ marginTop: '25px', padding: '10px 30px', backgroundColor: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Close</button>
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// REDOCKING TAB COMPONENT
+// ==========================================
+
+function RedockingTab({ onTaskStart, onTaskEnd }: { onTaskStart: (id: string) => void, onTaskEnd: () => void }) {
+  const [pdbTargets, setPdbTargets] = useState<string[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState("");
+  const [prepareComplex, setPrepareComplex] = useState(true);
+  const [chargeType, setChargeType] = useState("am1");
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<any>(null);
+  const [results, setResults] = useState<{headers: string[], rows: any[]} | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [executionLogs, setExecutionLogs] = useState("");
+
+  useEffect(() => {
+    // Check for existing task in localStorage
+    const savedTaskId = localStorage.getItem("active_redocking_task");
+    if (savedTaskId) {
+      setRunningTaskId(savedTaskId);
+      onTaskStart(savedTaskId);
+    }
+
+    async function fetchPdbTargets() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/files/list/PDB`);
+        if (res.ok) {
+          const data = await res.json();
+          const targets = Object.keys(data);
+          setPdbTargets(targets);
+          if (targets.length > 0 && !selectedTarget) setSelectedTarget(targets[0]);
+        }
+      } catch (e) { console.error("Failed to fetch PDB targets", e); }
+    }
+    fetchPdbTargets();
+  }, []);
+
+  const runRedocking = async () => {
+    if (!selectedTarget) return;
+    setLoading(true);
+    setResults(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/analysis/redocking/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target: selectedTarget,
+          prepare_complex: prepareComplex,
+          charge_type: chargeType
+        })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        setRunningTaskId(data.task_id);
+        localStorage.setItem("active_redocking_task", data.task_id);
+        onTaskStart(data.task_id);
+      } else {
+        alert(data.message);
+      }
+    } catch (e) {
+      alert("Error starting redocking process.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (runningTaskId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/analysis/redocking/status/${runningTaskId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setTaskStatus(data);
+            if (data.status === "completed" || data.status === "error") {
+              setRunningTaskId(null);
+              localStorage.removeItem("active_redocking_task");
+              onTaskEnd();
+              if (data.status === "completed") {
+                fetchResults(data.target);
+              }
+            }
+          } else if (res.status === 404) {
+            // Task lost (backend restart or invalid ID)
+            console.warn("Task not found on backend. Stopping poll.");
+            setRunningTaskId(null);
+            localStorage.removeItem("active_redocking_task");
+            onTaskEnd();
+          }
+        } catch (e) { 
+          console.error("Error polling status", e);
+          // Don't stop on generic fetch error (might be network blip)
+        }
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [runningTaskId]);
+
+  useEffect(() => {
+    let logInterval: any;
+    if (showLogs) {
+      const fetchLogs = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/analysis/redocking/logs`);
+          if (res.ok) {
+            const data = await res.json();
+            setExecutionLogs(data.logs);
+          }
+        } catch (e) { console.error("Error fetching logs", e); }
+      };
+      fetchLogs();
+      logInterval = setInterval(fetchLogs, 5000);
+    }
+    return () => clearInterval(logInterval);
+  }, [showLogs]);
+
+  const fetchResults = async (target: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/analysis/redocking/results/${encodeURIComponent(target)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setResults(data);
+      }
+    } catch (e) { console.error("Error fetching results", e); }
+  };
+
+  const downloadCsv = () => {
+    if (!selectedTarget) return;
+    window.open(`${API_BASE_URL}/api/files/download/PDB/csv/${encodeURIComponent(selectedTarget)}/pdb_codes.csv`);
+  };
+
+  return (
+    <div style={{ marginTop: '20px' }}>
+      {pdbTargets.length === 0 && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! No PDB targets available.</strong>
+            <span>You must first download at least one target on the </span>
+            <Link href="/pdb" style={{ fontWeight: 'bold', textDecoration: 'underline', color: '#856404' }}>
+              PDB Search page
+            </Link>
+            <span> before you can perform a redocking simulation.</span>
+          </div>
+        </div>
+      )}
+      <div style={{ 
+        backgroundColor: '#fff', 
+        padding: '25px', 
+        borderRadius: '12px', 
+        boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+        border: '1px solid #eee',
+        marginBottom: '30px'
+      }}>
+        <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>Redocking Parameters (AutoDock Vina)</h3>
+        
+        <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '1', minWidth: '200px' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Target Folder:</label>
+            <select 
+              value={selectedTarget} 
+              onChange={(e) => setSelectedTarget(e.target.value)} 
+              disabled={!!runningTaskId}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              {pdbTargets.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <div style={{ flex: '1', minWidth: '150px' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type:</label>
+            <select 
+              value={chargeType} 
+              onChange={(e) => setChargeType(e.target.value)}
+              disabled={!!runningTaskId}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              <option value="am1">AM1 (Recommended)</option>
+              <option value="gas">Gasteiger</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', paddingBottom: '10px' }}>
+            <input 
+              type="checkbox" 
+              id="prepComp" 
+              checked={prepareComplex} 
+              onChange={(e) => setPrepareComplex(e.target.checked)}
+              disabled={!!runningTaskId}
+              style={{ width: '18px', height: '18px', marginRight: '10px' }}
+            />
+            <label htmlFor="prepComp" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex</label>
+          </div>
+
+          <button 
+            onClick={runRedocking} 
+            disabled={!!runningTaskId || loading || !selectedTarget}
+            style={{ 
+              padding: '12px 30px', 
+              backgroundColor: 'var(--primary-color)', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '8px', 
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              opacity: (!!runningTaskId || loading || !selectedTarget) ? 0.6 : 1,
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+            }}
+          >
+            {loading ? 'Starting...' : 'Run Redocking'}
+          </button>
+        </div>
+      </div>
+
+      {runningTaskId && (
+        <div style={{ 
+          backgroundColor: '#e3f2fd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          textAlign: 'center',
+          border: '1px solid #90caf9'
+        }}>
+          <h4 style={{ color: '#1976d2', marginBottom: '10px' }}>Task in Progress...</h4>
+          <p style={{ marginBottom: '15px' }}>{taskStatus?.message || "Running simulation on server..."}</p>
+          <div style={{ 
+            width: '100%', 
+            height: '10px', 
+            backgroundColor: '#fff', 
+            borderRadius: '5px', 
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <div className="progress-bar-animated" style={{
+              height: '100%',
+              backgroundColor: '#1976d2',
+              width: '100%',
+              position: 'absolute'
+            }}></div>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: `
+            .progress-bar-animated {
+              animation: progress-animation 2s infinite linear;
+              transform-origin: 0% 50%;
+            }
+            @keyframes progress-animation {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+            }
+          `}} />
+          
+          </div>
+        )}
+
+      {taskStatus?.status === 'error' && (
+        <div className="error" style={{ marginBottom: '30px' }}>
+          <strong>Error:</strong> {taskStatus.message}
+        </div>
+      )}
+
+      {results && (
+        <div style={{ marginTop: '40px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ color: 'var(--primary-color)' }}>Redocking Results: {selectedTarget}</h3>
+            <button 
+              onClick={downloadCsv}
+              style={{ 
+                padding: '10px 20px', 
+                backgroundColor: '#2e7d32', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '6px', 
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <i className="fas fa-download"></i> Download CSV
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #dee2e6' }}>
+                  {results.headers.map(h => <th key={h} style={{ padding: '12px', textAlign: 'left' }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {results.rows.map((row, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+                    {row.map((cell: any, j: number) => <td key={j} style={{ padding: '12px' }}>{cell}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TERMINAL LOG VIEWER */}
+      <div style={{ marginTop: '30px', borderTop: '1px dashed #ccc', paddingTop: '20px' }}>
+        <button 
+          onClick={() => setShowLogs(!showLogs)}
+          style={{ 
+            padding: '10px 25px', 
+            fontSize: '0.9rem', 
+            borderRadius: '25px',
+            border: '1px solid #444',
+            backgroundColor: showLogs ? '#444' : 'white',
+            color: showLogs ? 'white' : '#444',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            margin: '0 auto',
+            transition: 'all 0.2s',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+          }}
+        >
+          <i className="fas fa-terminal" style={{ color: showLogs ? 'white' : '#666' }}></i>
+          {showLogs ? "Hide Terminal Output" : "Show Execution Logs (Terminal)"}
+        </button>
+
+        {showLogs && (
+          <div style={{ 
+            marginTop: '20px', 
+            textAlign: 'left',
+            backgroundColor: '#0c0c0c',
+            color: '#00ff41',
+            padding: '20px',
+            borderRadius: '8px',
+            fontFamily: '"Fira Code", "Courier New", monospace',
+            fontSize: '0.85rem',
+            maxHeight: '350px',
+            overflowY: 'auto',
+            whiteSpace: 'pre-wrap',
+            border: '1px solid #333',
+            boxShadow: '0 5px 15px rgba(0,0,0,0.3)',
+            lineHeight: '1.4'
+          }}>
+            <div style={{ color: '#aaa', borderBottom: '1px solid #333', paddingBottom: '8px', marginBottom: '12px', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
+              <span>AutoDock Vina / PDBPrep Terminal Output</span>
+              <span style={{ color: '#4caf50', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: '8px', height: '8px', backgroundColor: '#4caf50', borderRadius: '50%' }}></span> Live
+              </span>
+            </div>
+            {executionLogs || "Terminal idle. Start a redocking task to see logs here."}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MAIN ANALYSIS PAGE
+// ==========================================
+
+export default function AnalysisPage() {
+  const [activeTab, setActiveTab] = useState<"similarity" | "redocking">("similarity");
+  const [isTaskRunning, setIsTaskRunning] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
+
+  const handleTaskStart = (id: string) => {
+    setIsTaskRunning(true);
+    setLoadingMessage("Redocking simulation is running in background. You can navigate the site, but other actions are restricted until completion.");
+  };
+
+  const handleTaskEnd = () => {
+    setIsTaskRunning(false);
+  };
+
+  return (
+    <>
+      <Head>
+        <title>Analysis | BioMolExplorer</title>
+      </Head>
+
+      <main className="container" style={{ maxWidth: '1400px', marginBottom: '40px' }}>
+        <h2 className="page-title" style={{ marginBottom: "20px", fontSize: "2.5rem" }}>
+          Target-Ligand Analysis
+        </h2>
+
+        {/* TAB NAVIGATION */}
+        <div style={{ 
+          display: 'flex', 
+          borderBottom: '2px solid #ddd', 
+          marginBottom: '20px',
+          gap: '10px'
+        }}>
+          <button 
+            onClick={() => setActiveTab("similarity")}
+            style={{
+              padding: '12px 25px',
+              backgroundColor: activeTab === "similarity" ? 'var(--primary-color)' : 'transparent',
+              color: activeTab === "similarity" ? 'white' : '#333',
+              border: 'none',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              transition: 'all 0.3s'
+            }}
+          >
+            <i className="fas fa-network-wired" style={{ marginRight: '8px' }}></i>
+            Molecular Similarity
+          </button>
+          <button 
+            onClick={() => setActiveTab("redocking")}
+            style={{
+              padding: '12px 25px',
+              backgroundColor: activeTab === "redocking" ? 'var(--primary-color)' : 'transparent',
+              color: activeTab === "redocking" ? 'white' : '#333',
+              border: 'none',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              transition: 'all 0.3s'
+            }}
+          >
+            <i className="fas fa-microscope" style={{ marginRight: '8px' }}></i>
+            Redocking (AutoDock Vina)
+          </button>
+        </div>
+
+        {activeTab === "similarity" && <SimilarityTab />}
+        {activeTab === "redocking" && <RedockingTab onTaskStart={handleTaskStart} onTaskEnd={handleTaskEnd} />}
+      </main>
+
+      {activeTab !== "redocking" && (
+        <LoadingOverlay isLoading={isTaskRunning} message={loadingMessage} />
+      )}
+      
+      {/* GLOBAL LOCK OVERLAY - Only show if task is running AND we are NOT on redocking tab */}
+      {/* If we ARE on redocking tab, we want to see the logs, so we don't block the screen */}
+      {isTaskRunning && activeTab !== "redocking" && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9998,
+          cursor: 'not-allowed'
+        }} onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }} />
       )}
     </>
   );

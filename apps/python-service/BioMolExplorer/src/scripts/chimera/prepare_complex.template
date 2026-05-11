@@ -1,0 +1,9 @@
+open {input_complex}.pdb
+delete solvent
+delete element.H
+select #0:.{chain} | :FAD
+select invert
+delete selected
+write format pdb #0 {output_complex}.complex.pdb
+close session
+close all

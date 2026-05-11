@@ -68,13 +68,12 @@ select:focus {
     padding: 18px;
     width: 100%;
     border: none;
-    text-align: left;
     outline: none;
     font-size: 15px;
     transition: background-color 0.3s;
     border-bottom: 1px solid #ddd;
     display: flex;
-    justify-content: flex-start;
+    justify-content: space-between;
     align-items: center;
 }
 
@@ -409,10 +408,13 @@ select:focus {
 .target-header-left {
     display: flex;
     align-items: center;
+    gap: 12px;
+    justify-content: flex-start;
+    width: auto;
 }
 
 .target-header-right {
     display: flex;
     align-items: center;
-    margin-left: auto;
+    gap: 10px;
 }

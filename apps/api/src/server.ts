@@ -227,6 +227,53 @@ app.post('/api/analysis/molecule-image', async (req, res) => {
 });
 
 // ==========================================
+// REDOCKING ROUTES (FORWARDING TO PYTHON)
+// ==========================================
+app.post('/api/analysis/redocking/run', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/run_redocking`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/analysis/redocking/status/:taskId', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/redocking_status/${req.params.taskId}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/analysis/redocking/results/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/redocking_results/${encodeURIComponent(req.params.target)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/analysis/redocking/logs', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/redocking_logs`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ logs: 'Error fetching logs from gateway.' });
+  }
+});
+
+// ==========================================
 // FILE ROUTES (Adapted to your Flask service)
 // ==========================================
 // Listagem

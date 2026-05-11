@@ -12,13 +12,19 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 import ast
-
+import threading
+import uuid
 # Michel's files
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer', 'src')))
 from wrappers.crawlers import load_pdb, load_chembl, load_zinc
 from crawlers.complex import PolymerEntityType, ExperimentalMethod
 from wrappers.molecular_analyzer import compute_similarity, analyze_graphs, generate_fingerprints
+from wrappers.redocking import perform_redocking
 from kernel.descriptors import similarityFunctions, fingerprints
+
+# Global task management
+active_tasks = {}
+tasks_lock = threading.Lock()
 
 # PATHs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +54,7 @@ def run_load_pdb():
         try:
             warnings = load_pdb(
                 target=data.get('target'),
-                base_output_path='datasets',
+                base_output_path='/datasets',
                 pdb_ec=data.get('pdb_ec'),
                 PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
                 ExperimentalMethodID=data.get('ExperimentalMethodID'),
@@ -719,12 +725,8 @@ def run_load_zinc():
         
         if has_2d:
             target_filename = "zinc_2d.uri"
-            run_2d = True
-            run_3d = False
         else:
             target_filename = "zinc_3d.uri"
-            run_2d = False
-            run_3d = True
         
         file_path = os.path.join(ZINC_BASE_PATH, target_filename)
         
@@ -740,11 +742,12 @@ def run_load_zinc():
         os.chdir(biomol_explorer_path)
 
         try:
-            # CORREÇÃO: Passar run_2d e run_3d em vez das variáveis baseadas apenas no nome
+            # CORREÇÃO: Nova assinatura do Michel: load_zinc(base_output_path, filename, verbose)
+            # O wrapper usa base_output_path + '/' + filename para localizar o .uri
+            # e salva o CSV com o nome sem extensão (ex: zinc_2d.uri → zinc_2d.csv)
             load_zinc(
-                base_output_path='/datasets', 
-                zinc2d=run_2d,  # Use flag corresponding to saved file
-                zinc3d=run_3d,  # Use flag corresponding to saved file
+                base_output_path='/datasets/ZINC',
+                filename=target_filename,
                 verbose=verbose_flag
             )
         finally:
@@ -991,6 +994,128 @@ def get_target_pdb(target_name):
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# ==========================================
+# REDOCKING ROUTES
+# ==========================================
+
+def redocking_worker(task_id, target, prepare_complex, charge_type):
+    original_cwd = os.getcwd()
+    try:
+        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        os.chdir(biomol_explorer_path)
+        
+        with tasks_lock:
+            active_tasks[task_id]['status'] = 'running'
+            active_tasks[task_id]['message'] = f'Running Redocking for {target}...'
+        
+        # Ensure output directory exists if needed by the wrapper
+        # The wrapper uses /resultados/redocking
+        res_path = os.path.join(biomol_explorer_path, 'resultados', 'redocking', target.replace(' ', ''))
+        if not os.path.exists(res_path):
+            os.makedirs(res_path, exist_ok=True)
+
+        perform_redocking(
+            base_input_path='/datasets/PDB',
+            target=target,
+            base_output_path='/resultados/redocking',
+            prepare_complex=prepare_complex,
+            charge_type=charge_type
+        )
+        
+        with tasks_lock:
+            active_tasks[task_id]['status'] = 'completed'
+            active_tasks[task_id]['message'] = f'Redocking for {target} completed successfully.'
+    except Exception as e:
+        print(f"Error in redocking_worker: {e}")
+        with tasks_lock:
+            active_tasks[task_id]['status'] = 'error'
+            active_tasks[task_id]['message'] = str(e)
+    finally:
+        os.chdir(original_cwd)
+
+@app.route('/run_redocking', methods=['POST'])
+def run_redocking():
+    data = request.json
+    target = data.get('target')
+    prepare_complex = data.get('prepare_complex', True)
+    charge_type = data.get('charge_type', 'am1')
+    
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target is required'}), 400
+    
+    task_id = str(uuid.uuid4())
+    with tasks_lock:
+        active_tasks[task_id] = {
+            'status': 'pending',
+            'message': 'Starting task...',
+            'target': target,
+            'type': 'redocking'
+        }
+    
+    thread = threading.Thread(target=redocking_worker, args=(task_id, target, prepare_complex, charge_type))
+    thread.daemon = True
+    thread.start()
+    
+    return jsonify({'status': 'success', 'task_id': task_id})
+
+@app.route('/redocking_status/<task_id>', methods=['GET'])
+def get_redocking_status(task_id):
+    with tasks_lock:
+        status = active_tasks.get(task_id)
+    if not status:
+        return jsonify({'status': 'error', 'message': 'Task not found'}), 404
+    return jsonify(status)
+
+@app.route('/redocking_results/<target>', methods=['GET'])
+def get_redocking_results(target):
+    # The output is saved in pdb_codes.csv inside the target folder
+    file_path = os.path.join(PDB_BASE_PATH, target, 'pdb_codes.csv')
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'Results not found (pdb_codes.csv missing)'}), 404
+    
+    try:
+        # Read with pandas for better handling of different encodings if needed
+        df = pd.read_csv(file_path)
+        if df.empty:
+            return jsonify({'status': 'success', 'headers': [], 'rows': []})
+            
+        # Optional: only return rows with RMSD to focus on docking results
+        if 'RMSD' in df.columns:
+            df = df[df['RMSD'].notnull()]
+            
+        headers = df.columns.tolist()
+        data_rows = df.fillna('').values.tolist()
+        
+        return jsonify({'status': 'success', 'headers': headers, 'rows': data_rows})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# ==========================================
+# REDOCKING LOGS
+# ==========================================
+@app.route('/redocking_logs', methods=['GET'])
+def get_redocking_logs():
+    log_files = ['redocking.log', 'docking.log', 'vina.log']
+    combined_logs = []
+    logs_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'logs')
+    
+    for log_name in log_files:
+        log_path = os.path.join(logs_dir, log_name)
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+                    combined_logs.append(f"--- {log_name} ---\n")
+                    combined_logs.extend(lines[-100:])
+                    combined_logs.append("\n")
+            except Exception as e:
+                combined_logs.append(f"Error reading {log_name}: {str(e)}\n")
+    
+    if not combined_logs:
+        return jsonify({'logs': 'No logs found yet.'})
+        
+    return jsonify({'logs': "".join(combined_logs)})
 
 # ==========================================
 # SIMILARITY ANALYSIS ROUTES

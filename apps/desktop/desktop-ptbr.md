@@ -47,11 +47,17 @@ Sempre que houver alterações no sistema (Frontend/Backend) e for preciso liber
 
 ### Passo 1: Gerar a Imagem Docker
 
-Na raiz do projeto principal, gere a versão mais recente da imagem e exporte para a pasta do Launcher:
+Vá até a raiz do projeto principal (`~/BioMolExplorer`):
+
+```bash
+cd ../../../
+```
+
+Gere a versão mais recente da imagem e exporte para a pasta do Launcher:
 
 ```bash
 # 1. Build da imagem
-docker build -t biomolexplorer .
+docker build -t biomolexplorer .        # Windows
 
 # 2. Exporte para .tar
 docker save -o apps/desktop/BioMolExplorer-Launcher/biomolexplorer.tar biomolexplorer

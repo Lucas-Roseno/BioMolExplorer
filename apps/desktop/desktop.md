@@ -1,8 +1,6 @@
 # 🧬 BioMolExplorer - Ambiente Desktop & Distribuição
 
-Este diretório contém todas as instruções necessárias para transformar a plataforma web do BioMolExplorer em um **Aplicativo Desktop** instalável e distribuível para os usuários finais.
-
-Uniu-se o **Docker** (para rodar os servidores e o banco de dados de forma isolada) com o **Electron** (para fornecer uma interface de janela nativa em Windows, Linux e macOS).
+Este diretório contém todas as instruções necessárias para gerar um **Aplicativo Desktop** do BioMolExplorer instalável e distribuível para os usuários finais.
 
 ---
 
@@ -28,7 +26,7 @@ Após o build, o `.zip` final de distribuição é gerado **na raiz de `desktop/
 
 ---
 
-## ⚙️ Setup Inicial (apenas uma vez)
+## ⚙️ Setup Inicial (apenas a primeira vez)
 
 Antes da primeira build, instale as dependências do wrapper:
 

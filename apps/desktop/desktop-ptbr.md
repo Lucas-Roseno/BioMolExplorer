@@ -57,7 +57,7 @@ Gere a versão mais recente da imagem e exporte para a pasta do Launcher:
 
 ```bash
 # 1. Build da imagem
-docker build -t biomolexplorer .        # Windows
+docker build -t biomolexplorer .
 
 # 2. Exporte para .tar
 docker save -o apps/desktop/BioMolExplorer-Launcher/biomolexplorer.tar biomolexplorer

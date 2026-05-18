@@ -47,7 +47,13 @@ Whenever there are changes to the system (Frontend/Backend) and a new version ne
 
 ### Step 1: Generate the Docker Image
 
-From the root of the main project, generate the latest version of the image and export it to the Launcher folder:
+Go to the root of the main project (`~/BioMolExplorer`):
+
+```bash
+cd ../../../
+```
+
+Generate the latest version of the image and export it to the Launcher folder:
 
 ```bash
 # 1. Build the image

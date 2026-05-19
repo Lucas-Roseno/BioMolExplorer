@@ -142,6 +142,12 @@ npm run dev
 Pronto! Acesse `http://localhost:3000` em seu navegador padrão.
 *(Nota: Certifique-se de que o Conda `BioMolExplorer` está ativado no terminal aberto)*.
 
+**Opção C) Aplicativo Desktop (Distribuição) 🖥️**
+Para distribuir o BioMolExplorer como um executável instalável (Windows, Linux ou macOS), consulte o guia completo de geração de release:
+
+- 🇧🇷 [Documentação Desktop (PT-BR)](apps/desktop/desktop-ptbr.md)
+- 🇺🇸 [Desktop Documentation (EN)](apps/desktop/desktop-en.md)
+
 ---
 
 ## 🔮 5. Objetivos Futuros e Continuidade

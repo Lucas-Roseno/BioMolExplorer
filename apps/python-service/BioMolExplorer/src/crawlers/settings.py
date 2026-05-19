@@ -46,7 +46,6 @@ PhD research 2023~2026
 """
 #----------------------------------------------------------------------------------------------
 from chembl_webresource_client.settings import Settings
-from chembl_webresource_client.new_client import new_client as client
 #----------------------------------------------------------------------------------------------
 
 class CrawlerSettings:
@@ -105,9 +104,10 @@ class CrawlerSettings:
         Settings.Instance().CACHE_EXPIRE = 60 * 60 * 24
         Settings.Instance().CACHE_NAME = 'PhD.UFSJ'
         Settings.Instance().TIMEOUT = 86400
-        Settings.Instance().MAX_LIMIT = 1000000
         Settings.Instance().MAX_URL_SIZE = 1000000
 
+        # Importando lazyly para evitar que a API do ChEMBL trave o startup do servidor
+        from chembl_webresource_client.new_client import new_client as client
         self.client = client
         
 

@@ -66,8 +66,8 @@ if __name__ == "__main__":
     # @param zinc3d: bool  = True  - if True, download 3D structures if URI is available
     # @param verbose: bool = True  - if True, print the progress in the console
     #----------------------------------------------------------------------------------------------
-    load_zinc(base_output_path='/datasets',
-              zinc2d=True, zinc3d=False,
+    load_zinc(base_output_path='/datasets/ZINC',
+              filename='ZINC2D.uri',
               verbose=True) 
     
     

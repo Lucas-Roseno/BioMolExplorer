@@ -1,0 +1,7 @@
+open {input}
+delete solvent
+delete element.H
+addh
+write format pdb #0 {output}
+close session
+close all

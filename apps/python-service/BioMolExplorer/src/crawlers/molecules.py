@@ -62,6 +62,11 @@ from kernel.loggers import LoggerManager
 from crawlers.settings import CrawlerSettings
 #----------------------------------------------------------------------------------------------
 
+#----------------------------------------------------------------------------------------------
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+#----------------------------------------------------------------------------------------------
+
 
 class MyMolecules():
     
@@ -79,7 +84,7 @@ class Molecule(CrawlerSettings, MyMolecules):
     def __init__(self, path=None, bioactivity_path=None, extension='csv') -> None:
         CrawlerSettings.__init__(self)
         MyMolecules.__init__(self)
-        self.__molecule    = None
+        self.__molecule    = self.get_client_connection().molecule
         self.__extension   = extension
         self.set_outputpath(path) if path != None else None
         self.set_bioactivitypath(bioactivity_path) if bioactivity_path != None else None
@@ -121,13 +126,7 @@ class Molecule(CrawlerSettings, MyMolecules):
 
 
     def __search_mol(self, molecule_id:str, filter_params:dict, np_filter:int, mol_filter:str, mwt_filter:float) -> None:
-        if self.__molecule is None:
-            conn = self.get_client_connection()
-            if conn is None:
-                self.logger.error(f"Could not connect to ChEMBL API. Molecule search for {molecule_id} failed.")
-                return
-            self.__molecule = conn.molecule
-            
+        
         try:
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(molecule_id)[0]
@@ -212,7 +211,7 @@ class SimilarMols(CrawlerSettings, MyMolecules):
     def __init__(self, path:Optional[str]=None,  bioactivity_path:Optional[str]=None, extension:Optional[str]='csv') -> None:
         CrawlerSettings.__init__(self)
         MyMolecules.__init__(self)
-        self.__similarity  = None
+        self.__similarity  = self.get_client_connection().similarity
         self.__extension   = extension
         self.set_outputpath(path) if path != None else None
         self.set_bioactivitypath(bioactivity_path) if bioactivity_path != None else None
@@ -253,13 +252,7 @@ class SimilarMols(CrawlerSettings, MyMolecules):
 
 
     def __search_similar_mols(self, molecule_id:str, filter_params:dict, np_filter:int, mol_filter:str, mwt_filter:float) -> None:
-        if self.__similarity is None:
-            conn = self.get_client_connection()
-            if conn is None:
-                self.logger.error(f"Could not connect to ChEMBL API. Similarity search for {molecule_id} failed.")
-                return
-            self.__similarity = conn.similarity
-
+        
         try:
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(molecule_id)[0]
@@ -357,47 +350,40 @@ class ZincMols(MyMolecules):
 
     def __search_in_zinc(self, idx, url, verbose) -> DataFrame:
         
-        url = url.strip()
-        # Upgrade http to https to avoid 301 redirect overhead
-        if url.startswith('http://'):
-            url = url.replace('http://', 'https://', 1)
-        
+        url = url.strip() 
         mol = DataFrame(columns=['smile', 'zinc_id'])
+
+        # Configuração de Retentativas
+        retry_strategy = Retry(
+            total=5, # Tenta 5 vezes antes de desistir
+            backoff_factor=2, # Espera: 2s, 4s, 8s, 16s, 32s...
+            status_forcelist=[429, 500, 502, 503, 504], # Erros que disparam a retentativa
+            allowed_methods=["GET"]
+        )
         
-        # User-Agent header required by files.docking.org (returns 403 without it)
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session = requests.Session()
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        # Adicionando Headers para evitar o 403
         headers = {
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-            
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        } 
+
         try:
-                
-            response = requests.get(url, timeout=120, headers=headers)
+            response = requests.get(url, headers=headers, timeout=320)
                 
             if response.status_code == 200:
                 conteudo = response.text.splitlines()[1:]
                 conteudo = [token.split(' ') for token in conteudo]
                 mol = DataFrame(conteudo, columns=['smile', 'zinc_id'])
-                print('File number:', idx, ' URL:', url) if verbose else None
-            elif response.status_code == 403:
-                print(f'[ZINC] Access denied (403) for URL: {url} — the ZINC server may be blocking automated requests.')
-                self.logger.warning(f'403 Forbidden for {url}')
-            else:
-                print(f'[ZINC] HTTP {response.status_code} for URL: {url}')
-                self.logger.warning(f'HTTP {response.status_code} for {url}')
+                print('File number:', idx, ' URL:', url) if verbose else None 
             
             return mol
-        
-        except requests.exceptions.ConnectionError:
-            print(f'[ZINC] Connection error — the ZINC server (files.docking.org) may be offline or unreachable.')
-            self.logger.error(f'Connection error for {url}', exc_info=True)
-            return mol
-        except requests.exceptions.Timeout:
-            print(f'[ZINC] Timeout — the ZINC server did not respond within 120s for URL: {url}')
-            self.logger.error(f'Timeout for {url}', exc_info=True)
-            return mol
+                    
         except Exception as e:
             self.logger.error(f'Error during to perform {idx} molecule in {url} url in __search_in_zinc function', exc_info=True)
-            return mol
             
          
 
@@ -417,7 +403,7 @@ class ZincMols(MyMolecules):
             max_itens    = urls.get_size()
             processed    = 0
             
-            with futures.ThreadPoolExecutor(max_workers=os.cpu_count() - 1) as executor:
+            with futures.ThreadPoolExecutor(max_workers=1) as executor:
                 while(processed < max_itens):
                     data = urls.get_chunk(chunk_number, chunk_size)
                     chunk_number += 1

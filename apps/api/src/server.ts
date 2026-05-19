@@ -27,7 +27,7 @@ app.post('/api/pdb/search', async (req, res) => {
     const payload = {
       target: s.target, pdb_ec: s.pdb_ec,
       PolymerEntityTypeID: [s.polymer_entity_type], ExperimentalMethodID: [s.experimental_method],
-      max_resolution: isNaN(resolucao) ? null : resolucao, must_have_ligand: s.must_have_ligand
+      max_resolution: isNaN(resolucao) ? null : resolucao, must_have_ligand: s.must_have_ligand === true || s.must_have_ligand === 'true'
     };
     const response = await fetch(`${PYTHON_URL}/load_pdb`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
@@ -394,6 +394,74 @@ app.get('/api/files/molecule/:subdir/:target/:file', async (req, res) => {
     const response = await fetch(`${PYTHON_URL}/get_molecule_data/${encodeURIComponent(subdir)}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
     res.json(await response.json());
   } catch (e) { res.status(500).json({ success: false }); }
+});
+
+// ==========================================
+// ==========================================
+// REDOCKING ROUTES (FORWARDING TO PYTHON)
+// ==========================================
+
+app.get('/api/redocking/targets', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/targets`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/redocking/run', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/redocking/status/:task_id', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/status/${req.params.task_id}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/redocking/results', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/results`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/redocking/csv/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/csv/${encodeURIComponent(req.params.target)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/redocking/download/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/download/${encodeURIComponent(req.params.target)}`);
+    if (!response.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="redocking_results_${req.params.target}.csv"`);
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
 });
 
 app.get('/api/files/pdb_content/:target/:file', async (req, res) => {

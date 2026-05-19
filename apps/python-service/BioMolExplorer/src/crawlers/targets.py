@@ -62,7 +62,7 @@ class Targets(CrawlerSettings):
 
     def __init__(self, path=None, extension='csv') -> None:
         super().__init__()
-        self.__target    = None
+        self.__target    = super().get_client_connection().target
         self.__path      = str(Path.cwd())
         self.__extension = extension
         self.logger      = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/targets.log')
@@ -77,31 +77,29 @@ class Targets(CrawlerSettings):
      
        
     def search(self, target_name:str, filter_params:dict) -> None:
-        if self.__target is None:
-            conn = self.get_client_connection()
-            if conn is None:
-                self.logger.error("Could not connect to ChEMBL API. Target search failed.")
-                return
-            self.__target = conn.target
-
-        files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
-        target_name = target_name.upper()
-        infile  =  files.isFile(target_name)[0]
-        columns = ['pref_name', 'target_chembl_id', 'target_components', 'target_type']
-
-        filter_params["pref_name__iexact"] =  target_name
         
-        target = files.csv_to_dataframe(target_name) if infile else self.__target.filter(**filter_params).only(columns)
-        
+        try:
+            files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
+            target_name = target_name.upper()
+            infile  =  files.isFile(target_name)[0]
+            columns = ['pref_name', 'target_chembl_id', 'target_components', 'target_type']
 
-        if len(target) > 0:
-            target = DataFrame.from_records(target)
-            target.drop_duplicates(subset='target_chembl_id', inplace=True, ignore_index=True)
-            target = target[columns] if infile and len(columns) > 0 else target
-        else:
-            target = DataFrame()
-        
-        self.save_target(target, target_name) if self.__outputpath != None else None
+            filter_params["pref_name__iexact"] =  target_name
+            
+            target = files.csv_to_dataframe(target_name) if infile else self.__target.filter(**filter_params).only(columns)
+            
+
+            if len(target) > 0:
+                target = DataFrame.from_records(target)
+                target.drop_duplicates(subset='target_chembl_id', inplace=True, ignore_index=True)
+                target = target[columns] if infile and len(columns) > 0 else target
+            else:
+                target = DataFrame()
+            
+            self.save_target(target, target_name) if self.__outputpath != None else None
+            
+        except Exception as e:
+            self.logger.error(f'Error during to perform {target_name} target in search function', exc_info=True)
             
     
      

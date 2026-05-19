@@ -1,0 +1,17 @@
+receptor = {receptor}
+ligand = {ligand}
+
+center_x = {center_x}
+center_y = {center_y}
+center_z = {center_z}
+
+size_x = {size_x}
+size_y = {size_y}
+size_z = {size_z}
+
+out = {out}
+exhaustiveness = {exhaustiveness}
+num_modes = {num_modes}
+seed = 73
+verbosity = 0
+scoring = vina

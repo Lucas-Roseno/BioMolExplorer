@@ -51,41 +51,54 @@ sys.path.append("src")
 #----------------------------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------------------------
-from wrappers.crawlers import load_chembl
+from wrappers.crawlers import load_pdb
+from crawlers.complex import PolymerEntityType, ExperimentalMethod
 #----------------------------------------------------------------------------------------------
+
 
 
 if __name__ == "__main__":
     
 
     #----------------------------------------------------------------------------------------------
-    # Example 1: Retrival information from ChEMBL database for Acetylcholinesterase
-    # @param target_name: str = 'Acetylcholinesterase' - specific target name defined by ChEMBL
-    # @param base_output_path: str = '/datasets' - base path to save the output files
-    # @obs: Filters to compose retrieval information from ChEMBL database are defined by the
-    # scripts in the scripts folder located in the src > scripts > crawlers folder.
+    #EXAMPLE 1: Load PDBs for the target Acetylcholinesterase
+    # @param target: A reference name for the target, used to create the output folder
+    # @param base_output_path: The base path to save the output files
+    # @param pdb_ec: The Enzyme Commission number for the target
+    # @param organism: The organism name for the target
+    # @param PolymerEntityTypeID: The type of polymer entity (DNA, NA_HYBRID, PROTEIN, RNA, OTHER)
+    # @param ExperimentalMethodID: The experimental method used to obtain the structure (X_RAY_DIFFRACTION,
+    # ELECTRON_MICROSCOPY, SOLID_STATE_NMR, SOLUTION_NMR, NEUTRON_DIFFRACTION, FIBER_DIFFRACTION,
+    # POWDER_DIFFRACTION, ELECTRON_CRYSTALLOGRAPHY, OTHER)
+    # @param max_resolution: The maximum resolution for the structure
+    # @param must_have_ligand: If the structure must have a ligand as part of the complex
+    # @obs: The parameters are flexible and can be adjusted according to the research needs.
     #----------------------------------------------------------------------------------------------
-    load_chembl(target_name='Acetylcholinesterase',
-                base_output_path='/datasets') 
+    load_pdb(target='Monoamine Oxidase B', 
+             base_output_path='/datasets', 
+             pdb_ec='1.4.3.1',
+             PolymerEntityTypeID=[PolymerEntityType.PROTEIN],
+             ExperimentalMethodID=[ExperimentalMethod.X_RAY_DIFFRACTION],
+             max_resolution=2.0, must_have_ligand=True)
     
-
     #----------------------------------------------------------------------------------------------
-    # Example 2: Retrival information from ChEMBL database for Butyrylcholinesterase
-    # @param target_name: str = 'Butyrylcholinesterase' - specific target name defined by ChEMBL
-    # @param base_output_path: str = '/datasets' - base path to save the output files
-    # @obs: Filters to compose retrieval information from ChEMBL database are defined by the
-    # scripts in the scripts folder located in the src > scripts > crawlers folder.
+    #EXAMPLE 2: Load PDBs for the target Butyrylcholinesterase
+    # @param target: A reference name for the target, used to create the output folder
+    # @param base_output_path: The base path to save the output files
+    # @param pdb_ec: The Enzyme Commission number for the target
+    # @param organism: The organism name for the target
+    # @param PolymerEntityTypeID: The type of polymer entity (DNA, NA_HYBRID, PROTEIN, RNA, OTHER)
+    # @param ExperimentalMethodID: The experimental method used to obtain the structure (X_RAY_DIFFRACTION,
+    # ELECTRON_MICROSCOPY, SOLID_STATE_NMR, SOLUTION_NMR, NEUTRON_DIFFRACTION, FIBER_DIFFRACTION,
+    # POWDER_DIFFRACTION, ELECTRON_CRYSTALLOGRAPHY, OTHER)
+    # @param max_resolution: The maximum resolution for the structure
+    # @param must_have_ligand: If the structure must have a ligand as part of the complex
+    # @obs: The parameters are flexible and can be adjusted according to the research needs.
     #----------------------------------------------------------------------------------------------
-    load_chembl(target_name='Butyrylcholinesterase',
-                base_output_path='/datasets')
-     
-
-    #----------------------------------------------------------------------------------------------
-    # Example 3: Retrival information from ChEMBL database for Beta-secretase 1
-    # @param target_name: str = 'Beta-secretase 1' - specific target name defined by ChEMBL
-    # @param base_output_path: str = '/datasets' - base path to save the output files
-    # @obs: Filters to compose retrieval information from ChEMBL database are defined by the
-    # scripts in the scripts folder located in the src > scripts > crawlers folder.
-    #----------------------------------------------------------------------------------------------
-    load_chembl(target_name='Beta-secretase 1', 
-                base_output_path='/datasets')    
+    load_pdb(target='Monoamine Oxidase B', 
+             base_output_path='/datasets', 
+             pdb_ec='1.4.3.21',
+             PolymerEntityTypeID=[PolymerEntityType.PROTEIN],
+             ExperimentalMethodID=[ExperimentalMethod.X_RAY_DIFFRACTION],
+             max_resolution=2.0, must_have_ligand=True)
+    

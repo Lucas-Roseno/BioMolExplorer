@@ -4,12 +4,19 @@ import os
 import shutil
 import json
 import io
+import csv
 import base64
 import zipfile
 import requests
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
+import uuid
+import threading
+import logging
+
+# Global dictionary to track active background tasks
+active_tasks = {}
 import ast
 
 # Michel's files
@@ -18,6 +25,7 @@ from wrappers.crawlers import load_pdb, load_chembl, load_zinc
 from crawlers.complex import PolymerEntityType, ExperimentalMethod
 from wrappers.molecular_analyzer import compute_similarity, analyze_graphs, generate_fingerprints
 from kernel.descriptors import similarityFunctions, fingerprints
+from wrappers.redocking import perform_redocking
 
 # PATHs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -82,6 +90,164 @@ def get_pdb_list():
     
     return jsonify(pdb_data)
 
+@app.route('/pdb_csv/<target>/<csv_file>', methods=['GET'])
+def get_pdb_csv(target, csv_file):
+    if not target or not csv_file:
+        return jsonify({'status': 'error', 'message': 'Target or CSV file not specified'}), 400
+    if '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
+
+    try:
+        with open(file_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+        if not rows:
+            return jsonify({'status': 'success', 'headers': [], 'rows': []})
+
+        headers = rows[0]
+        data_rows = rows[1:]
+        return jsonify({'status': 'success', 'headers': headers, 'rows': data_rows})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+def _perform_pdb_cascade_delete(target, pdb_code):
+    """
+    Helper to remove a .pdb file and its references from all CSVs in a target folder.
+    """
+    target_dir = os.path.join(PDB_BASE_PATH, target)
+    pdb_file = f"{pdb_code}.pdb"
+    file_path = os.path.join(target_dir, pdb_file)
+    
+    # 1. Remove the .pdb file if it exists
+    print(f"DEBUG: Checking for PDB file: {file_path}", file=sys.stderr)
+    if os.path.exists(file_path):
+        try:
+            print(f"DEBUG: Removing PDB file: {file_path}", file=sys.stderr)
+            os.remove(file_path)
+        except Exception as e:
+            print(f"Error removing PDB file {file_path}: {str(e)}", file=sys.stderr)
+    else:
+        print(f"DEBUG: PDB file NOT FOUND: {file_path}", file=sys.stderr)
+    
+    # 2. Cascade delete: Remove all rows with this PDB code from ALL CSVs in the target folder
+    if os.path.exists(target_dir):
+        for filename in os.listdir(target_dir):
+            if filename.endswith('.csv'):
+                csv_path = os.path.join(target_dir, filename)
+                try:
+                    with open(csv_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+                        rows = list(csv.reader(f))
+                    
+                    if rows:
+                        headers = rows[0]
+                        # Filter out rows that contain the pdb_code in ANY column
+                        # (Case-insensitive comparison for safety)
+                        new_rows = [headers]
+                        for row in rows[1:]:
+                            if not any(pdb_code.upper() in str(cell).upper() for cell in row):
+                                new_rows.append(row)
+                        
+                        # Only write back if rows were actually removed
+                        if len(new_rows) < len(rows):
+                            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                                writer = csv.writer(f)
+                                writer.writerows(new_rows)
+                except Exception as e:
+                    print(f"Error updating CSV {filename} for {target}: {str(e)}", file=sys.stderr)
+    
+    # 3. Cleanup: If target folder is empty, remove it
+    try:
+        if os.path.isdir(target_dir) and not os.listdir(target_dir):
+            shutil.rmtree(target_dir)
+    except:
+        pass
+
+@app.route('/delete_pdb_csv_row', methods=['POST'])
+def delete_pdb_csv_row():
+    data = request.json
+    target = data.get('target')
+    csv_file = data.get('csv_file')
+    row_index = data.get('row_index')
+
+    if not target or not csv_file or row_index is None:
+        return jsonify({'status': 'error', 'message': 'Target, CSV file, and row index are required'}), 400
+    if not isinstance(row_index, int):
+        try:
+            row_index = int(row_index)
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': 'Row index must be an integer'}), 400
+    if '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
+
+    try:
+        with open(file_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+            rows = list(csv.reader(f))
+
+        if len(rows) <= 1 or row_index < 0 or row_index >= len(rows) - 1:
+            return jsonify({'status': 'error', 'message': 'Row index out of range'}), 400
+
+        # Identify PDB code to check for sync deletion
+        headers = rows[0]
+        pdb_code_idx = -1
+        for i, h in enumerate(headers):
+            if h.upper() == 'PDB_CODE':
+                pdb_code_idx = i
+                break
+        
+        pdb_code_to_sync = None
+        if pdb_code_idx != -1:
+            pdb_code_to_sync = rows[row_index + 1][pdb_code_idx].strip()
+
+        # Remove the row
+        rows.pop(row_index + 1)
+
+        # Save the updated CSV
+        with open(file_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerows(rows)
+
+        # If it was the last row for this PDB code, trigger cascade delete of the .pdb file
+        sync_message = ""
+        if pdb_code_to_sync:
+            # Check if any other row still has this PDB code
+            still_exists = any(len(row) > pdb_code_idx and row[pdb_code_idx].strip().upper() == pdb_code_to_sync.upper() for row in rows[1:])
+            print(f"DEBUG: PDB code {pdb_code_to_sync} still exists: {still_exists}", file=sys.stderr)
+            if not still_exists:
+                print(f"DEBUG: Triggering cascade delete for {pdb_code_to_sync}", file=sys.stderr)
+                _perform_pdb_cascade_delete(target, pdb_code_to_sync)
+                sync_message = f" and last representative sync-deleted {pdb_code_to_sync}.pdb"
+
+        return jsonify({
+            'status': 'success',
+            'message': f'CSV row deleted successfully{sync_message}'
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/download_pdb_csv/<target>/<csv_file>', methods=['GET'])
+def download_pdb_csv(target, csv_file):
+    if not target or not csv_file:
+        return jsonify({'status': 'error', 'message': 'Target or CSV file not specified'}), 400
+    if '..' in target or '..' in csv_file:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
+
+    try:
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/download_pdb_zip/<target>', methods=['GET'])
 def download_pdb_zip(target):
     if not target: return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
@@ -131,17 +297,15 @@ def delete_pdb():
         return jsonify({'status': 'error', 'message': 'Target or PDB file not specified'}), 400
 
     file_path = os.path.join(PDB_BASE_PATH, target, pdb_file)
+    target_dir = os.path.join(PDB_BASE_PATH, target)
     
     try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            # If target folder is empty, remove it
-            target_dir_path = os.path.join(PDB_BASE_PATH, target)
-            if not os.listdir(target_dir_path):
-                 shutil.rmtree(target_dir_path)
-            return jsonify({'status': 'success', 'message': f'{pdb_file} deleted successfully'})
-        else:
-            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+        # Extract PDB code from filename (remove extension)
+        pdb_code = os.path.splitext(pdb_file)[0].strip()
+
+        _perform_pdb_cascade_delete(target, pdb_code)
+        
+        return jsonify({'status': 'success', 'message': f'{pdb_file} and all its references deleted successfully'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -251,7 +415,7 @@ def run_load_chembl():
 
         load_chembl(
             target_name=target_name,
-            base_output_path='/datasets'
+            base_output_path='datasets'
         )
         return jsonify({'status': 'success', 'message': f"ChEMBL data for '{target_name}' loaded successfully!"})
 
@@ -455,7 +619,7 @@ def delete_chembl_target():
 
 @app.route('/delete_chembl', methods=['POST'])
 def delete_chembl():
-    """Deletes a specific ChEMBL CSV file."""
+    """Deletes a specific ChEMBL CSV file and all its references in other CSVs."""
     data = request.json
     sub_dir_name = data.get('sub_dir_name')
     target = data.get('target')
@@ -470,13 +634,50 @@ def delete_chembl():
     file_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target, csv_file)
     
     try:
+        # Identify the molecule ID (e.g., CHEMBL123) from the filename
+        molecule_id = os.path.splitext(csv_file)[0].strip()
+
         if os.path.exists(file_path):
+            # 1. Remove the specific .csv file
             os.remove(file_path)
+            
+            # 2. Cascade delete: Search and remove the ID from all CSVs in ChEMBL related folders for this target
+            search_dirs = [
+                os.path.join(CHEMBL_BASE_PATH, 'molecules', target),
+                os.path.join(CHEMBL_BASE_PATH, 'similars', target),
+                os.path.join(CHEMBL_BASE_PATH, 'bioactivity', target)
+            ]
+            
+            for directory in search_dirs:
+                if os.path.exists(directory) and os.path.isdir(directory):
+                    for filename in os.listdir(directory):
+                        if filename.endswith('.csv'):
+                            csv_path = os.path.join(directory, filename)
+                            try:
+                                with open(csv_path, 'r', newline='', encoding='utf-8', errors='ignore') as f:
+                                    rows = list(csv.reader(f))
+                                
+                                if rows:
+                                    headers = rows[0]
+                                    # Remove any row that contains the molecule_id in any cell
+                                    new_rows = [headers]
+                                    for row in rows[1:]:
+                                        if not any(molecule_id.upper() in str(cell).upper() for cell in row):
+                                            new_rows.append(row)
+                                    
+                                    if len(new_rows) < len(rows):
+                                        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                                            writer = csv.writer(f)
+                                            writer.writerows(new_rows)
+                            except Exception as e:
+                                print(f"Error updating ChEMBL CSV {filename}: {str(e)}", file=sys.stderr)
+
+            # Cleanup empty folders
             target_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
-            # If target folder is empty, remove it
-            if not os.listdir(target_path):
+            if os.path.exists(target_path) and not os.listdir(target_path):
                  os.rmdir(target_path) 
-            return jsonify({'status': 'success', 'message': f'{csv_file} deleted successfully'})
+            
+            return jsonify({'status': 'success', 'message': f'{csv_file} and all its references deleted successfully'})
         else:
             return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
@@ -546,11 +747,9 @@ def run_load_zinc():
         os.chdir(biomol_explorer_path)
 
         try:
-            # CORREÇÃO: Passar run_2d e run_3d em vez das variáveis baseadas apenas no nome
             load_zinc(
-                base_output_path='/datasets', 
-                zinc2d=run_2d,  # Use flag corresponding to saved file
-                zinc3d=run_3d,  # Use flag corresponding to saved file
+                base_output_path='datasets/ZINC',
+                filename=target_filename,
                 verbose=verbose_flag
             )
         finally:
@@ -802,6 +1001,39 @@ def get_target_pdb(target_name):
 # SIMILARITY ANALYSIS ROUTES
 # ==========================================
 
+@app.route('/api/analysis/process-graphs', methods=['POST'])
+def process_graphs():
+    """
+    Manually runs the similarity pipeline for the graphs.
+    """
+    original_cwd = os.getcwd()
+    try:
+        target_dir = os.path.join(BASE_DIR, 'BioMolExplorer')
+        os.chdir(target_dir)
+
+        rel_db_path = '/datasets/ChEMBL/DrugBank'
+        full_db_path = os.path.join(target_dir, 'datasets', 'ChEMBL', 'DrugBank')
+        
+        if not os.path.exists(full_db_path):
+             return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
+
+        generate_fingerprints(base_input_path=rel_db_path, morgan=True, maccs=True, pharmacophore=True)
+        compute_similarity(base_input_path=rel_db_path + '/Fingerprints',
+                           base_output_path=rel_db_path,
+                           metric=similarityFunctions.TanimotoSimilarity,
+                            fingerprint=fingerprints.Morgan)
+        analyze_graphs(base_input_path=rel_db_path,
+                        base_output_path='/resultados/grafos',
+                        metric=similarityFunctions.TanimotoSimilarity,
+                        fingerprint=fingerprints.Morgan)
+                        
+        return jsonify({'success': True, 'message': 'Processing completed successfully.'})
+    except Exception as e:
+        app.logger.error(f"Error processing graphs: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        os.chdir(original_cwd)
+
 @app.route('/api/analysis/graph-data', methods=['GET'])
 def get_graph_data():
     """
@@ -825,27 +1057,27 @@ def get_graph_data():
              return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
 
         # Executing original workflow functions (21-dataAnalysis.py)
-        # Note: these functions use Path.cwd() internally
-        generate_fingerprints(base_input_path=rel_db_path, morgan=True, maccs=True, pharmacophore=True)
-        compute_similarity(base_input_path=rel_db_path + '/Fingerprints',
-                           base_output_path=rel_db_path,
-                           metric=similarityFunctions.TanimotoSimilarity,
-                            fingerprint=fingerprints.Morgan)
-        analyze_graphs(base_input_path=rel_db_path,
-                        base_output_path='/resultados/grafos',
-                        metric=similarityFunctions.TanimotoSimilarity,
-                        fingerprint=fingerprints.Morgan)
 
         dataset_type = request.args.get('datasetType', 'MOLS')
         if dataset_type not in ['MOLS', 'SIMS']:
             dataset_type = 'MOLS'
 
-        # --- 1. Load Processed Data ---
-        maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
-        
-        # Find corresponding file flexibly (ignoring spaces in target name)
-        csv_file = None
+        # --- 1. Load Processed Data & Check if Outdated ---
+        outdated = False
         target_normalized = target.replace(" ", "").lower()
+        
+        # Check source files (MOLS and SIMS)
+        source_mols = None
+        source_sims = None
+        if os.path.exists(full_db_path):
+            for f in os.listdir(full_db_path):
+                if f.endswith('_MOLS.csv') and f.replace('_MOLS.csv', '').replace(' ', '').lower() == target_normalized:
+                    source_mols = os.path.join(full_db_path, f)
+                elif f.endswith('_SIMS.csv') and f.replace('_SIMS.csv', '').replace(' ', '').lower() == target_normalized:
+                    source_sims = os.path.join(full_db_path, f)
+
+        maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
+        csv_file = None
         correct_alvo = target # fallback
         
         if os.path.exists(maxcomp_dir):
@@ -858,7 +1090,18 @@ def get_graph_data():
                         break
                         
         if not csv_file or not os.path.exists(csv_file):
-            return jsonify({'success': False, 'message': f'Graph data file not found for {dataset_type} dataset.'}), 404
+            outdated = True
+        else:
+            # Check modification times
+            generated_mtime = os.path.getmtime(csv_file)
+            source_file = source_mols if dataset_type == 'MOLS' else source_sims
+            if source_file and os.path.exists(source_file):
+                if os.path.getmtime(source_file) > generated_mtime:
+                    outdated = True
+                    
+        if outdated:
+            return jsonify({'success': False, 'needs_processing': True, 'message': f'Graph data needs to be calculated for {target}.'}), 404
+
             
         # Read edges (source, target, value)
         edges_df = pd.read_csv(csv_file)
@@ -997,6 +1240,184 @@ def get_analysis_molecule_image():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+# ==========================================
+# REDOCKING WORKER & ROUTES
+# ==========================================
+
+# Dictionary to store logs for each task
+task_logs = {}
+
+def redocking_worker(task_id, target, charge_type, prepare_complex):
+    import logging
+    original_cwd = os.getcwd()
+    biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+    os.chdir(biomol_explorer_path)
+    
+    # Create a stream to capture stdout
+    log_stream = io.StringIO()
+    
+    # Redirect stdout and stderr to our stream
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    # Captura stdout e stderr mas também mantém o original para debug no terminal
+    class Tee(object):
+        def __init__(self, *files):
+            self.files = files
+        def write(self, obj):
+            for f in self.files:
+                f.write(obj)
+                f.flush()
+        def flush(self):
+            for f in self.files:
+                f.flush()
+        def fileno(self):
+            for f in self.files:
+                if hasattr(f, 'fileno'):
+                    return f.fileno()
+            return sys.__stdout__.fileno()
+
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    sys.stdout = Tee(log_stream, sys.__stdout__)
+    sys.stderr = Tee(log_stream, sys.__stderr__)
+
+    # Add a stream handler to project loggers so they show up in our captured logs
+    project_loggers = ['wrapper_redocking', 'Docking', 'DockVina', 'crawlers']
+    handlers = []
+    for name in project_loggers:
+        l = logging.getLogger(name)
+        h = logging.StreamHandler(sys.stdout)
+        h.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        l.addHandler(h)
+        handlers.append((l, h))
+    
+    try:
+        active_tasks[task_id] = {'status': 'running', 'message': f'Running redocking for {target}...'}
+        task_logs[task_id] = ""
+        
+        # Start a thread to periodically update task_logs from log_stream
+        def update_logs():
+            while active_tasks.get(task_id, {}).get('status') == 'running':
+                content = log_stream.getvalue()
+                task_logs[task_id] = content
+                threading.Event().wait(0.5)
+            # Final update
+            task_logs[task_id] = log_stream.getvalue()
+
+        log_updater = threading.Thread(target=update_logs)
+        log_updater.daemon = True
+        log_updater.start()
+
+        perform_redocking(
+            base_input_path='datasets/PDB',
+            target=target,
+            base_output_path='resultados/redocking',
+            prepare_complex=prepare_complex,
+            charge_type=charge_type
+        )
+        
+        active_tasks[task_id]['status'] = 'completed'
+        active_tasks[task_id]['message'] = f'Redocking for {target} completed successfully.'
+        
+    except Exception as e:
+        print(f"FATAL ERROR in redocking_worker: {str(e)}", file=sys.__stderr__)
+        active_tasks[task_id]['status'] = 'error'
+        active_tasks[task_id]['message'] = str(e)
+    finally:
+        # Remove our custom handlers
+        for l, h in handlers:
+            l.removeHandler(h)
+            
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+        os.chdir(original_cwd)
+
+@app.route('/api/redocking/targets', methods=['GET'])
+def get_redocking_targets():
+    """Lists downloaded PDB targets that can be used for redocking."""
+    pdb_data = {}
+    if not os.path.exists(PDB_BASE_PATH):
+        return jsonify([])
+
+    targets = []
+    for target_dir in os.listdir(PDB_BASE_PATH):
+        target_path = os.path.join(PDB_BASE_PATH, target_dir)
+        if os.path.isdir(target_path):
+            pdb_files = [f for f in os.listdir(target_path) if f.endswith('.pdb')]
+            if pdb_files:
+                targets.append(target_dir)
+    
+    return jsonify(sorted(targets))
+
+@app.route('/api/redocking/run', methods=['POST'])
+def run_redocking_task():
+    data = request.json
+    target = data.get('target')
+    charge_type = data.get('charge_type', 'am1')
+    prepare_complex = data.get('prepare_complex', True)
+
+    if not target:
+        return jsonify({'status': 'error', 'message': 'Target is required'}), 400
+
+    task_id = str(uuid.uuid4())
+    thread = threading.Thread(target=redocking_worker, args=(task_id, target, charge_type, prepare_complex))
+    thread.start()
+
+    return jsonify({'status': 'success', 'task_id': task_id})
+
+@app.route('/api/redocking/status/<task_id>', methods=['GET'])
+def get_redocking_status(task_id):
+    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
+    logs = task_logs.get(task_id, "")
+    return jsonify({**status, 'logs': logs})
+
+@app.route('/api/redocking/results', methods=['GET'])
+def list_redocking_results():
+    """Lists targets that have redocking results (pdb_codes.csv with RMSD)."""
+    results = []
+    if not os.path.exists(PDB_BASE_PATH):
+        return jsonify([])
+
+    for target_dir in os.listdir(PDB_BASE_PATH):
+        csv_path = os.path.join(PDB_BASE_PATH, target_dir, 'pdb_codes.csv')
+        if os.path.exists(csv_path):
+            try:
+                df = pd.read_csv(csv_path)
+                if 'RMSD' in df.columns and not df['RMSD'].dropna().empty:
+                    results.append(target_dir)
+            except:
+                continue
+    
+    return jsonify(sorted(results))
+
+@app.route('/api/redocking/csv/<target>', methods=['GET'])
+def get_redocking_csv(target):
+    csv_path = os.path.join(PDB_BASE_PATH, target, 'pdb_codes.csv')
+    if not os.path.exists(csv_path):
+        return jsonify({'status': 'error', 'message': 'Results not found'}), 404
+
+    try:
+        df = pd.read_csv(csv_path)
+        # Filter to only show rows with results
+        if 'RMSD' in df.columns:
+            df = df[df['RMSD'].notnull()]
+            # Sort by RMSD descending, as requested
+            df = df.sort_values(by='RMSD', ascending=False)
+        
+        headers = df.columns.tolist()
+        rows = df.values.tolist()
+        return jsonify({'status': 'success', 'headers': headers, 'rows': rows})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/redocking/download/<target>', methods=['GET'])
+def download_redocking_csv(target):
+    csv_path = os.path.join(PDB_BASE_PATH, target, 'pdb_codes.csv')
+    if not os.path.exists(csv_path):
+        return jsonify({'status': 'error', 'message': 'Results not found'}), 404
+    
+    return send_file(csv_path, as_attachment=True, download_name=f'redocking_results_{target}.csv')
+
 if __name__ == '__main__':
-    # Disable debug mode to prevent the Werkzeug reloader from doubling RAM usage
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    # Enabled debug mode for development hot-reload
+    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=True)

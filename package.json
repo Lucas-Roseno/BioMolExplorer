@@ -7,7 +7,12 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=api\" \"npm run dev --workspace=web\" \"cd apps/python-service && python app.py\"",
-    "start": "concurrently \"npm run start --workspace=api\" \"npm run start --workspace=web\" \"cd apps/python-service && python app.py\""
+    "start": "concurrently \"npm run start --workspace=api\" \"npm run start --workspace=web\" \"cd apps/python-service && python app.py\"",
+    "test": "npm run test --workspace=api && npm run test --workspace=web",
+    "test:api": "npm run test --workspace=api",
+    "test:web": "npm run test --workspace=web",
+    "test:watch": "concurrently \"npm run test:watch --workspace=api\" \"npm run test:watch --workspace=web\"",
+    "test:coverage": "npm run test:coverage --workspace=api && npm run test:coverage --workspace=web"
   },
   "dependencies": {
     "concurrently": "^9.2.1"

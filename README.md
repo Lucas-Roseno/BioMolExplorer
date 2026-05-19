@@ -38,7 +38,9 @@ Esse projeto exigiu uma combinação plural e desafiadora de competências técn
 - **Desenvolvimento de UI/UX Responsivo**: Modelagem de fluxogramas em tela, tratamento de operações assíncronas extensas com *lock screens* nativos (spinners), paginação para datasets densos e design profissional atraente voltado à usabilidade do pesquisador.
 - **Engenharia de Dados & Web Crawlers**: Tratamento profundo de arquivos CSV provindos das bases do PDB e ChEMBL, incluindo injeções anti-falhas e downloads paralelos escaláveis (via `concurrent.futures`), lidando com resiliência de rede e APIs abertas.
 - **Integração de Bioinformática em Tela**: Acoplamento pioneiro da biblioteca **RDKit** para extração de topologias e exibição interativa (2D/3D) de moléculas e enzimas complexas diretamente pelo navegador do usuário.
-- **DevOps Elementar**: Criação da orquestração unificada de todos os serviços (Web, API Node e Flask/Python) contidos dentro do padrão **Docker**, elevando drasticamente a portabilidade e permitindo deploy escalonável *one-click* com ambientes Anaconda simulados. 
+- **Pipeline de Redocking Automatizado**: Fluxo completo de redocking de ligantes-alvo utilizando **AutoDock Vina**, **OpenBabel** e **UCSF Chimera**, com cálculo automático de RMSD e reordenamento na interface.
+- **Visualização de Grafos de Similaridade (On-Demand)**: Análise molecular de grafos sob demanda para evitar timeouts em conexões, processando arquivos cacheados e detectando atualizações (modifications times) nos datasets originais.
+- **DevOps Elementar**: Criação da orquestração unificada de todos os serviços (Web, API Node e Flask/Python) contidos dentro do padrão **Docker**, elevando drasticamente a portabilidade e permitindo deploy escalonável *one-click* com ambientes Anaconda simulados.
 
 ### 🤝 Colaboradores
 O BioMolExplorer foi originado na Iniciação Científica no **CEFET-MG** sob um esforço coletivo multidisciplinar:
@@ -79,10 +81,17 @@ BioMolExplorer/
 
 É possível rodar a aplicação através do *Docker* (Maneira mais fácil e recomendada) ou pelo Ambiente de Desenvolvimento Nativo.
 
-### Pré-requisitos
-- Git e [Node.js](https://nodejs.org/) **(versão 20 ou superior)** instalados.
-- [Docker](https://www.docker.com/) (Para o método Container).
-- [Anaconda / Miniconda](https://www.anaconda.com/) (Para o método Nativo).
+### Pré-requisitos e Dependências
+Para que o projeto, em especial os fluxos de **Redocking** e extração de dados, funcione sem erros, são necessárias as seguintes dependências (instaladas automaticamente via Docker ou via script de instalação nativo):
+- **Gerais**: Git e [Node.js](https://nodejs.org/).
+- **Para o método Container**: [Docker](https://www.docker.com/).
+- **Para o método Nativo**: [Anaconda / Miniconda](https://www.anaconda.com/) (gerenciado pelo script de instalação).
+- **Ferramentas de Bioinformática (Backend)**: 
+  - **AutoDock Vina** (`vina`)
+  - **OpenBabel** (`openbabel`)
+  - **PyMOL** (`pymol-open-source`)
+  - **UCSF Chimera** (Necessário para a preparação de ligantes e complexos).
+  - Outras bibliotecas: `rdkit`, `networkx`, `biopython`, `pandas`, etc.
 
 ### Passo a Passo
 
@@ -106,19 +115,22 @@ Após um instante de configuração, o terminal informará que a interface web e
 <br/>
 
 **Opção B) Ambiente de Desenvolvimento Nativo (Source) 💻**
-Ideal se você quiser contribuir com modificações no código.
+Ideal se você quiser contribuir com modificações no código ou rodar o pipeline completo de Redocking localmente.
 
 ```bash
-# 1. Entre no repositório back-end e crie o ambiente Anaconda dedicado
-cd apps/python-service
-conda create -n BioMolExplorer python=3.12 nodejs=20 -c conda-forge -y
+# 1. Entre no diretório do serviço Python
+cd apps/python-service/BioMolExplorer
+
+# 2. Execute o script de instalação automática (Isso instalará Anaconda, UCSF Chimera e criará o ambiente Conda com todas as dependências do requirements.yml)
+# Nota: Certifique-se de que o arquivo chimera.bin está na pasta apps/ do python-service.
+bash install.sh
+
+# 3. Ative o ambiente virtual criado
+source ~/.bashrc
 conda activate BioMolExplorer
 
-# 2. Instale as bibliotecas e ferramentas do Python
-cd BioMolExplorer
-conda env update -f requirements.yml
 # (Volte para a raiz do repositório)
-cd ../../../
+cd ../../../ 
 
 # 3. Na raiz do projeto, instale as dependências Node/Javascript para Web e Proxy
 npm install

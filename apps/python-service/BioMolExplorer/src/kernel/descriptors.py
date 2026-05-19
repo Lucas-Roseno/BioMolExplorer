@@ -193,6 +193,22 @@ class Descriptors():
             return {"molecule_chembl_id": molecule_chembl_id, "fingerprint": list(Generate.Gen2DFingerprint(mol, factory))}
         return {"molecule_chembl_id": molecule_chembl_id, "fingerprint": None}
         
+    def calcRMSD(self, ref_file: str, target_file: str) -> float:
+        import subprocess
+        try:
+            result = subprocess.run(['obrms', ref_file, target_file], capture_output=True, text=True, check=True)
+            output = result.stdout.strip()
+            if output:
+                lines = output.split('\n')
+                for line in lines:
+                    if 'RMSD' in line.upper():
+                        return float(line.split()[-1])
+                return float(output.split()[-1])
+            return float('nan')
+        except Exception as e:
+            self.logger.error(f"Error calculating RMSD between {ref_file} and {target_file}", exc_info=True)
+            return float('nan')
+        
         
     
     def max_common_substructure(self, smiles:list) -> tuple:

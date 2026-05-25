@@ -1,0 +1,44 @@
+{
+  "name": "biomolexplorer",
+  "version": "2.0.0",
+  "description": "Interface Desktop para o BioMolExplorer",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable && node scripts/pack-release.js win",
+    "build:linux": "electron-builder --linux AppImage && node scripts/pack-release.js linux",
+    "build:mac": "electron-builder --mac dmg && node scripts/pack-release.js mac"
+  },
+  "build": {
+    "appId": "com.onrender.biomolexplorer",
+    "productName": "BioMolExplorer",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.ico",
+      "artifactName": "BioMolExplorer.exe"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png",
+      "category": "Science",
+      "artifactName": "BioMolExplorer.AppImage"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.education",
+      "artifactName": "BioMolExplorer.dmg"
+    }
+  },
+  "author": "Pedro Dias",
+  "license": "MIT",
+  "devDependencies": {
+    "7zip-bin": "^5.2.0",
+    "archiver": "^7.0.1",
+    "electron": "^32.3.3",
+    "electron-builder": "^24.13.3"
+  }
+}

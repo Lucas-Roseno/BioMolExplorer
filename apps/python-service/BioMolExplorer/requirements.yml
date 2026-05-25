@@ -14,6 +14,7 @@ dependencies:
   - biopython=1.84
   - datasketch=1.6.5
   - seaborn=0.13.2
+  - matplotlib>=3.8
   - pymol-open-source=3.0.0
   - vina=1.2.5
   - pip:

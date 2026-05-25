@@ -32,10 +32,19 @@ export default function ChemblPage() {
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        alert(data.message || 'Error processing ChEMBL search.');
+        const errorMsg = data.message || '';
+        if (errorMsg.includes('spore') || errorMsg.includes('500') || errorMsg.includes('ebi.ac.uk')) {
+          alert(
+            "⚠️ ChEMBL Server Error (EBI)\n\n" +
+            "The official ChEMBL API servers (EMBL-EBI) are currently experiencing technical difficulties or a temporary outage (HTTP 500).\n\n" +
+            "Please try again in a few minutes. If you already have molecules downloaded on other targets, you can still perform Redocking and ADMET analysis on them."
+          );
+        } else {
+          alert(errorMsg || 'Error processing ChEMBL search.');
+        }
       }
     } catch (error) {
-      alert('Failed to communicate with the server.');
+      alert('Failed to communicate with the server. Please check your connection.');
     } finally {
       setIsLoading(false);
       fetchFiles();

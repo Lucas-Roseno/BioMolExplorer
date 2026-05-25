@@ -433,7 +433,7 @@ const Terminal = ({ logs }: { logs: string }) => (
     lineHeight: '1.4'
   }}>
     <div style={{ color: '#aaa', borderBottom: '1px solid #333', paddingBottom: '8px', marginBottom: '12px', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between' }}>
-      <span>AutoDock Vina / PDBPrep Terminal Output</span>
+      <span>Pipeline Terminal Output</span>
       <span style={{ color: '#4caf50', display: 'flex', alignItems: 'center', gap: '5px' }}>
         <span style={{ width: '8px', height: '8px', backgroundColor: '#4caf50', borderRadius: '50%' }}></span> Live
       </span>
@@ -767,18 +767,728 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
 }
 
 // ==========================================
+// ADMET TAB COMPONENT
+// ==========================================
+
+interface AdmetTabProps {
+  onTaskStart: (id: string) => void;
+  onTaskEnd: () => void;
+  executionLogs: string;
+  setExecutionLogs: (logs: string) => void;
+  isTaskRunning: boolean;
+}
+
+function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: AdmetTabProps) {
+  const [availableTargets, setAvailableTargets] = useState<string[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState("");
+
+  // Task state (async pipeline)
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<any>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  // Results state
+  const [resultsData, setResultsData] = useState<{ headers: string[]; rows: any[]; summary: any } | null>(null);
+  const [plots, setPlots] = useState<string[]>([]);
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Expansion states
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [isEggsExpanded, setIsEggsExpanded] = useState(false);
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+
+  // Molecule Modal states
+  const [selectedMolecule, setSelectedMolecule] = useState<{id: string, smiles: string} | null>(null);
+  const [moleculeSvg, setMoleculeSvg] = useState<string | null>(null);
+  const [molecule3DBlock, setMolecule3DBlock] = useState<string | null>(null);
+  const [svgLoading, setSvgLoading] = useState(false);
+
+  // Fetch available ChEMBL targets that have molecules
+  useEffect(() => {
+    const fetchTargets = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/admet/available-targets`);
+        if (res.ok) {
+          const targets: string[] = await res.json();
+          setAvailableTargets(targets);
+          if (targets.length > 0) setSelectedTarget(targets[0]);
+        }
+      } catch (e) {
+        console.error("Failed to load available targets", e);
+      }
+    };
+    fetchTargets();
+  }, []);
+
+  // Load existing results whenever target changes
+  useEffect(() => {
+    if (!selectedTarget || isRunning) return;
+    loadResultsForTarget(selectedTarget);
+  }, [selectedTarget]);
+
+  // Polling for task status
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (runningTaskId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/admet/status/${runningTaskId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setTaskStatus(data);
+            setExecutionLogs(data.logs || "");
+            if (data.status === 'completed' || data.status === 'error') {
+              setRunningTaskId(null);
+              setIsRunning(false);
+              onTaskEnd();
+              if (data.status === 'completed') loadResultsForTarget(selectedTarget);
+            }
+          }
+        } catch (err) {
+          console.error("Error polling ADMET status", err);
+        }
+      }, 1500);
+    }
+    return () => clearInterval(interval);
+  }, [runningTaskId, selectedTarget]);
+
+  const loadResultsForTarget = async (target: string) => {
+    if (!target) return;
+    setLoadingResults(true);
+    setErrorMsg(null);
+    try {
+      const [csvRes, plotsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/admet/csv/${encodeURIComponent(target)}`),
+        fetch(`${API_BASE_URL}/api/admet/plots/${encodeURIComponent(target)}`)
+      ]);
+      if (csvRes.ok) {
+        const d = await csvRes.json();
+        if (d.status === 'success') setResultsData({ headers: d.headers, rows: d.rows, summary: d.summary });
+        else setResultsData(null);
+      } else {
+        setResultsData(null);
+      }
+      if (plotsRes.ok) {
+        const p: string[] = await plotsRes.json();
+        setPlots(p);
+      }
+    } catch (e) {
+      console.error("Failed to load ADMET results", e);
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
+  const runAdmet = async () => {
+    if (!selectedTarget) return;
+    setTaskStatus({ status: 'starting', message: 'Initializing ADMET pipeline...' });
+    setExecutionLogs("");
+    setIsRunning(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admet/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: selectedTarget })
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setRunningTaskId(d.task_id);
+        onTaskStart(d.task_id);
+      } else {
+        const err = await res.json();
+        setTaskStatus({ status: 'error', message: err.message });
+        setIsRunning(false);
+        onTaskEnd();
+      }
+    } catch (e) {
+      setTaskStatus({ status: 'error', message: 'Failed to start ADMET task.' });
+      setIsRunning(false);
+      onTaskEnd();
+    }
+  };
+
+  const downloadImage = (plotFile: string) => {
+    const url = `${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(plotFile)}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = plotFile;
+    
+    fetch(url)
+      .then(res => res.blob())
+      .then(blob => {
+        const objectUrl = window.URL.createObjectURL(blob);
+        a.href = objectUrl;
+        a.click();
+        window.URL.revokeObjectURL(objectUrl);
+      })
+      .catch(err => {
+        console.error("Failed to download image", err);
+        a.target = '_blank';
+        a.click();
+      });
+  };
+
+  const downloadAllImages = () => {
+    plots.forEach(plotFile => downloadImage(plotFile));
+  };
+
+  const openMoleculeModal = async (id: string, smiles: string) => {
+    setSelectedMolecule({ id, smiles });
+    setMoleculeSvg(null);
+    setMolecule3DBlock(null);
+    setSvgLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/analysis/molecule-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smiles })
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.success) {
+          setMoleculeSvg(d.svg);
+          setMolecule3DBlock(d.molBlock);
+          
+          if (d.molBlock) {
+            setTimeout(() => {
+              const element = document.getElementById('viewer-3d-canvas-admet');
+              if (element && (window as any).$3Dmol) {
+                element.innerHTML = '';
+                let v = (window as any).$3Dmol.createViewer(element, { backgroundColor: 'white' });
+                v.addModel(d.molBlock, "sdf");
+                v.setStyle({}, { stick: {} });
+                v.zoomTo(); v.render();
+              }
+            }, 200);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load molecule SVG", e);
+    } finally {
+      setSvgLoading(false);
+    }
+  };
+
+  const downloadCsv = () => {
+    if (selectedTarget) window.open(`${API_BASE_URL}/api/admet/download/${encodeURIComponent(selectedTarget)}`, '_blank');
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────
+
+  // Empty state: no ChEMBL data downloaded yet
+  if (availableTargets.length === 0) {
+    return (
+      <div style={{ marginTop: '20px' }}>
+        <div style={{
+          backgroundColor: '#fff3cd',
+          padding: '24px',
+          borderRadius: '12px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '18px',
+          boxShadow: '0 2px 8px rgba(133,100,4,0.08)'
+        }}>
+          <i className="fas fa-flask" style={{ fontSize: '2rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.15rem', marginBottom: '6px' }}>
+              No ChEMBL molecules found.
+            </strong>
+            <span>To run ADMET analysis, you first need to download bioactivity data on the </span>
+            <Link href="/chembl" style={{ fontWeight: 'bold', textDecoration: 'underline', color: '#856404' }}>
+              ChEMBL Loader page
+            </Link>
+            <span>. Once molecules are downloaded, return here to evaluate their pharmacokinetic properties.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '20px' }}>
+
+      {/* ── Controls ── */}
+      <div style={{
+        backgroundColor: '#fff',
+        padding: '25px',
+        borderRadius: '12px',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+        border: '1px solid #eee',
+        marginBottom: '30px'
+      }}>
+        <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>ADMET Analysis Parameters</h3>
+        <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '1', minWidth: '220px' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>ChEMBL Target:</label>
+            <select
+              value={selectedTarget}
+              onChange={(e) => { setSelectedTarget(e.target.value); setResultsData(null); setPlots([]); setIsTableExpanded(false); setIsEggsExpanded(false); }}
+              disabled={isRunning}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              {availableTargets.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <button
+            id="admet-run-btn"
+            onClick={runAdmet}
+            disabled={isRunning || !selectedTarget}
+            style={{
+              padding: '12px 30px',
+              backgroundColor: isRunning ? '#ccc' : 'var(--primary-color)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: 'bold',
+              cursor: isRunning ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}
+          >
+            <i className="fas fa-dna"></i>
+            {isRunning ? 'Running ADMET...' : 'Run ADMET Analysis'}
+          </button>
+        </div>
+
+        {/* Status badge */}
+        {taskStatus && (
+          <div style={{
+            marginTop: '18px',
+            padding: '10px 16px',
+            borderRadius: '6px',
+            backgroundColor: taskStatus.status === 'error' ? '#fff0f0' : taskStatus.status === 'completed' ? '#f0fff4' : '#f0f4ff',
+            border: `1px solid ${taskStatus.status === 'error' ? '#ffcccc' : taskStatus.status === 'completed' ? '#b7f5d8' : '#c3d4ff'}`,
+            color: taskStatus.status === 'error' ? '#c00' : taskStatus.status === 'completed' ? '#155724' : '#004080',
+            fontSize: '0.9rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            {taskStatus.status === 'running' && (
+              <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#3b82f6', animation: 'pulse 1.5s infinite' }}></span>
+            )}
+            {taskStatus.status === 'completed' && <i className="fas fa-check-circle"></i>}
+            {taskStatus.status === 'error' && <i className="fas fa-times-circle"></i>}
+            {taskStatus.message}
+          </div>
+        )}
+      </div>
+
+
+
+      {/* ── Error message ── */}
+      {taskStatus?.status === 'error' && (
+        <div className="error" style={{ marginBottom: '30px' }}>
+          <strong>Error:</strong> {taskStatus.message}
+        </div>
+      )}
+
+      {/* ── Results ── */}
+      {loadingResults && <p style={{ textAlign: 'center', padding: '40px', color: 'var(--primary-color)' }}>Loading ADMET results...</p>}
+
+      {!loadingResults && resultsData && (
+        <div>
+          {/* Summary cards */}
+          <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>Results — {selectedTarget}</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '16px', marginBottom: '30px' }}>
+            {[
+              { label: 'Total Processed', value: resultsData.summary.total, color: '#6366f1', icon: 'fa-atom', tooltip: 'Total number of molecules processed in this analysis' },
+              { label: 'BBB+', value: resultsData.summary.bbb_plus, color: '#ef4444', icon: 'fa-brain', tooltip: 'Blood-Brain Barrier (+): The molecule can penetrate the brain (important for neurological/psychiatric drugs).' },
+              { label: 'BBB−', value: resultsData.summary.bbb_minus, color: '#3b82f6', icon: 'fa-circle-xmark', tooltip: 'Blood-Brain Barrier (-): The molecule cannot penetrate the brain (good to avoid central nervous system side effects in general use drugs).' },
+              { label: 'HIA+', value: resultsData.summary.hia_plus, color: '#10b981', icon: 'fa-pills', tooltip: 'Human Intestinal Absorption (+): High probability of being well absorbed by the intestine (essential for pill format drugs).' },
+              { label: 'PGP+', value: resultsData.summary.pgp_plus, color: '#f59e0b', icon: 'fa-shield-halved', tooltip: 'P-glycoprotein (+): Indicates the molecule interacts with P-glycoprotein, an efflux pump. If it is a PGP substrate, the body will try to expel the drug, reducing its efficacy.' },
+            ].map(card => (
+              <div key={card.label} title={card.tooltip ?? ''} style={{
+                backgroundColor: '#fff',
+                borderRadius: '12px',
+                padding: '20px',
+                textAlign: 'center',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.06)',
+                border: `1px solid ${card.color}22`,
+                cursor: card.tooltip ? 'help' : 'default'
+              }}>
+                <i className={`fas ${card.icon}`} style={{ fontSize: '1.5rem', color: card.color, marginBottom: '8px', display: 'block' }}></i>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: card.color }}>{card.value}</div>
+                <div style={{ fontSize: '0.8rem', color: '#777', marginTop: '4px' }}>{card.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Results table */}
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '12px',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.05)', border: '1px solid #eee', padding: '25px',
+            marginBottom: '30px', position: 'relative'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h4 style={{ margin: 0 }}>Detailed Results ({resultsData.rows.length} molecules)</h4>
+              <button
+                id="admet-download-btn"
+                onClick={downloadCsv}
+                style={{
+                  padding: '10px 22px', backgroundColor: '#6366f1', color: 'white',
+                  border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 2px 4px rgba(99,102,241,0.3)'
+                }}
+              >
+                <i className="fas fa-download"></i> Download CSV
+              </button>
+            </div>
+            
+            <div style={{
+              position: 'relative',
+              maxHeight: isTableExpanded ? 'none' : '300px',
+              overflow: 'hidden',
+              transition: 'max-height 0.3s ease-in-out'
+            }}>
+              <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #f0f0f0' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #eee' }}>
+                      {resultsData.headers.map(h => {
+                        let tooltip = "";
+                        if (h === "MW") tooltip = "Molecular Weight: Very heavy molecules (usually > 500 Da) have more difficulty being absorbed by the body.";
+                        else if (h === "WLOGP") tooltip = "Partition Coefficient: A measure of lipophilicity. Balanced values are ideal for the drug to cross lipid cell membranes but also dissolve in aqueous blood.";
+                        else if (h === "TPSA") tooltip = "Topological Polar Surface Area: Sum of the surfaces of polar atoms. Lower values generally indicate better ability to penetrate membranes.";
+                        else if (h === "HBD") tooltip = "Number of hydrogen bond donors.";
+                        else if (h === "HBA") tooltip = "Number of hydrogen bond acceptors.";
+                        else if (h === "RB") tooltip = "Rotatable Bonds: Measures the flexibility of the molecule. Too flexible molecules may have difficulty binding firmly to a target.";
+                        else if (h === "BBB") tooltip = "Blood-Brain Barrier penetration prediction (BBB+ or BBB-).";
+                        else if (h === "HIA") tooltip = "Human Intestinal Absorption prediction (HIA+ or HIA-).";
+                        else if (h === "PGP") tooltip = "P-glycoprotein substrate prediction (PGP+ or PGP-).";
+
+                        return (
+                          <th key={h} title={tooltip} style={{ padding: '12px 15px', textAlign: 'left', color: '#555', fontWeight: '600', whiteSpace: 'nowrap', cursor: tooltip ? 'help' : 'default' }}>{h}</th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultsData.rows.map((row, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid #f9f9f9', transition: 'background 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#fafafe')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      >
+                        {row.map((cell: any, j: number) => {
+                          const header = resultsData.headers[j];
+                          let badgeColor = '';
+                          if (cell === 'BBB+') badgeColor = '#ef4444';
+                          else if (cell === 'BBB-') badgeColor = '#3b82f6';
+                          else if (cell === 'HIA+') badgeColor = '#10b981';
+                          else if (cell === 'HIA-') badgeColor = '#6b7280';
+                          else if (cell === 'PGP+') badgeColor = '#f59e0b';
+                          else if (cell === 'PGP-') badgeColor = '#9ca3af';
+                          return (
+                            <td key={j} style={{ padding: '10px 15px', color: '#666', fontSize: '0.88rem' }}>
+                              {badgeColor ? (
+                                <span style={{
+                                  backgroundColor: badgeColor + '18', color: badgeColor,
+                                  padding: '3px 8px', borderRadius: '12px', fontWeight: '600', fontSize: '0.8rem'
+                                }}>{cell}</span>
+                              ) : (
+                                header === 'canonical_smiles'
+                                  ? <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#888' }} title={String(cell)}>{String(cell).slice(0, 25)}{String(cell).length > 25 ? '…' : ''}</span>
+                                  : header === 'molecule_chembl_id'
+                                    ? <button 
+                                        title="Click to view 2D/3D structure"
+                                        onClick={() => openMoleculeModal(cell, row[resultsData.headers.indexOf('canonical_smiles')])}
+                                        style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: 0, fontWeight: 'bold', textDecoration: 'underline' }}
+                                      >{cell}</button>
+                                    : cell
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {!isTableExpanded && resultsData.rows.length > 5 && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0, left: 0, right: 0, height: '150px',
+                  background: 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1) 80%)',
+                  display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '10px'
+                }}>
+                  <button
+                    onClick={() => setIsTableExpanded(true)}
+                    style={{
+                      padding: '10px 20px', backgroundColor: '#fff', color: 'var(--primary-color)',
+                      border: '2px solid var(--primary-color)', borderRadius: '20px', cursor: 'pointer',
+                      fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                      display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10
+                    }}
+                  >
+                    <i className="fas fa-chevron-down"></i> Click here to see the full content
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {isTableExpanded && (
+               <div style={{ textAlign: 'center', marginTop: '15px' }}>
+                 <button onClick={() => setIsTableExpanded(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline' }}>Show less</button>
+               </div>
+            )}
+          </div>
+
+          {/* BOILED-Egg plots */}
+          {plots.length > 0 && (
+            <div style={{ marginBottom: '30px', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 
+                  style={{ color: '#555', margin: 0, cursor: 'help' }}
+                  title="BOILED-Egg (Brain Or IntestinaL EstimateD permeation) is a predictive model that uses lipophilicity (WLOGP) and polarity (TPSA) to simultaneously predict gastrointestinal absorption (HIA - white region) and blood-brain barrier penetration (BBB - yellow region)."
+                >
+                  BOILED-Egg Plot <i className="fas fa-info-circle" style={{ fontSize: '0.8rem', opacity: 0.7, marginLeft: '5px' }}></i>
+                </h4>
+                <button
+                  onClick={downloadAllImages}
+                  style={{
+                    padding: '8px 16px', backgroundColor: '#fff', color: '#6366f1',
+                    border: '1px solid #6366f1', borderRadius: '8px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem',
+                    fontWeight: '600'
+                  }}
+                >
+                  <i className="fas fa-images"></i> Download All Images
+                </button>
+              </div>
+              <div style={{
+                position: 'relative',
+                maxHeight: isEggsExpanded ? 'none' : '400px',
+                overflow: 'hidden',
+                transition: 'max-height 0.3s ease-in-out'
+              }}>
+                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                  {plots.map(plotFile => (
+                    <div key={plotFile} style={{
+                      border: '1px solid #eee', borderRadius: '12px', padding: '10px',
+                      backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+                      flex: '1', minWidth: '320px'
+                    }}>
+                      <img
+                        src={`${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(plotFile)}`}
+                        alt={`BOILED-Egg plot — ${plotFile}`}
+                        title="Click to enlarge"
+                        onClick={() => setEnlargedImage(plotFile)}
+                        style={{ width: '100%', borderRadius: '8px', cursor: 'zoom-in', transition: 'transform 0.2s ease-in-out' }}
+                        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.02)')}
+                        onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                        <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>{plotFile}</p>
+                        <button
+                          onClick={() => downloadImage(plotFile)}
+                          title="Download Image"
+                          style={{
+                            background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
+                            padding: '4px'
+                          }}
+                        >
+                          <i className="fas fa-download"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {!isEggsExpanded && plots.length > 3 && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0, left: 0, right: 0, height: '200px',
+                    background: 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1) 80%)',
+                    display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '20px'
+                  }}>
+                    <button
+                      onClick={() => setIsEggsExpanded(true)}
+                      style={{
+                        padding: '10px 20px', backgroundColor: '#fff', color: 'var(--primary-color)',
+                        border: '2px solid var(--primary-color)', borderRadius: '20px', cursor: 'pointer',
+                        fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                        display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10
+                      }}
+                    >
+                      <i className="fas fa-chevron-down"></i> Click here to see all plots
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {isEggsExpanded && (
+                <div style={{ textAlign: 'center', marginTop: '15px' }}>
+                  <button onClick={() => setIsEggsExpanded(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline' }}>Show less</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* No results yet message */}
+      {!loadingResults && !resultsData && !isRunning && (
+        <div style={{
+          textAlign: 'center', padding: '50px 20px',
+          backgroundColor: '#f8f9fa', borderRadius: '12px',
+          border: '1px dashed #ddd', color: '#999'
+        }}>
+          <i className="fas fa-dna" style={{ fontSize: '3rem', marginBottom: '15px', display: 'block', opacity: 0.3 }}></i>
+          <p style={{ fontSize: '1.1rem' }}>No ADMET results for <strong>{selectedTarget}</strong> yet.</p>
+          <p style={{ fontSize: '0.9rem' }}>Click <strong>Run ADMET Analysis</strong> to compute pharmacokinetic properties.</p>
+        </div>
+      )}
+
+      {/* Enlarged Image Modal */}
+      {enlargedImage && (
+        <div 
+          onClick={() => setEnlargedImage(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999,
+            display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px',
+            backdropFilter: 'blur(5px)'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+          >
+            <button 
+              onClick={() => setEnlargedImage(null)}
+              style={{
+                position: 'absolute', top: '-40px', right: 0,
+                background: 'none', border: 'none', color: 'white', fontSize: '2.5rem', cursor: 'pointer',
+                lineHeight: 1
+              }}
+              title="Close"
+            >
+              &times;
+            </button>
+            <img 
+              src={`${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(enlargedImage)}`}
+              alt="Enlarged Plot"
+              style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 60px)', borderRadius: '12px', objectFit: 'contain', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
+            />
+            <div style={{ marginTop: '15px', display: 'flex', gap: '15px', alignItems: 'center' }}>
+              <p style={{ color: 'white', margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{enlargedImage}</p>
+              <button
+                onClick={() => downloadImage(enlargedImage)}
+                style={{
+                  padding: '8px 16px', backgroundColor: '#6366f1', color: 'white',
+                  border: 'none', borderRadius: '8px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold'
+                }}
+              >
+                <i className="fas fa-download"></i> Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Molecule 2D/3D Modal */}
+      {selectedMolecule && (
+        <div 
+          onClick={() => setSelectedMolecule(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999,
+            display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px',
+            backdropFilter: 'blur(3px)'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              position: 'relative', width: '95%', maxWidth: '1000px', backgroundColor: '#fff',
+              borderRadius: '16px', padding: '30px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' 
+            }}
+          >
+            <span 
+              onClick={() => setSelectedMolecule(null)} 
+              style={{ position: 'absolute', top: '20px', right: '25px', fontSize: '1.5rem', cursor: 'pointer', color: '#888' }}
+            >
+              &times;
+            </span>
+            <div style={{ textAlign: 'center', marginTop: '10px' }}>
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '15px', fontSize: '1.5rem', wordBreak: 'break-all' }}>
+                {selectedMolecule.id}
+              </h3>
+              
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'nowrap', justifyContent: 'center', overflowX: 'auto' }}>
+                <div style={{ flex: '1 1 50%', border: '1px solid #ddd', borderRadius: '8px', padding: '20px', backgroundColor: '#fafafa', minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <h4 style={{ marginBottom: '10px', color: '#555' }}>2D Structure</h4>
+                  {selectedMolecule.smiles ? ( 
+                    svgLoading ? ( 
+                      <p>Loading SVG image...</p> 
+                    ) : moleculeSvg ? ( 
+                      <div dangerouslySetInnerHTML={{ __html: moleculeSvg }} style={{ width: '100%', display: 'flex', justifyContent: 'center' }} /> 
+                    ) : ( 
+                      <p style={{ color: 'red' }}>Failed to generate image.</p> 
+                    ) 
+                  ) : ( 
+                    <p style={{ color: '#999', fontStyle: 'italic' }}>Structure (SMILES) not found in the dataset.</p> 
+                  )}
+                </div>
+
+                <div style={{ flex: '1 1 50%', border: '1px solid #ddd', borderRadius: '8px', padding: '20px', backgroundColor: '#fafafa', minHeight: '350px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <h4 style={{ marginBottom: '10px', color: '#555' }}>3D Structure</h4>
+                  <div id="viewer-3d-canvas-admet" style={{ width: '100%', height: '300px', position: 'relative' }}></div>
+                  {!svgLoading && !molecule3DBlock && (
+                    <p style={{ color: 'red', marginTop: '10px' }}>Failed to generate 3D structure.</p>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ marginTop: '20px', textAlign: 'left', backgroundColor: '#f2f4f8', padding: '15px', borderRadius: '5px' }}>
+                <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#666', fontWeight: 'bold' }}>SMILES:</p>
+                <p style={{ margin: 0, fontSize: '0.85rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>{selectedMolecule.smiles || "N/A"}</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setSelectedMolecule(null)} 
+                style={{ 
+                  marginTop: '25px', padding: '10px 30px', backgroundColor: 'var(--primary-color)', 
+                  color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' 
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
 // MAIN ANALYSIS PAGE
 // ==========================================
 
 export default function AnalysisPage() {
-  const [activeTab, setActiveTab] = useState<"similarity" | "redocking">("similarity");
+  const [activeTab, setActiveTab] = useState<"similarity" | "redocking" | "admet">("similarity");
   const [isTaskRunning, setIsTaskRunning] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [executionLogs, setExecutionLogs] = useState("");
 
   const handleTaskStart = (id: string) => {
     setIsTaskRunning(true);
-    setLoadingMessage("Redocking simulation is running in background...");
+    setLoadingMessage(
+      activeTab === 'admet'
+        ? 'ADMET analysis is running in background...'
+        : 'Redocking simulation is running in background...'
+    );
   };
 
   const handleTaskEnd = () => {
@@ -820,7 +1530,7 @@ export default function AnalysisPage() {
             <i className="fas fa-network-wired" style={{ marginRight: '8px' }}></i>
             Molecular Similarity
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab("redocking")}
             style={{
               padding: '12px 25px',
@@ -837,6 +1547,23 @@ export default function AnalysisPage() {
             <i className="fas fa-microscope" style={{ marginRight: '8px' }}></i>
             Redocking (AutoDock Vina)
           </button>
+          <button
+            onClick={() => setActiveTab("admet")}
+            style={{
+              padding: '12px 25px',
+              backgroundColor: activeTab === "admet" ? 'var(--primary-color)' : 'transparent',
+              color: activeTab === "admet" ? 'white' : '#333',
+              border: 'none',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              transition: 'all 0.3s'
+            }}
+          >
+            <i className="fas fa-flask" style={{ marginRight: '8px' }}></i>
+            ADMET Analysis
+          </button>
         </div>
 
         {activeTab === "similarity" && <SimilarityTab />}
@@ -844,6 +1571,15 @@ export default function AnalysisPage() {
           <RedockingTab 
             onTaskStart={handleTaskStart} 
             onTaskEnd={handleTaskEnd} 
+            executionLogs={executionLogs}
+            setExecutionLogs={setExecutionLogs}
+            isTaskRunning={isTaskRunning}
+          />
+        )}
+        {activeTab === "admet" && (
+          <AdmetTab
+            onTaskStart={handleTaskStart}
+            onTaskEnd={handleTaskEnd}
             executionLogs={executionLogs}
             setExecutionLogs={setExecutionLogs}
             isTaskRunning={isTaskRunning}

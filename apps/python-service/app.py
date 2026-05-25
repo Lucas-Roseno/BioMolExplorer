@@ -26,6 +26,7 @@ from crawlers.complex import PolymerEntityType, ExperimentalMethod
 from wrappers.molecular_analyzer import compute_similarity, analyze_graphs, generate_fingerprints
 from kernel.descriptors import similarityFunctions, fingerprints
 from wrappers.redocking import perform_redocking
+from wrappers.admet import ADMETWrapper
 
 # PATHs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +35,7 @@ PDB_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'PDB')
 CHEMBL_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL')
 JSON_CRAWLERS_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'src', 'scripts', 'crawlers')
 ZINC_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ZINC')
+ADMET_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ADMET')
 
 # --- PDB functions ---
 @app.route('/load_pdb', methods=['POST'])
@@ -1231,12 +1233,24 @@ def get_analysis_molecule_image():
             return jsonify({'success': False, 'message': 'Invalid SMILES.'}), 400
             
         from rdkit.Chem.Draw import rdMolDraw2D
+        from rdkit.Chem import AllChem
+        
         drawer = rdMolDraw2D.MolDraw2DSVG(400, 300)
         drawer.DrawMolecule(mol)
         drawer.FinishDrawing()
         svg = drawer.GetDrawingText()
         
-        return jsonify({'success': True, 'svg': svg})
+        # Generate 3D structure
+        mol_3d = Chem.AddHs(mol)
+        try:
+            AllChem.EmbedMolecule(mol_3d, randomSeed=42)
+            AllChem.MMFFOptimizeMolecule(mol_3d)
+            mol_block = Chem.MolToMolBlock(mol_3d)
+        except Exception as e:
+            print(f"Failed to generate 3D structure: {e}")
+            mol_block = None
+        
+        return jsonify({'success': True, 'svg': svg, 'molBlock': mol_block})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -1417,6 +1431,246 @@ def download_redocking_csv(target):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
     
     return send_file(csv_path, as_attachment=True, download_name=f'redocking_results_{target}.csv')
+
+# ==========================================
+# ADMET ROUTES
+# ==========================================
+
+# Dictionary to store ADMET task logs
+admet_task_logs = {}
+
+def admet_worker(task_id: str, target: str, input_file: str | None):
+    """Background worker that runs the ADMET pipeline for a given ChEMBL target."""
+    log_stream = io.StringIO()
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+
+    class Tee:
+        def __init__(self, *files): self.files = files
+        def write(self, obj):
+            for f in self.files: f.write(obj); f.flush()
+        def flush(self):
+            for f in self.files: f.flush()
+        def fileno(self):
+            for f in self.files:
+                if hasattr(f, 'fileno'): return f.fileno()
+            return sys.__stdout__.fileno()
+
+    sys.stdout = Tee(log_stream, sys.__stdout__)
+    sys.stderr = Tee(log_stream, sys.__stderr__)
+
+    def update_logs():
+        while active_tasks.get(task_id, {}).get('status') == 'running':
+            admet_task_logs[task_id] = log_stream.getvalue()
+            threading.Event().wait(0.5)
+        admet_task_logs[task_id] = log_stream.getvalue()
+
+    log_updater = threading.Thread(target=update_logs)
+    log_updater.daemon = True
+    log_updater.start()
+
+    try:
+        active_tasks[task_id] = {'status': 'running', 'message': f'Running ADMET for {target}...'}
+        admet_task_logs[task_id] = ''
+
+        # Input: molecules/{target}/ folder inside ChEMBL datasets
+        input_path  = os.path.join(CHEMBL_BASE_PATH, 'molecules', target)
+        output_path = os.path.join(ADMET_BASE_PATH, target)
+
+        if not os.path.isdir(input_path):
+            raise FileNotFoundError(
+                f"No ChEMBL molecules found for target '{target}'. "
+                f"Please download data from the ChEMBL page first."
+            )
+
+        wrapper = ADMETWrapper(
+            base_input_path=input_path,
+            base_output_path=output_path,
+            input_file=input_file,
+            verbose=True
+        )
+        summary = wrapper.run_pipeline()
+
+        active_tasks[task_id]['status']  = 'completed'
+        active_tasks[task_id]['message'] = f'ADMET for {target} completed successfully.'
+        active_tasks[task_id]['summary'] = summary
+
+    except Exception as e:
+        print(f"FATAL ERROR in admet_worker: {e}", file=sys.__stderr__)
+        active_tasks[task_id]['status']  = 'error'
+        active_tasks[task_id]['message'] = str(e)
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+
+@app.route('/api/admet/run', methods=['POST'])
+def run_admet_task():
+    """Starts an async ADMET analysis for the given ChEMBL target."""
+    data       = request.json or {}
+    target     = data.get('target')
+    input_file = data.get('input_file')  # Optional — specific CSV basename
+
+    if not target:
+        return jsonify({'status': 'error', 'message': 'target is required'}), 400
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
+
+    task_id = str(uuid.uuid4())
+    thread  = threading.Thread(target=admet_worker, args=(task_id, target, input_file))
+    thread.start()
+
+    return jsonify({'status': 'success', 'task_id': task_id})
+
+
+@app.route('/api/admet/status/<task_id>', methods=['GET'])
+def get_admet_status(task_id):
+    """Returns the current status and logs for a running ADMET task."""
+    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
+    logs   = admet_task_logs.get(task_id, '')
+    return jsonify({**status, 'logs': logs})
+
+
+@app.route('/api/admet/results', methods=['GET'])
+def list_admet_results():
+    """Lists ChEMBL targets that have completed ADMET results."""
+    results = []
+    if not os.path.isdir(ADMET_BASE_PATH):
+        return jsonify([])
+
+    for target_dir in sorted(os.listdir(ADMET_BASE_PATH)):
+        target_path = os.path.join(ADMET_BASE_PATH, target_dir)
+        if os.path.isdir(target_path):
+            has_csv = any(f.endswith('.csv') for f in os.listdir(target_path))
+            if has_csv:
+                results.append(target_dir)
+
+    return jsonify(results)
+
+
+@app.route('/api/admet/csv/<target>', methods=['GET'])
+def get_admet_csv(target):
+    """Returns ADMET results table for a given target."""
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
+
+    target_dir = os.path.join(ADMET_BASE_PATH, target)
+    if not os.path.isdir(target_dir):
+        return jsonify({'status': 'error', 'message': 'No ADMET results found for this target'}), 404
+
+    # Find the main results CSV (not the filtered sub-CSVs like _BBB+, _BBB-, _HIA+)
+    csv_files = [
+        f for f in os.listdir(target_dir)
+        if f.endswith('.csv')
+        and not f.endswith('_BBB+.csv')
+        and not f.endswith('_BBB-.csv')
+        and not f.endswith('_HIA+.csv')
+    ]
+    if not csv_files:
+        return jsonify({'status': 'error', 'message': 'Results CSV not found'}), 404
+
+    try:
+        dfs = []
+        for f in csv_files:
+            csv_path = os.path.join(target_dir, f)
+            try:
+                temp_df = pd.read_csv(csv_path)
+                if not temp_df.empty:
+                    dfs.append(temp_df)
+            except Exception as read_e:
+                print(f"Error reading {f}: {read_e}")
+                
+        if not dfs:
+            return jsonify({'status': 'error', 'message': 'All CSVs are empty or invalid'}), 404
+            
+        df = pd.concat(dfs, ignore_index=True)
+        headers = df.columns.tolist()
+        rows    = df.values.tolist()
+        # Compute summary counts for the frontend cards
+        summary = {
+            'total':     len(df),
+            'bbb_plus':  int((df['BBB'] == 'BBB+').sum()),
+            'bbb_minus': int((df['BBB'] == 'BBB-').sum()),
+            'hia_plus':  int((df['HIA'] == 'HIA+').sum()),
+            'pgp_plus':  int((df['PGP'] == 'PGP+').sum()),
+        }
+        return jsonify({'status': 'success', 'headers': headers, 'rows': rows, 'summary': summary})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/admet/plot/<target>/<filename>', methods=['GET'])
+def get_admet_plot(target, filename):
+    """Serves a BOILED-Egg PNG plot for the given target."""
+    if '..' in target or '..' in filename:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+    if not filename.endswith('.png'):
+        return jsonify({'status': 'error', 'message': 'Only PNG files are served'}), 400
+
+    file_path = os.path.join(ADMET_BASE_PATH, target, filename)
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'Plot not found'}), 404
+
+    return send_file(file_path, mimetype='image/png')
+
+
+@app.route('/api/admet/plots/<target>', methods=['GET'])
+def list_admet_plots(target):
+    """Lists available BOILED-Egg PNG plots for a given target."""
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
+
+    target_dir = os.path.join(ADMET_BASE_PATH, target)
+    if not os.path.isdir(target_dir):
+        return jsonify([])
+
+    plots = sorted([f for f in os.listdir(target_dir) if f.endswith('_egg.png')])
+    return jsonify(plots)
+
+
+@app.route('/api/admet/download/<target>', methods=['GET'])
+def download_admet_csv(target):
+    """Downloads the main ADMET results CSV for a given target."""
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
+
+    target_dir = os.path.join(ADMET_BASE_PATH, target)
+    if not os.path.isdir(target_dir):
+        return jsonify({'status': 'error', 'message': 'No ADMET results for this target'}), 404
+
+    csv_files = [
+        f for f in os.listdir(target_dir)
+        if f.endswith('.csv')
+        and not f.endswith('_BBB+.csv')
+        and not f.endswith('_BBB-.csv')
+        and not f.endswith('_HIA+.csv')
+    ]
+    if not csv_files:
+        return jsonify({'status': 'error', 'message': 'Results CSV not found'}), 404
+
+    return send_file(
+        os.path.join(target_dir, csv_files[0]),
+        as_attachment=True,
+        download_name=f'admet_results_{target}.csv'
+    )
+
+
+@app.route('/api/admet/available-targets', methods=['GET'])
+def list_admet_available_targets():
+    """Lists ChEMBL targets that HAVE molecules downloaded (eligible for ADMET analysis)."""
+    targets = []
+    molecules_dir = os.path.join(CHEMBL_BASE_PATH, 'molecules')
+    if not os.path.isdir(molecules_dir):
+        return jsonify([])
+
+    for target_dir in sorted(os.listdir(molecules_dir)):
+        target_path = os.path.join(molecules_dir, target_dir)
+        if os.path.isdir(target_path):
+            has_csv = any(f.endswith('.csv') for f in os.listdir(target_path))
+            if has_csv:
+                targets.append(target_dir)
+
+    return jsonify(targets)
+
 
 if __name__ == '__main__':
     # Enabled debug mode for development hot-reload

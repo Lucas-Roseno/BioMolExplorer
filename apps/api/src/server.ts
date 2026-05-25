@@ -464,6 +464,99 @@ app.get('/api/redocking/download/:target', async (req, res) => {
   } catch (e) { res.status(404).send('Not found'); }
 });
 
+// ==========================================
+// ADMET ROUTES (FORWARDING TO PYTHON)
+// ==========================================
+
+app.get('/api/admet/available-targets', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/available-targets`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/admet/run', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/admet/status/:task_id', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/status/${req.params.task_id}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/admet/results', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/results`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/admet/csv/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/csv/${encodeURIComponent(req.params.target)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/admet/plots/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/plots/${encodeURIComponent(req.params.target)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+// Binary proxy — pipe PNG directly from Python
+app.get('/api/admet/plot/:target/:filename', async (req, res) => {
+  try {
+    const { target, filename } = req.params;
+    const response = await fetch(
+      `${PYTHON_URL}/api/admet/plot/${encodeURIComponent(target)}/${encodeURIComponent(filename)}`
+    );
+    if (!response.ok) return res.status(response.status).json({ success: false, message: 'Plot not found.' });
+    res.setHeader('Content-Type', 'image/png');
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/admet/download/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/download/${encodeURIComponent(req.params.target)}`);
+    if (!response.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="admet_results_${req.params.target}.csv"`);
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
+});
+
+
 app.get('/api/files/pdb_content/:target/:file', async (req, res) => {
   try {
     const { target, file } = req.params;

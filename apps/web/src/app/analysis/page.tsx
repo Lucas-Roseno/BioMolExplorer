@@ -401,7 +401,7 @@ function SimilarityTab() {
             <span className="modal-close" onClick={() => setIsModalOpen(false)}>&times;</span>
             <div style={{ textAlign: 'center', marginTop: '10px' }}>
               <h3 style={{ color: 'var(--primary-color)', marginBottom: '15px', fontSize: '1.5rem', wordBreak: 'break-all' }}>{selectedNode.id}</h3>
-              <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '20px', backgroundColor: '#fafafa', minHeight: '250px', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}>
+              <div style={{ border: '1px solid #ddd', borderRadius: '8px', padding: '20px', backgroundColor: '#fafafa', minHeight: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {selectedNode.smiles ? ( svgLoading ? ( <p>Loading SVG image...</p> ) : moleculeSvg ? ( <div dangerouslySetInnerHTML={{ __html: moleculeSvg }} /> ) : ( <p style={{ color: 'red' }}>Failed to generate image.</p> ) ) : ( <p style={{ color: '#999', fontStyle: 'italic' }}>Structure (SMILES) not found in the dataset.</p> )}
               </div>
               <div style={{ marginTop: '20px', textAlign: 'left', backgroundColor: '#f2f4f8', padding: '15px', borderRadius: '5px' }}>

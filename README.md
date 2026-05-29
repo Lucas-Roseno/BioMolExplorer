@@ -79,74 +79,126 @@ BioMolExplorer/
 
 ## 🚀 4. Como Rodar o Projeto
 
-É possível rodar a aplicação através do *Docker* (Maneira mais fácil e recomendada) ou pelo Ambiente de Desenvolvimento Nativo.
+> É possível rodar a aplicação de **três formas**: via Docker (recomendado), em modo de desenvolvimento nativo, ou como aplicativo Desktop. Escolha a que melhor se encaixa no seu caso.
 
-### Pré-requisitos e Dependências
-Para que o projeto, em especial os fluxos de **Redocking** e extração de dados, funcione sem erros, são necessárias as seguintes dependências (instaladas automaticamente via Docker ou via script de instalação nativo):
-- **Gerais**: Git e [Node.js](https://nodejs.org/).
-- **Para o método Container**: [Docker](https://www.docker.com/).
-- **Para o método Nativo**: [Anaconda / Miniconda](https://www.anaconda.com/) (gerenciado pelo script de instalação).
-- **Ferramentas de Bioinformática (Backend)**: 
-  - **AutoDock Vina** (`vina`)
-  - **OpenBabel** (`openbabel`)
-  - **PyMOL** (`pymol-open-source`)
-  - **UCSF Chimera** (Necessário para a preparação de ligantes e complexos).
-  - Outras bibliotecas: `rdkit`, `networkx`, `biopython`, `pandas`, etc.
+---
 
-### Passo a Passo
+### ✅ Pré-requisitos Obrigatórios
 
-**1.** ⬇️ Clone este repositório:
+Antes de qualquer opção, certifique-se de ter instalado:
+
+| Ferramenta | Versão Mínima | Instalação |
+|---|---|---|
+| **Git** | qualquer | [git-scm.com](https://git-scm.com/) |
+| **Node.js** | 18+ | [nodejs.org](https://nodejs.org/) |
+| **npm** | 9+ | Incluído com Node.js |
+
+Você pode verificar se já os tem com:
+```bash
+git --version
+node --version
+npm --version
+```
+
+---
+
+### 1️⃣ Clone o Repositório
+
+**Este passo é obrigatório para todas as opções abaixo.**
+
 ```bash
 git clone https://github.com/Lucas-Roseno/BioMolExplorer.git
 cd BioMolExplorer
 ```
 
-**Opção A) Usando o Docker - O jeito rápido (Recomendado) 🐳**
-Esta maneira não afeta o Python do seu PC e já instala todas as dependências complexas lá dentro.
+---
+
+### Opção A) 🐳 Docker — Jeito rápido (Recomendado para a versão Web)
+
+Esta opção **não exige Python, Conda ou nenhuma ferramenta científica instalada** na sua máquina. Tudo já vem empacotado na imagem.
+
+**Pré-requisito adicional:** [Docker](https://www.docker.com/get-started/) instalado e em execução.
+
 ```bash
-# Compile a Imagem (Pode demorar alguns minutos na primeira vez)
+# Verifique se o Docker está rodando
+docker --version
+
+# 1. Compile a imagem (pode demorar alguns minutos na primeira vez — baixa ~2 GB)
 docker build -t biomolexplorer .
 
-# Rode o Container vinculando as portas
+# 2. Rode o container vinculando as portas dos 3 serviços
 docker run -p 3000:3000 -p 3001:3001 -p 5000:5000 biomolexplorer
 ```
-Após um instante de configuração, o terminal informará que a interface web está acessível em: `http://localhost:3000`
 
-<br/>
+Após a inicialização, acesse no navegador: **http://localhost:3000**
 
-**Opção B) Ambiente de Desenvolvimento Nativo (Source) 💻**
-Ideal se você quiser contribuir com modificações no código ou rodar o pipeline completo de Redocking localmente.
+> 💡 **Serviços disponíveis:**
+> - `http://localhost:3000` — Interface Web (Next.js)
+> - `http://localhost:3001` — API Proxy (Node.js)
+> - `http://localhost:5000` — Backend Científico (Flask/Python)
+
+---
+
+### Opção B) 💻 Ambiente Nativo — Para desenvolvimento e contribuição
+
+Ideal para quem quer modificar o código ou rodar o pipeline de **Redocking** localmente.
+
+> ⚠️ **UCSF Chimera (opcional, apenas para Redocking):** Baixe o instalador `.bin` manualmente em [rbvi.ucsf.edu/chimera](https://www.rbvi.ucsf.edu/chimera/download.html) e coloque-o em `apps/python-service/BioMolExplorer/apps/chimera.bin` **antes** de rodar o setup. O script irá avisá-lo se não encontrá-lo.
+
+#### Um único comando instala tudo:
 
 ```bash
-# 1. Entre no diretório do serviço Python
-cd apps/python-service/BioMolExplorer
-
-# 2. Execute o script de instalação automática (Isso instalará Anaconda, UCSF Chimera e criará o ambiente Conda com todas as dependências do requirements.yml)
-# Nota: Certifique-se de que o arquivo chimera.bin está na pasta apps/ do python-service.
-bash install.sh
-
-# 3. Ative o ambiente virtual criado
-source ~/.bashrc
-conda activate BioMolExplorer
-
-# (Volte para a raiz do repositório)
-cd ../../../ 
-
-# 3. Na raiz do projeto, instale as dependências Node/Javascript para Web e Proxy
-npm install
-
-# 4. Inicie os três serviços ao mesmo tempo via Concurrently!
-npm run dev
+# Na raiz do projeto, rode o script de setup automático.
+# Ele irá: verificar Node.js, instalar o Miniconda (se necessário),
+# criar o ambiente Conda com RDKit, OpenBabel, Vina, PyMOL, Pandas etc.
+# e instalar todas as dependências JavaScript (npm workspaces).
+bash setup.sh
 ```
 
-Pronto! Acesse `http://localhost:3000` em seu navegador padrão.
-*(Nota: Certifique-se de que o Conda `BioMolExplorer` está ativado no terminal aberto)*.
+> O `setup.sh` instala todas as dependências de uma vez:
+> - **Python**: RDKit, OpenBabel, AutoDock Vina, PyMOL, Pandas, Biopython, NetworkX, etc. (via `requirements.yml`)
+> - **JavaScript**: Next.js, Express, TypeScript, e todas as libs do monorepo (via `npm install`)
+> - **Miniconda**: baixado e instalado automaticamente se não estiver presente
 
-**Opção C) Aplicativo Desktop (Distribuição) 🖥️**
-Para distribuir o BioMolExplorer como um executável instalável (Windows, Linux ou macOS), consulte o guia completo de geração de release:
+Depois do setup, para iniciar os serviços:
+
+```bash
+bash dev.sh
+```
+
+> 💡 O `dev.sh` ativa o ambiente Conda automaticamente e inicia os 3 serviços simultaneamente com hot-reload (Flask na :5000, API Node na :3001, Next.js na :3000).
+
+Acesse no navegador: **http://localhost:3000**
+
+---
+
+### Opção C) 🖥️ Aplicativo Desktop (Distribuição)
+
+Para usar o BioMolExplorer como um **executável instalável** (.AppImage no Linux, .exe no Windows, .dmg no macOS) — sem precisar abrir um terminal — consulte o guia completo:
 
 - 🇧🇷 [Documentação Desktop (PT-BR)](apps/desktop/desktop-ptbr.md)
 - 🇺🇸 [Desktop Documentation (EN)](apps/desktop/desktop-en.md)
+
+> 🐧 **Ubuntu 22.04+:** Para rodar o `.AppImage` pode ser necessário:
+> ```bash
+> sudo apt install libfuse2
+> chmod +x BioMolExplorer.AppImage
+> ./BioMolExplorer.AppImage --no-sandbox
+> ```
+
+---
+
+### ❓ Problemas Comuns
+
+| Erro | Solução |
+|---|---|
+| `conda: command not found` | Instale o [Anaconda/Miniconda](https://www.anaconda.com/download) e reabra o terminal |
+| `node: command not found` | Instale o [Node.js 18+](https://nodejs.org/) |
+| `ModuleNotFoundError: No module named 'pymol'` | `conda install -c conda-forge pymol-open-source` |
+| `Port 3000 already in use` | `fuser -k 3000/tcp 3001/tcp 5000/tcp` |
+| `docker: command not found` | Instale o [Docker](https://www.docker.com/get-started/) |
+| `chimera.bin não encontrado` | Baixe em [rbvi.ucsf.edu/chimera](https://www.rbvi.ucsf.edu/chimera/download.html) e coloque em `apps/python-service/BioMolExplorer/apps/` |
+| Erro CORS na web | Verifique se a API está rodando em `http://localhost:3001` |
 
 ---
 

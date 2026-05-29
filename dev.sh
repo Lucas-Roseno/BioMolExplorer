@@ -17,7 +17,29 @@ echo "Iniciando os 3 serviços em modo DEV..."
 
 # Limpar processos antigos nas portas 3000, 3001 e 5000
 echo "Limpando processos nas portas 3000, 3001 e 5000..."
-fuser -k 3000/tcp 3001/tcp 5000/tcp || true
+fuser -k -9 3000/tcp 3001/tcp 5000/tcp 2>/dev/null || true
+if command -v lsof >/dev/null 2>&1; then
+    kill -9 $(lsof -t -i:3000 -i:3001 -i:5000) 2>/dev/null || true
+fi
+
+# Verificar se há containers Docker ativos ocupando essas portas
+if command -v docker >/dev/null 2>&1; then
+    CONFLICTING_DOCKER=$(docker ps --format '{{.ID}} {{.Names}} {{.Ports}}' | grep -E '(:3000->|:3001->|:5000->)' || true)
+    if [ -n "$CONFLICTING_DOCKER" ]; then
+        echo "⚠️  Detectado container Docker rodando nas portas do projeto (3000/3001/5000):"
+        echo "$CONFLICTING_DOCKER" | awk '{print "   - ID: " $1 ", Nome: " $2}'
+        echo -n "Deseja parar estes containers conflitantes automaticamente? (s/N): "
+        read -r -t 10 response || response="n"
+        if [[ "$response" =~ ^[Ss]$ ]]; then
+            CONTAINER_IDS=$(echo "$CONFLICTING_DOCKER" | cut -d' ' -f1)
+            echo "Parando container(s)..."
+            docker stop $CONTAINER_IDS
+            sleep 2
+        else
+            echo "Aviso: O conflito de portas pode causar erros de inicialização se os containers não forem parados."
+        fi
+    fi
+fi
 
 # 1. Inicia o Python Flask em background (já tem hot-reload via debug=True)
 python apps/python-service/app.py &

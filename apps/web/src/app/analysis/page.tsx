@@ -778,6 +778,14 @@ interface AdmetTabProps {
   isTaskRunning: boolean;
 }
 
+// Group type returned by the API
+interface AdmetGroup {
+  group: 'MOLS' | 'SIMS' | 'FULL';
+  headers: string[];
+  rows: any[][];
+  summary: { total: number; bbb_plus: number; bbb_minus: number; hia_plus: number; pgp_plus: number };
+}
+
 function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: AdmetTabProps) {
   const [availableTargets, setAvailableTargets] = useState<string[]>([]);
   const [selectedTarget, setSelectedTarget] = useState("");
@@ -787,8 +795,9 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
   const [taskStatus, setTaskStatus] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Results state
-  const [resultsData, setResultsData] = useState<{ headers: string[]; rows: any[]; summary: any } | null>(null);
+  // Results state — now grouped (MOLS / SIMS / FULL)
+  const [groups, setGroups] = useState<AdmetGroup[]>([]);
+  const [activeGroup, setActiveGroup] = useState<'MOLS' | 'SIMS' | 'FULL'>('FULL');
   const [plots, setPlots] = useState<string[]>([]);
   const [loadingResults, setLoadingResults] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -803,6 +812,9 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
   const [moleculeSvg, setMoleculeSvg] = useState<string | null>(null);
   const [molecule3DBlock, setMolecule3DBlock] = useState<string | null>(null);
   const [svgLoading, setSvgLoading] = useState(false);
+
+  // Derived: the currently-active group data
+  const currentGroup = groups.find(g => g.group === activeGroup) ?? groups[0] ?? null;
 
   // Fetch available ChEMBL targets that have molecules
   useEffect(() => {
@@ -864,10 +876,16 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
       ]);
       if (csvRes.ok) {
         const d = await csvRes.json();
-        if (d.status === 'success') setResultsData({ headers: d.headers, rows: d.rows, summary: d.summary });
-        else setResultsData(null);
+        if (d.status === 'success' && d.groups?.length > 0) {
+          setGroups(d.groups as AdmetGroup[]);
+          // Default to FULL if available, otherwise first group
+          const has_full = d.groups.some((g: AdmetGroup) => g.group === 'FULL');
+          setActiveGroup(has_full ? 'FULL' : d.groups[0].group);
+        } else {
+          setGroups([]);
+        }
       } else {
-        setResultsData(null);
+        setGroups([]);
       }
       if (plotsRes.ok) {
         const p: string[] = await plotsRes.json();
@@ -972,7 +990,8 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
   };
 
   const downloadCsv = () => {
-    if (selectedTarget) window.open(`${API_BASE_URL}/api/admet/download/${encodeURIComponent(selectedTarget)}`, '_blank');
+    if (selectedTarget && currentGroup)
+      window.open(`${API_BASE_URL}/api/admet/download/${encodeURIComponent(selectedTarget)}/${currentGroup.group}`, '_blank');
   };
 
   // ── Render ──────────────────────────────────────────────────────────
@@ -1026,7 +1045,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>ChEMBL Target:</label>
             <select
               value={selectedTarget}
-              onChange={(e) => { setSelectedTarget(e.target.value); setResultsData(null); setPlots([]); setIsTableExpanded(false); setIsEggsExpanded(false); }}
+              onChange={(e) => { setSelectedTarget(e.target.value); setGroups([]); setPlots([]); setIsTableExpanded(false); setIsEggsExpanded(false); }}
               disabled={isRunning}
               style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
             >
@@ -1093,17 +1112,42 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
       {/* ── Results ── */}
       {loadingResults && <p style={{ textAlign: 'center', padding: '40px', color: 'var(--primary-color)' }}>Loading ADMET results...</p>}
 
-      {!loadingResults && resultsData && (
+      {!loadingResults && groups.length > 0 && currentGroup && (
         <div>
           {/* Summary cards */}
-          <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>Results — {selectedTarget}</h3>
+          <h3 style={{ color: 'var(--primary-color)', marginBottom: '16px' }}>Results — {selectedTarget}</h3>
+
+          {/* Group tabs: MOLS / SIMS / FULL */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', borderBottom: '2px solid #eee', paddingBottom: '0' }}>
+            {groups.map(g => (
+              <button
+                key={g.group}
+                onClick={() => { setActiveGroup(g.group); setIsTableExpanded(false); }}
+                style={{
+                  padding: '9px 22px',
+                  fontWeight: 'bold',
+                  fontSize: '0.9rem',
+                  border: 'none',
+                  borderBottom: activeGroup === g.group ? '3px solid var(--primary-color)' : '3px solid transparent',
+                  backgroundColor: activeGroup === g.group ? '#f0f4ff' : 'transparent',
+                  color: activeGroup === g.group ? 'var(--primary-color)' : '#777',
+                  cursor: 'pointer',
+                  borderRadius: '6px 6px 0 0',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {g.group} <span style={{ fontWeight: 'normal', fontSize: '0.8rem', marginLeft: '4px', opacity: 0.7 }}>({g.summary.total})</span>
+              </button>
+            ))}
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '16px', marginBottom: '30px' }}>
             {[
-              { label: 'Total Processed', value: resultsData.summary.total, color: '#6366f1', icon: 'fa-atom', tooltip: 'Total number of molecules processed in this analysis' },
-              { label: 'BBB+', value: resultsData.summary.bbb_plus, color: '#ef4444', icon: 'fa-brain', tooltip: 'Blood-Brain Barrier (+): The molecule can penetrate the brain (important for neurological/psychiatric drugs).' },
-              { label: 'BBB−', value: resultsData.summary.bbb_minus, color: '#3b82f6', icon: 'fa-circle-xmark', tooltip: 'Blood-Brain Barrier (-): The molecule cannot penetrate the brain (good to avoid central nervous system side effects in general use drugs).' },
-              { label: 'HIA+', value: resultsData.summary.hia_plus, color: '#10b981', icon: 'fa-pills', tooltip: 'Human Intestinal Absorption (+): High probability of being well absorbed by the intestine (essential for pill format drugs).' },
-              { label: 'PGP+', value: resultsData.summary.pgp_plus, color: '#f59e0b', icon: 'fa-shield-halved', tooltip: 'P-glycoprotein (+): Indicates the molecule interacts with P-glycoprotein, an efflux pump. If it is a PGP substrate, the body will try to expel the drug, reducing its efficacy.' },
+              { label: 'Total Processed', value: currentGroup.summary.total, color: '#6366f1', icon: 'fa-atom', tooltip: 'Total number of molecules processed in this analysis' },
+              { label: 'BBB+', value: currentGroup.summary.bbb_plus, color: '#ef4444', icon: 'fa-brain', tooltip: 'Blood-Brain Barrier (+): The molecule can penetrate the brain.' },
+              { label: 'BBB−', value: currentGroup.summary.bbb_minus, color: '#3b82f6', icon: 'fa-circle-xmark', tooltip: 'Blood-Brain Barrier (-): The molecule cannot penetrate the brain.' },
+              { label: 'HIA+', value: currentGroup.summary.hia_plus, color: '#10b981', icon: 'fa-pills', tooltip: 'Human Intestinal Absorption (+): High probability of being absorbed by the intestine.' },
+              { label: 'PGP+', value: currentGroup.summary.pgp_plus, color: '#f59e0b', icon: 'fa-shield-halved', tooltip: 'P-glycoprotein (+): Molecule interacts with P-glycoprotein efflux pump.' },
             ].map(card => (
               <div key={card.label} title={card.tooltip ?? ''} style={{
                 backgroundColor: '#fff',
@@ -1128,7 +1172,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
             marginBottom: '30px', position: 'relative'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h4 style={{ margin: 0 }}>Detailed Results ({resultsData.rows.length} molecules)</h4>
+              <h4 style={{ margin: 0 }}>Detailed Results — {activeGroup} ({currentGroup.rows.length} molecules)</h4>
               <button
                 id="admet-download-btn"
                 onClick={downloadCsv}
@@ -1153,7 +1197,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                      {resultsData.headers.map(h => {
+                      {currentGroup.headers.map(h => {
                         let tooltip = "";
                         if (h === "MW") tooltip = "Molecular Weight: Very heavy molecules (usually > 500 Da) have more difficulty being absorbed by the body.";
                         else if (h === "WLOGP") tooltip = "Partition Coefficient: A measure of lipophilicity. Balanced values are ideal for the drug to cross lipid cell membranes but also dissolve in aqueous blood.";
@@ -1172,13 +1216,13 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                     </tr>
                   </thead>
                   <tbody>
-                    {resultsData.rows.map((row, i) => (
+                    {currentGroup.rows.map((row, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #f9f9f9', transition: 'background 0.15s' }}
                         onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#fafafe')}
                         onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                       >
                         {row.map((cell: any, j: number) => {
-                          const header = resultsData.headers[j];
+                          const header = currentGroup.headers[j];
                           let badgeColor = '';
                           if (cell === 'BBB+') badgeColor = '#ef4444';
                           else if (cell === 'BBB-') badgeColor = '#3b82f6';
@@ -1199,7 +1243,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                                   : header === 'molecule_chembl_id'
                                     ? <button 
                                         title="Click to view 2D/3D structure"
-                                        onClick={() => openMoleculeModal(cell, row[resultsData.headers.indexOf('canonical_smiles')])}
+                                        onClick={() => openMoleculeModal(cell, row[currentGroup.headers.indexOf('canonical_smiles')])}
                                         style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: 0, fontWeight: 'bold', textDecoration: 'underline' }}
                                       >{cell}</button>
                                     : cell
@@ -1213,7 +1257,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                 </table>
               </div>
               
-              {!isTableExpanded && resultsData.rows.length > 5 && (
+              {!isTableExpanded && currentGroup.rows.length > 5 && (
                 <div style={{
                   position: 'absolute',
                   bottom: 0, left: 0, right: 0, height: '150px',
@@ -1248,9 +1292,9 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h4 
                   style={{ color: '#555', margin: 0, cursor: 'help' }}
-                  title="BOILED-Egg (Brain Or IntestinaL EstimateD permeation) is a predictive model that uses lipophilicity (WLOGP) and polarity (TPSA) to simultaneously predict gastrointestinal absorption (HIA - white region) and blood-brain barrier penetration (BBB - yellow region)."
+                  title="BOILED-Egg: lipophilicity (WLOGP) vs. polarity (TPSA). Yellow = BBB+, White = HIA+."
                 >
-                  BOILED-Egg Plot <i className="fas fa-info-circle" style={{ fontSize: '0.8rem', opacity: 0.7, marginLeft: '5px' }}></i>
+                  BOILED-Egg Plots (MOLS / SIMS / FULL) <i className="fas fa-info-circle" style={{ fontSize: '0.8rem', opacity: 0.7, marginLeft: '5px' }}></i>
                 </h4>
                 <button
                   onClick={downloadAllImages}
@@ -1336,7 +1380,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
       )}
 
       {/* No results yet message */}
-      {!loadingResults && !resultsData && !isRunning && (
+      {!loadingResults && groups.length === 0 && !isRunning && (
         <div style={{
           textAlign: 'center', padding: '50px 20px',
           backgroundColor: '#f8f9fa', borderRadius: '12px',

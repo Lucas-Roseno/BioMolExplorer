@@ -8,7 +8,17 @@ PhD research 2023~2026
 @info
     ADMETWrapper orchestrates molecule loading, property calculation, toxicity
     filtering, classification (BBB/HIA/PGP), result export, and BOILED-Egg plot
-    generation for a given ChEMBL target dataset.
+    generation.
+
+    Input convention (aligned with the professor's pipeline):
+        ChEMBL/DrugBank/{Target}_MOLS.csv   — unique molecules from bioactivity
+        ChEMBL/DrugBank/{Target}_SIMS.csv   — similar molecules
+        ChEMBL/DrugBank/{Target}_FULL.csv   — union of MOLS + SIMS
+
+    Output:
+        ChEMBL/DrugBank/ADMET/{Target}_MOLS.csv  (+sub-CSVs +egg plot)
+        ChEMBL/DrugBank/ADMET/{Target}_SIMS.csv  (+sub-CSVs +egg plot)
+        ChEMBL/DrugBank/ADMET/{Target}_FULL.csv  (+sub-CSVs +egg plot)
 
 @authors
    - Michel Pires da Silva (michel@cefetmg.br)
@@ -18,100 +28,114 @@ PhD research 2023~2026
 @date 2023-2026
 @copyright MIT License
 """
-#----------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 import os
 import glob
 import pandas as pd
-#----------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 
-#----------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 from caad.admet import MoleculeEvaluator, BoiledEggPlotter
-#----------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+
+# The three group suffixes that the DrugBank crawler generates.
+_GROUPS = ("MOLS", "SIMS", "FULL")
 
 
 class ADMETWrapper:
     """
-    Orchestrates the full ADMET analysis pipeline for a ChEMBL target.
+    Orchestrates the full ADMET analysis pipeline for a ChEMBL target,
+    processing the three consolidated DrugBank files (MOLS, SIMS, FULL).
 
     Args:
-        base_input_path:  Absolute path to the directory containing the input CSV(s).
-        base_output_path: Absolute path to the directory where results will be saved.
-        input_file:       Optional — specific CSV filename (without extension) to process.
-                          If None, all CSVs in base_input_path are processed.
-        verbose:          If True, prints a summary to stdout after each file.
+        drugbank_path:    Absolute path to the DrugBank directory
+                          (contains {Target}_MOLS.csv / _SIMS.csv / _FULL.csv).
+        output_path:      Absolute path where ADMET results will be saved.
+        target:           Target name exactly as used in the CSV filename
+                          prefix (e.g. "Acetylcholinesterase").
+        verbose:          If True, prints a per-file summary to stdout.
     """
 
-    def __init__(self, base_input_path: str, base_output_path: str,
-                 input_file: str | None = None, verbose: bool = False):
-        self.base_input_path  = base_input_path
-        self.base_output_path = base_output_path
-        self.verbose          = verbose
+    def __init__(
+        self,
+        drugbank_path: str,
+        output_path: str,
+        target: str,
+        verbose: bool = False,
+    ):
+        self.drugbank_path = drugbank_path
+        self.output_path   = output_path
+        self.target        = target
+        self.verbose       = verbose
 
-        os.makedirs(self.base_output_path, exist_ok=True)
+        os.makedirs(self.output_path, exist_ok=True)
 
-        self.csv_files    = self._resolve_input_files(input_file)
-        self.evaluator    = MoleculeEvaluator()
-        self.excluded_count = 0
+        self.evaluator = MoleculeEvaluator()
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _resolve_input_files(self, input_file: str | None) -> list[str]:
-        """Returns the list of CSV basenames (without extension) to process."""
-        if input_file is not None:
-            return [input_file]
+    def _resolve_group_files(self) -> list[tuple[str, str]]:
+        """
+        Returns a list of (group_suffix, full_csv_path) for each DrugBank
+        group file that exists for this target.
 
-        pattern = os.path.join(self.base_input_path, '*.csv')
-        found   = glob.glob(pattern)
+        Raises FileNotFoundError if no group file is found at all.
+        """
+        found = []
+        for suffix in _GROUPS:
+            path = os.path.join(
+                self.drugbank_path, f"{self.target}_{suffix}.csv"
+            )
+            if os.path.isfile(path):
+                found.append((suffix, path))
+
         if not found:
             raise FileNotFoundError(
-                f"No CSV files found in: {self.base_input_path}"
+                f"No DrugBank group files found for target '{self.target}' "
+                f"in {self.drugbank_path}. "
+                f"Expected files like '{self.target}_MOLS.csv'."
             )
-        return [os.path.splitext(os.path.basename(f))[0] for f in found]
+        return found
 
-    def _load_data(self, filename: str) -> pd.DataFrame:
+    def _load_group(self, csv_path: str) -> pd.DataFrame:
         """
-        Loads a CSV and normalises it to only expose the columns needed for ADMET.
+        Loads a DrugBank group CSV and normalises it to
+        [molecule_chembl_id, canonical_smiles].
 
-        The ChEMBL crawler stores molecules in their raw API format, where
-        `canonical_smiles` is nested inside the `molecule_structures` column as a
-        serialised dict string.  This method handles both:
-
-          1. Raw format  — columns: molecule_chembl_id, molecule_structures (dict str)
-          2. Clean format — columns: molecule_chembl_id, canonical_smiles (plain str)
+        DrugBank CSVs already have a top-level 'canonical_smiles' column
+        (generated by the crawler wrapper), so no dict-parsing is needed.
         """
-        import ast
+        df = pd.read_csv(csv_path)
 
-        path = os.path.join(self.base_input_path, filename + '.csv')
-        df   = pd.read_csv(path)
+        if "canonical_smiles" in df.columns:
+            df = df[["molecule_chembl_id", "canonical_smiles"]].copy()
+            df.dropna(subset=["canonical_smiles"], inplace=True)
+            return df
 
-        # ── Case 1: already has canonical_smiles ──────────────────────────────
-        if 'canonical_smiles' in df.columns:
-            return df[['molecule_chembl_id', 'canonical_smiles']].copy()
+        # Fallback: raw ChEMBL format with molecule_structures dict
+        if "molecule_structures" in df.columns:
+            import ast
 
-        # ── Case 2: raw ChEMBL format, SMILES nested in molecule_structures ──
-        if 'molecule_structures' in df.columns:
-            def _extract_smiles(cell) -> str | None:
+            def _extract(cell) -> str | None:
                 try:
                     if pd.isna(cell):
                         return None
                     d = ast.literal_eval(cell) if isinstance(cell, str) else cell
-                    return d.get('canonical_smiles') if isinstance(d, dict) else None
+                    return d.get("canonical_smiles") if isinstance(d, dict) else None
                 except Exception:
                     return None
 
-            df['canonical_smiles'] = df['molecule_structures'].apply(_extract_smiles)
-            df = df[['molecule_chembl_id', 'canonical_smiles']].copy()
-            df.dropna(subset=['canonical_smiles'], inplace=True)
+            df["canonical_smiles"] = df["molecule_structures"].apply(_extract)
+            df = df[["molecule_chembl_id", "canonical_smiles"]].copy()
+            df.dropna(subset=["canonical_smiles"], inplace=True)
             return df
 
-        # ── Neither column found ──────────────────────────────────────────────
         raise ValueError(
-            f"CSV '{filename}.csv' has neither 'canonical_smiles' nor "
-            f"'molecule_structures' column. Columns found: {list(df.columns)}"
+            f"CSV '{csv_path}' has neither 'canonical_smiles' nor "
+            f"'molecule_structures' column. Found: {list(df.columns)}"
         )
-
 
     # ------------------------------------------------------------------
     # Pipeline
@@ -119,80 +143,85 @@ class ADMETWrapper:
 
     def run_pipeline(self) -> dict:
         """
-        Runs the full ADMET pipeline for all resolved input files.
+        Runs the full ADMET pipeline for the three DrugBank groups
+        (MOLS, SIMS, FULL).
 
         Returns:
-            A summary dict with counts per file and totals.
+            A summary dict with per-group counts and overall totals.
         """
+        group_files = self._resolve_group_files()
+
         summary = {
-            'files_processed': [],
-            'total_input': 0,
-            'total_processed': 0,
-            'total_excluded': 0,
+            "target":          self.target,
+            "groups":          [],
+            "total_input":     0,
+            "total_processed": 0,
+            "total_excluded":  0,
         }
 
-        for filename in self.csv_files:
-            df_input = self._load_data(filename)
-
-            rows = []
-            self.excluded_count = 0
+        for suffix, csv_path in group_files:
+            df_input       = self._load_group(csv_path)
+            rows           = []
+            excluded_count = 0
 
             for _, row in df_input.iterrows():
-                smiles = row['canonical_smiles']
-                name   = row['molecule_chembl_id']
+                smiles = row["canonical_smiles"]
+                name   = row["molecule_chembl_id"]
 
                 props = self.evaluator.calculate_properties(smiles)
                 if props is None:
-                    self.excluded_count += 1
+                    excluded_count += 1
                     continue
 
                 # Toxicology filter
-                if self.evaluator.is_toxic(props['Mol']):
-                    self.excluded_count += 1
+                if self.evaluator.is_toxic(props["Mol"]):
+                    excluded_count += 1
                     continue
 
-                tpsa, logp, mw = props['TPSA'], props['WLOGP'], props['MW']
-                hbd, hba, rb   = props['HBD'], props['HBA'], props['RB']
+                tpsa, logp, mw = props["TPSA"], props["WLOGP"], props["MW"]
+                hbd, hba, rb   = props["HBD"],  props["HBA"],   props["RB"]
 
                 bbb = self.evaluator.classify_bbb(tpsa, logp, mw, hbd, rb)
                 hia = self.evaluator.classify_hia(tpsa, logp)
                 pgp = self.evaluator.predict_pgp(mw, tpsa, logp, hbd)
 
                 rows.append({
-                    'canonical_smiles':   smiles,
-                    'molecule_chembl_id': name,
-                    'TPSA':  round(tpsa, 2),
-                    'WLOGP': round(logp, 2),
-                    'MW':    round(mw,   2),
-                    'HBD':   hbd,
-                    'HBA':   hba,
-                    'RB':    rb,
-                    'BBB':   bbb,
-                    'HIA':   hia,
-                    'PGP':   pgp,
+                    "canonical_smiles":   smiles,
+                    "molecule_chembl_id": name,
+                    "TPSA":  round(tpsa, 2),
+                    "WLOGP": round(logp, 2),
+                    "MW":    round(mw,   2),
+                    "HBD":   hbd,
+                    "HBA":   hba,
+                    "RB":    rb,
+                    "BBB":   bbb,
+                    "HIA":   hia,
+                    "PGP":   pgp,
                 })
 
-            results = pd.DataFrame(rows)
-            self._export_results(results, filename)
-            self._generate_plot(results, filename)
+            results       = pd.DataFrame(rows)
+            out_basename  = f"{self.target}_{suffix}"
 
-            file_summary = {
-                'file':           filename,
-                'input':          len(df_input),
-                'processed':      len(results),
-                'excluded':       self.excluded_count,
-                'bbb_plus':       int((results['BBB'] == 'BBB+').sum()) if not results.empty else 0,
-                'bbb_minus':      int((results['BBB'] == 'BBB-').sum()) if not results.empty else 0,
-                'hia_plus':       int((results['HIA'] == 'HIA+').sum()) if not results.empty else 0,
-                'pgp_plus':       int((results['PGP'] == 'PGP+').sum()) if not results.empty else 0,
+            self._export_results(results, out_basename)
+            self._generate_plot(results, out_basename)
+
+            group_summary = {
+                "group":     suffix,
+                "input":     len(df_input),
+                "processed": len(results),
+                "excluded":  excluded_count,
+                "bbb_plus":  int((results["BBB"] == "BBB+").sum()) if not results.empty else 0,
+                "bbb_minus": int((results["BBB"] == "BBB-").sum()) if not results.empty else 0,
+                "hia_plus":  int((results["HIA"] == "HIA+").sum()) if not results.empty else 0,
+                "pgp_plus":  int((results["PGP"] == "PGP+").sum()) if not results.empty else 0,
             }
-            summary['files_processed'].append(file_summary)
-            summary['total_input']     += file_summary['input']
-            summary['total_processed'] += file_summary['processed']
-            summary['total_excluded']  += file_summary['excluded']
+            summary["groups"].append(group_summary)
+            summary["total_input"]     += group_summary["input"]
+            summary["total_processed"] += group_summary["processed"]
+            summary["total_excluded"]  += group_summary["excluded"]
 
             if self.verbose:
-                self._print_summary(file_summary)
+                self._print_summary(group_summary)
 
         return summary
 
@@ -200,46 +229,44 @@ class ADMETWrapper:
     # Export & Plot
     # ------------------------------------------------------------------
 
-    def _export_results(self, results: pd.DataFrame, filename: str) -> None:
+    def _export_results(self, results: pd.DataFrame, basename: str) -> None:
         """Saves the main results CSV plus filtered sub-CSVs."""
         if results.empty:
             return
 
-        main_path = os.path.join(self.base_output_path, filename + '.csv')
+        main_path = os.path.join(self.output_path, basename + ".csv")
         results.to_csv(main_path, index=False)
 
-        # Filtered sub-exports
         filters = [
-            ('BBB=="BBB+"', filename + '_BBB+'),
-            ('BBB=="BBB-"', filename + '_BBB-'),
-            ('HIA=="HIA+"', filename + '_HIA+'),
+            ('BBB=="BBB+"', basename + "_BBB+"),
+            ('BBB=="BBB-"', basename + "_BBB-"),
+            ('HIA=="HIA+"', basename + "_HIA+"),
         ]
         for query, out_name in filters:
-            subset = results.query(query)[['canonical_smiles', 'molecule_chembl_id']]
+            subset = results.query(query)[["canonical_smiles", "molecule_chembl_id"]]
             if not subset.empty:
                 subset.to_csv(
-                    os.path.join(self.base_output_path, out_name + '.csv'),
-                    index=False
+                    os.path.join(self.output_path, out_name + ".csv"),
+                    index=False,
                 )
 
-    def _generate_plot(self, results: pd.DataFrame, filename: str) -> None:
+    def _generate_plot(self, results: pd.DataFrame, basename: str) -> None:
         """Renders and saves the BOILED-Egg plot."""
         if results.empty:
             return
         BoiledEggPlotter.plot(
             df=results,
-            output_path=self.base_output_path,
-            output_image_file=filename + '_egg.png'
+            output_path=self.output_path,
+            output_image_file=basename + "_egg.png",
         )
 
     @staticmethod
     def _print_summary(s: dict) -> None:
-        print('\n========== ADMET SUMMARY ==========')
-        print(f"File       : {s['file']}")
-        print(f"Input mols : {s['input']}")
+        print(f"\n========== ADMET SUMMARY — {s['group']} ==========")
+        print(f"Input      : {s['input']}")
         print(f"Excluded   : {s['excluded']}")
         print(f"Processed  : {s['processed']}")
         print(f"BBB+       : {s['bbb_plus']}")
         print(f"BBB-       : {s['bbb_minus']}")
         print(f"HIA+       : {s['hia_plus']}")
-        print('====================================\n')
+        print("=" * 50 + "\n")

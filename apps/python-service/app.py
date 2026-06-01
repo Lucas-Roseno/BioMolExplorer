@@ -35,7 +35,8 @@ PDB_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'PDB')
 CHEMBL_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL')
 JSON_CRAWLERS_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'src', 'scripts', 'crawlers')
 ZINC_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ZINC')
-ADMET_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ADMET')
+DRUGBANK_PATH    = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank')
+ADMET_BASE_PATH  = os.path.join(DRUGBANK_PATH, 'ADMET')
 
 # --- PDB functions ---
 @app.route('/load_pdb', methods=['POST'])
@@ -607,11 +608,39 @@ def delete_chembl_target():
     if '..' in target: return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
     try:
         deleted_something = False
-        for sub_dir_name in ['molecules', 'similars']:
+        # 1. Delete main ChEMBL folders
+        for sub_dir_name in ['molecules', 'similars', 'bioactivity']:
             target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
             if os.path.isdir(target_dir):
                 shutil.rmtree(target_dir)
                 deleted_something = True
+                
+        # 2. Delete DrugBank consolidated files
+        for suffix in ['_MOLS.csv', '_SIMS.csv', '_FULL.csv']:
+            drugbank_file = os.path.join(DRUGBANK_PATH, f"{target}{suffix}")
+            if os.path.exists(drugbank_file):
+                os.remove(drugbank_file)
+                deleted_something = True
+                
+        # 3. Delete ADMET results
+        if os.path.isdir(ADMET_BASE_PATH):
+            for fname in os.listdir(ADMET_BASE_PATH):
+                if fname.startswith(f"{target}_") or fname == target:
+                    fpath = os.path.join(ADMET_BASE_PATH, fname)
+                    if os.path.isdir(fpath):
+                        shutil.rmtree(fpath)
+                    else:
+                        os.remove(fpath)
+                    deleted_something = True
+                    
+        # 4. Delete Graph Cache
+        maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
+        if os.path.isdir(maxcomp_dir):
+            for fname in os.listdir(maxcomp_dir):
+                if fname.startswith(f"Tanimoto_morgan_{target}_"):
+                    os.remove(os.path.join(maxcomp_dir, fname))
+                    deleted_something = True
+
         if deleted_something:
             return jsonify({'status': 'success', 'message': f'Target "{target}" deleted successfully'})
         else:
@@ -647,12 +676,18 @@ def delete_chembl():
             search_dirs = [
                 os.path.join(CHEMBL_BASE_PATH, 'molecules', target),
                 os.path.join(CHEMBL_BASE_PATH, 'similars', target),
-                os.path.join(CHEMBL_BASE_PATH, 'bioactivity', target)
+                os.path.join(CHEMBL_BASE_PATH, 'bioactivity', target),
+                DRUGBANK_PATH,
+                ADMET_BASE_PATH
             ]
             
             for directory in search_dirs:
                 if os.path.exists(directory) and os.path.isdir(directory):
                     for filename in os.listdir(directory):
+                        # Optimize for DrugBank and ADMET: only check files related to the target
+                        if directory in [DRUGBANK_PATH, ADMET_BASE_PATH] and not filename.startswith(f"{target}_"):
+                            continue
+                            
                         if filename.endswith('.csv'):
                             csv_path = os.path.join(directory, filename)
                             try:
@@ -678,6 +713,16 @@ def delete_chembl():
             target_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
             if os.path.exists(target_path) and not os.listdir(target_path):
                  os.rmdir(target_path) 
+                 
+            # 3. Delete Graph Cache to force re-generation without the deleted molecule
+            maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
+            if os.path.isdir(maxcomp_dir):
+                for fname in os.listdir(maxcomp_dir):
+                    if fname.startswith(f"Tanimoto_morgan_{target}_"):
+                        try:
+                            os.remove(os.path.join(maxcomp_dir, fname))
+                        except Exception:
+                            pass
             
             return jsonify({'status': 'success', 'message': f'{csv_file} and all its references deleted successfully'})
         else:
@@ -1439,8 +1484,16 @@ def download_redocking_csv(target):
 # Dictionary to store ADMET task logs
 admet_task_logs = {}
 
-def admet_worker(task_id: str, target: str, input_file: str | None):
-    """Background worker that runs the ADMET pipeline for a given ChEMBL target."""
+def admet_worker(task_id: str, target: str, input_file: str | None = None):
+    """Background worker that runs the ADMET pipeline for a given ChEMBL target.
+
+    Reads the three consolidated DrugBank files:
+        {DRUGBANK_PATH}/{target}_MOLS.csv
+        {DRUGBANK_PATH}/{target}_SIMS.csv
+        {DRUGBANK_PATH}/{target}_FULL.csv
+
+    Writes results to {ADMET_BASE_PATH}/ (= DrugBank/ADMET/).
+    """
     log_stream = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
 
@@ -1472,21 +1525,25 @@ def admet_worker(task_id: str, target: str, input_file: str | None):
         active_tasks[task_id] = {'status': 'running', 'message': f'Running ADMET for {target}...'}
         admet_task_logs[task_id] = ''
 
-        # Input: molecules/{target}/ folder inside ChEMBL datasets
-        input_path  = os.path.join(CHEMBL_BASE_PATH, 'molecules', target)
-        output_path = os.path.join(ADMET_BASE_PATH, target)
-
-        if not os.path.isdir(input_path):
+        # Verify that at least one DrugBank group file exists for this target
+        found_any = any(
+            os.path.isfile(os.path.join(DRUGBANK_PATH, f"{target}_{sfx}.csv"))
+            for sfx in ('MOLS', 'SIMS', 'FULL')
+        )
+        if not found_any:
             raise FileNotFoundError(
-                f"No ChEMBL molecules found for target '{target}'. "
-                f"Please download data from the ChEMBL page first."
+                f"No DrugBank group files found for target '{target}'. "
+                f"Expected files like '{target}_MOLS.csv' in {DRUGBANK_PATH}. "
+                f"Please download ChEMBL data first."
             )
 
+        output_path = ADMET_BASE_PATH
+
         wrapper = ADMETWrapper(
-            base_input_path=input_path,
-            base_output_path=output_path,
-            input_file=input_file,
-            verbose=True
+            drugbank_path=DRUGBANK_PATH,
+            output_path=output_path,
+            target=target,
+            verbose=True,
         )
         summary = wrapper.run_pipeline()
 
@@ -1506,9 +1563,8 @@ def admet_worker(task_id: str, target: str, input_file: str | None):
 @app.route('/api/admet/run', methods=['POST'])
 def run_admet_task():
     """Starts an async ADMET analysis for the given ChEMBL target."""
-    data       = request.json or {}
-    target     = data.get('target')
-    input_file = data.get('input_file')  # Optional — specific CSV basename
+    data   = request.json or {}
+    target = data.get('target')
 
     if not target:
         return jsonify({'status': 'error', 'message': 'target is required'}), 400
@@ -1516,7 +1572,7 @@ def run_admet_task():
         return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
 
     task_id = str(uuid.uuid4())
-    thread  = threading.Thread(target=admet_worker, args=(task_id, target, input_file))
+    thread  = threading.Thread(target=admet_worker, args=(task_id, target, None))
     thread.start()
 
     return jsonify({'status': 'success', 'task_id': task_id})
@@ -1532,81 +1588,88 @@ def get_admet_status(task_id):
 
 @app.route('/api/admet/results', methods=['GET'])
 def list_admet_results():
-    """Lists ChEMBL targets that have completed ADMET results."""
-    results = []
+    """Lists targets that have completed ADMET results in DrugBank/ADMET/."""
+    results = set()
     if not os.path.isdir(ADMET_BASE_PATH):
         return jsonify([])
 
-    for target_dir in sorted(os.listdir(ADMET_BASE_PATH)):
-        target_path = os.path.join(ADMET_BASE_PATH, target_dir)
-        if os.path.isdir(target_path):
-            has_csv = any(f.endswith('.csv') for f in os.listdir(target_path))
-            if has_csv:
-                results.append(target_dir)
+    for fname in os.listdir(ADMET_BASE_PATH):
+        if fname.endswith('.csv'):
+            # Strip the group suffix to get the target name
+            for sfx in ('_MOLS.csv', '_SIMS.csv', '_FULL.csv'):
+                if fname.endswith(sfx):
+                    results.add(fname[: -len(sfx)])
+                    break
 
-    return jsonify(results)
+    return jsonify(sorted(results))
 
 
 @app.route('/api/admet/csv/<target>', methods=['GET'])
 def get_admet_csv(target):
-    """Returns ADMET results table for a given target."""
+    """
+    Returns ADMET results for a given target, broken down by group
+    (MOLS, SIMS, FULL).  Each group has its own headers, rows, and summary.
+
+    Response shape:
+    {
+      "status": "success",
+      "groups": [
+        {
+          "group": "MOLS",
+          "headers": [...],
+          "rows": [[...], ...],
+          "summary": {"total": N, "bbb_plus": N, ...}
+        },
+        ...
+      ]
+    }
+    """
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
-    target_dir = os.path.join(ADMET_BASE_PATH, target)
-    if not os.path.isdir(target_dir):
+    if not os.path.isdir(ADMET_BASE_PATH):
+        return jsonify({'status': 'error', 'message': 'No ADMET results found'}), 404
+
+    groups = []
+    for suffix in ('MOLS', 'SIMS', 'FULL'):
+        csv_path = os.path.join(ADMET_BASE_PATH, f"{target}_{suffix}.csv")
+        if not os.path.isfile(csv_path):
+            continue
+        try:
+            df = pd.read_csv(csv_path)
+            if df.empty:
+                continue
+            summary = {
+                'total':     len(df),
+                'bbb_plus':  int((df['BBB'] == 'BBB+').sum()),
+                'bbb_minus': int((df['BBB'] == 'BBB-').sum()),
+                'hia_plus':  int((df['HIA'] == 'HIA+').sum()),
+                'pgp_plus':  int((df['PGP'] == 'PGP+').sum()),
+            }
+            groups.append({
+                'group':   suffix,
+                'headers': df.columns.tolist(),
+                'rows':    df.values.tolist(),
+                'summary': summary,
+            })
+        except Exception as e:
+            print(f"Error reading {csv_path}: {e}")
+
+    if not groups:
         return jsonify({'status': 'error', 'message': 'No ADMET results found for this target'}), 404
 
-    # Find the main results CSV (not the filtered sub-CSVs like _BBB+, _BBB-, _HIA+)
-    csv_files = [
-        f for f in os.listdir(target_dir)
-        if f.endswith('.csv')
-        and not f.endswith('_BBB+.csv')
-        and not f.endswith('_BBB-.csv')
-        and not f.endswith('_HIA+.csv')
-    ]
-    if not csv_files:
-        return jsonify({'status': 'error', 'message': 'Results CSV not found'}), 404
-
-    try:
-        dfs = []
-        for f in csv_files:
-            csv_path = os.path.join(target_dir, f)
-            try:
-                temp_df = pd.read_csv(csv_path)
-                if not temp_df.empty:
-                    dfs.append(temp_df)
-            except Exception as read_e:
-                print(f"Error reading {f}: {read_e}")
-                
-        if not dfs:
-            return jsonify({'status': 'error', 'message': 'All CSVs are empty or invalid'}), 404
-            
-        df = pd.concat(dfs, ignore_index=True)
-        headers = df.columns.tolist()
-        rows    = df.values.tolist()
-        # Compute summary counts for the frontend cards
-        summary = {
-            'total':     len(df),
-            'bbb_plus':  int((df['BBB'] == 'BBB+').sum()),
-            'bbb_minus': int((df['BBB'] == 'BBB-').sum()),
-            'hia_plus':  int((df['HIA'] == 'HIA+').sum()),
-            'pgp_plus':  int((df['PGP'] == 'PGP+').sum()),
-        }
-        return jsonify({'status': 'success', 'headers': headers, 'rows': rows, 'summary': summary})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    return jsonify({'status': 'success', 'groups': groups})
 
 
 @app.route('/api/admet/plot/<target>/<filename>', methods=['GET'])
 def get_admet_plot(target, filename):
-    """Serves a BOILED-Egg PNG plot for the given target."""
+    """Serves a BOILED-Egg PNG plot for the given target from DrugBank/ADMET/."""
     if '..' in target or '..' in filename:
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
     if not filename.endswith('.png'):
         return jsonify({'status': 'error', 'message': 'Only PNG files are served'}), 400
 
-    file_path = os.path.join(ADMET_BASE_PATH, target, filename)
+    file_path = os.path.join(ADMET_BASE_PATH, filename)
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'Plot not found'}), 404
 
@@ -1615,61 +1678,56 @@ def get_admet_plot(target, filename):
 
 @app.route('/api/admet/plots/<target>', methods=['GET'])
 def list_admet_plots(target):
-    """Lists available BOILED-Egg PNG plots for a given target."""
+    """Lists available BOILED-Egg PNG plots for a given target from DrugBank/ADMET/."""
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
-    target_dir = os.path.join(ADMET_BASE_PATH, target)
-    if not os.path.isdir(target_dir):
+    if not os.path.isdir(ADMET_BASE_PATH):
         return jsonify([])
 
-    plots = sorted([f for f in os.listdir(target_dir) if f.endswith('_egg.png')])
+    plots = sorted([
+        f for f in os.listdir(ADMET_BASE_PATH)
+        if f.startswith(target) and f.endswith('_egg.png')
+    ])
     return jsonify(plots)
 
 
-@app.route('/api/admet/download/<target>', methods=['GET'])
-def download_admet_csv(target):
-    """Downloads the main ADMET results CSV for a given target."""
-    if '..' in target:
-        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
+@app.route('/api/admet/download/<target>/<group>', methods=['GET'])
+def download_admet_csv(target, group):
+    """Downloads a specific ADMET group CSV (MOLS, SIMS, or FULL) for a given target."""
+    if '..' in target or '..' in group:
+        return jsonify({'status': 'error', 'message': 'Invalid target or group'}), 400
+    if group not in ('MOLS', 'SIMS', 'FULL'):
+        return jsonify({'status': 'error', 'message': 'group must be MOLS, SIMS, or FULL'}), 400
 
-    target_dir = os.path.join(ADMET_BASE_PATH, target)
-    if not os.path.isdir(target_dir):
-        return jsonify({'status': 'error', 'message': 'No ADMET results for this target'}), 404
-
-    csv_files = [
-        f for f in os.listdir(target_dir)
-        if f.endswith('.csv')
-        and not f.endswith('_BBB+.csv')
-        and not f.endswith('_BBB-.csv')
-        and not f.endswith('_HIA+.csv')
-    ]
-    if not csv_files:
+    csv_path = os.path.join(ADMET_BASE_PATH, f"{target}_{group}.csv")
+    if not os.path.isfile(csv_path):
         return jsonify({'status': 'error', 'message': 'Results CSV not found'}), 404
 
     return send_file(
-        os.path.join(target_dir, csv_files[0]),
+        csv_path,
         as_attachment=True,
-        download_name=f'admet_results_{target}.csv'
+        download_name=f'admet_{target}_{group}.csv'
     )
 
 
 @app.route('/api/admet/available-targets', methods=['GET'])
 def list_admet_available_targets():
-    """Lists ChEMBL targets that HAVE molecules downloaded (eligible for ADMET analysis)."""
-    targets = []
-    molecules_dir = os.path.join(CHEMBL_BASE_PATH, 'molecules')
-    if not os.path.isdir(molecules_dir):
+    """
+    Lists targets eligible for ADMET analysis — those that have at least one
+    DrugBank group file (_MOLS.csv / _SIMS.csv / _FULL.csv) in DRUGBANK_PATH.
+    """
+    if not os.path.isdir(DRUGBANK_PATH):
         return jsonify([])
 
-    for target_dir in sorted(os.listdir(molecules_dir)):
-        target_path = os.path.join(molecules_dir, target_dir)
-        if os.path.isdir(target_path):
-            has_csv = any(f.endswith('.csv') for f in os.listdir(target_path))
-            if has_csv:
-                targets.append(target_dir)
+    targets = set()
+    for fname in os.listdir(DRUGBANK_PATH):
+        for sfx in ('_MOLS.csv', '_SIMS.csv', '_FULL.csv'):
+            if fname.endswith(sfx):
+                targets.add(fname[: -len(sfx)])
+                break
 
-    return jsonify(targets)
+    return jsonify(sorted(targets))
 
 
 if __name__ == '__main__':

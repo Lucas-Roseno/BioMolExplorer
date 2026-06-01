@@ -76,6 +76,20 @@ app.get('/api/analysis/graph-data', async (req, res) => {
   }
 });
 
+app.post('/api/analysis/process-graphs', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/analysis/process-graphs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
 app.get('/api/analysis/plots', async (req, res) => {
   try {
     const response = await fetch(`${PYTHON_URL}/api/analysis/plots`);

@@ -1,0 +1,7 @@
+
+# Arquivos e pastas pesadas ignoradas
+datasets/
+resultados/
+logs/
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,3 @@
+[submodule "apps/python-service/BioMolExplorer"]
+	path = apps/python-service/BioMolExplorer
+	url = git@github.com:Lucas-Roseno/BioMolExplorer.git

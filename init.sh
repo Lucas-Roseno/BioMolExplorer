@@ -12,6 +12,11 @@ else
     echo "Aviso: Script do Conda não encontrado em $CONDA_BASE. Continuando com ambiente global..."
 fi
 
+echo "Limpando instâncias antigas dos serviços..."
+# Libera as portas 3001 e 5000 se houver algo rodando de uma execução anterior
+lsof -t -i:3001 | xargs -r kill -9 2>/dev/null || true
+lsof -t -i:5000 | xargs -r kill -9 2>/dev/null || true
+
 echo "Iniciando os 3 serviços (Produção)..."
 
 # 1. Inicia a API Node.js em background (porta 3001 interna)
@@ -34,18 +39,37 @@ timeout 60 bash -c 'until curl -s http://localhost:5000/pdb_files > /dev/null; d
 
 echo "Serviços de background prontos! Iniciando Servidor Web..."
 
-# 3. Inicia o Next.js via Standalone Server (Porta 3000)
+# 3. Inicia o Next.js via Standalone Server
 # Isso é MUITO mais rápido e eficiente que o 'npm start'
 export HOSTNAME="0.0.0.0"
-export PORT=${PORT:-3000}
+
+# Procura a primeira porta livre começando pela configurada (padrão 3000)
+START_PORT=${PORT:-3000}
+while ss -lntu | grep -qw ":$START_PORT" || lsof -i :$START_PORT > /dev/null 2>&1; do
+    echo "A porta $START_PORT já está em uso, tentando a porta $((START_PORT+1))..."
+    START_PORT=$((START_PORT+1))
+done
+
+export PORT=$START_PORT
+echo "Iniciando Servidor Web na porta $PORT..."
 
 # Verifica se o standalone existe, caso contrário usa o modo padrão
-if [ -f "apps/web/.next/standalone/server.js" ]; then
+if [ -f "apps/web/.next/standalone/apps/web/server.js" ]; then
+    echo "Executando via Next.js Standalone (Monorepo)..."
+    # O modo Standalone do Next.js exige que copiemos a pasta static e public manualmente para que o CSS funcione
+    cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/ 2>/dev/null || true
+    cp -r apps/web/public apps/web/.next/standalone/apps/web/ 2>/dev/null || true
+    
+    # É necessário entrar na pasta para o standalone rodar corretamente
+    cd apps/web/.next/standalone/apps/web && node server.js
+elif [ -f "apps/web/.next/standalone/server.js" ]; then
     echo "Executando via Next.js Standalone..."
-    node apps/web/.next/standalone/server.js
-elif [ -f "apps/web/.next/standalone/apps/web/server.js" ]; then
-    # Estrutura comum em monorepos
-    node apps/web/.next/standalone/apps/web/server.js
+    # O modo Standalone do Next.js exige que copiemos a pasta static e public manualmente para que o CSS funcione
+    cp -r apps/web/.next/static apps/web/.next/standalone/.next/ 2>/dev/null || true
+    cp -r apps/web/public apps/web/.next/standalone/ 2>/dev/null || true
+    
+    # É necessário entrar na pasta para o standalone rodar corretamente
+    cd apps/web/.next/standalone && node server.js
 else
     echo "Standalone não encontrado. Tentando npm start..."
     npm start --workspace=web

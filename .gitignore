@@ -14,3 +14,7 @@ apps/desktop/wrapper/node_modules/
 apps/desktop/BioMolExplorer-Launcher/*.tar
 apps/desktop/BioMolExplorer-Launcher-*.zip
 apps/desktop/BioMolExplorer-Launcher-linux
+# Repositório do professor clonado na raiz (não faz parte do projeto monorepo)
+BioMolExplorer/
+# Backups temporários
+**/BioMolExplorer_bkp/

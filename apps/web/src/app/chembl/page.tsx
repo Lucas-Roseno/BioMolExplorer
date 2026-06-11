@@ -39,6 +39,16 @@ export default function ChemblPage() {
             "The official ChEMBL API servers (EMBL-EBI) are currently experiencing technical difficulties or a temporary outage (HTTP 500).\n\n" +
             "Please try again in a few minutes. If you already have molecules downloaded on other targets, you can still perform Redocking and ADMET analysis on them."
           );
+        } else if (errorMsg.includes('not found in ChEMBL with the provided filters')) {
+          alert(
+            "⚠️ No Results Found\n\n" +
+            "No molecules were found in ChEMBL for the specified target using your current filters.\n\n" +
+            "This usually happens when your search parameters are too restrictive. Try relaxing your filters, such as:\n" +
+            "- Increasing the Max Value (nM)\n" +
+            "- Checking different Standard Types (e.g., IC50, Ki, Inhibition)\n" +
+            "- Increasing the Max Weight\n" +
+            "- Decreasing the Similarity (%)"
+          );
         } else {
           alert(errorMsg || 'Error processing ChEMBL search.');
         }

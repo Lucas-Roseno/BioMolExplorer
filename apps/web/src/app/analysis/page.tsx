@@ -467,14 +467,15 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
   const [activeResultTarget, setActiveResultTarget] = useState<string | null>(null);
   const [resultsData, setResultsData] = useState<{headers: string[], rows: any[]} | null>(null);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
 
   // Fetch PDB targets and existing results
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [targetsRes, resultsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/redocking/targets`),
-          fetch(`${API_BASE_URL}/api/redocking/results`)
+          fetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`)
         ]);
         
         if (targetsRes.ok) {
@@ -534,7 +535,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
               setRunningTaskId(null);
               onTaskEnd();
               // Refresh available results
-              const resultsRes = await fetch(`${API_BASE_URL}/api/redocking/results`);
+              const resultsRes = await fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`);
               if (resultsRes.ok) {
                 const results = await resultsRes.json();
                 setAvailableResults(results);
@@ -736,27 +737,47 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
                 </button>
               </div>
 
+              {/* REDOCKING RESULTS TABLE */}
               {loadingResults ? (
                 <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>Loading result table...</p>
               ) : resultsData ? (
-                <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #eee' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                        {resultsData.headers.map(h => <th key={h} style={{ padding: '12px 15px', textAlign: 'left', color: '#555' }}>{h}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resultsData.rows.map((row, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid #f9f9f9' }}>
-                          {row.map((cell: any, j: number) => <td key={j} style={{ padding: '10px 15px', color: '#666', fontSize: '0.9rem' }}>{cell}</td>)}
+                <div style={{ marginBottom: '40px', position: 'relative' }}>
+                  <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', maxHeight: isTableExpanded ? 'none' : '400px', overflowY: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                        <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
+                          {resultsData.headers.map((h, idx) => <th key={idx} style={{ padding: '14px 16px', textAlign: 'left', color: '#374151', fontWeight: 600, fontSize: '0.95rem' }}>{h}</th>)}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {resultsData.rows.slice(0, isTableExpanded ? resultsData.rows.length : 5).map((row, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                            {row.map((cell: any, j: number) => <td key={j} style={{ padding: '12px 16px', color: '#4b5563', fontSize: '0.9rem' }}>{cell}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {!isTableExpanded && resultsData.rows.length > 5 && (
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0, height: '80px',
+                      background: 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1) 80%)',
+                      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '10px'
+                    }}>
+                      <button onClick={() => setIsTableExpanded(true)} style={{ padding: '8px 16px', backgroundColor: '#fff', color: 'var(--primary-color)', border: '2px solid var(--primary-color)', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
+                        <i className="fas fa-chevron-down"></i> Show more ({resultsData.rows.length - 5} remaining)
+                      </button>
+                    </div>
+                  )}
+                  {isTableExpanded && resultsData.rows.length > 5 && (
+                    <div style={{ textAlign: 'center', marginTop: '15px' }}>
+                      <button onClick={() => setIsTableExpanded(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline' }}>Show less</button>
+                    </div>
+                  )}
                 </div>
               ) : (
-                <p>No result data available for this target.</p>
+                <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>No result data available for this target.</p>
               )}
             </div>
           )}
@@ -1332,16 +1353,25 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                       />
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                         <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>{plotFile}</p>
-                        <button
-                          onClick={() => downloadImage(plotFile)}
-                          title="Download Image"
-                          style={{
-                            background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer',
-                            padding: '4px'
-                          }}
-                        >
-                          <i className="fas fa-download"></i>
-                        </button>
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <a
+                            href={`${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(plotFile)}`}
+                            download={plotFile}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ background: 'none', border: 'none', color: '#4b5563', cursor: 'pointer', padding: '4px', textDecoration: 'none' }}
+                            title="Download Image"
+                          >
+                            <i className="fas fa-download"></i>
+                          </a>
+                          <button
+                            onClick={() => setEnlargedImage(plotFile)}
+                            style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', padding: '4px' }}
+                            title="Expand"
+                          >
+                            <i className="fas fa-expand-arrows-alt"></i>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1517,11 +1547,536 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
 }
 
 // ==========================================
+// DOCKING TAB COMPONENT
+// ==========================================
+
+interface DockingTabProps {
+  onTaskStart: (id: string) => void;
+  onTaskEnd: () => void;
+  executionLogs: string;
+  setExecutionLogs: (logs: string) => void;
+  isTaskRunning: boolean;
+}
+
+function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: DockingTabProps) {
+  const [pdbTargets, setPdbTargets] = useState<string[]>([]);
+  const [chemblTargets, setChemblTargets] = useState<string[]>([]);
+  const [zincTargets, setZincTargets] = useState<string[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState("");
+  const [availableLigands, setAvailableLigands] = useState<any[]>([]);
+  const [selectedLigand, setSelectedLigand] = useState<any>(null); // Should hold the array [Residue, Name, Number, Chain]
+  const [library, setLibrary] = useState("chembl");
+  const [prepareComplex, setPrepareComplex] = useState(true);
+  const [chargeType, setChargeType] = useState("am1");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<any>(null);
+  
+  // Results states
+  const [availableResults, setAvailableResults] = useState<string[]>([]);
+  const [activeResultTarget, setActiveResultTarget] = useState<string | null>(null);
+  const [resultsData, setResultsData] = useState<{headers: string[], rows: any[]} | null>(null);
+  const [loadingResults, setLoadingResults] = useState(false);
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
+
+  // Advanced params
+  const [radius, setRadius] = useState(1.4);
+  const [exhaustiveness, setExhaustiveness] = useState(20);
+
+  useEffect(() => {
+    // fetch targets from /api/redocking/targets and others
+    const fetchTargets = async () => {
+      try {
+        const [targetsRes, resultsRes, chemblRes, zincRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/chembl_files?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/zinc_files?t=${Date.now()}`)
+        ]);
+        
+        if (targetsRes.ok) {
+          const targets = await targetsRes.json();
+          setPdbTargets(targets);
+          if (targets.length > 0) setSelectedTarget(targets[0]);
+        }
+        
+        if (resultsRes.ok) {
+          const results = await resultsRes.json();
+          setAvailableResults(results);
+          if (results.length > 0 && !activeResultTarget) {
+            setActiveResultTarget(results[0]);
+          }
+        }
+
+        if (chemblRes.ok) {
+          const chemblData = await chemblRes.json();
+          // Fix: chemblData is an object mapping target names to info, so we need the keys to check inclusion later
+          setChemblTargets(Object.keys(chemblData));
+        }
+
+        if (zincRes.ok) {
+          const zincData = await zincRes.json();
+          setZincTargets(zincData);
+        }
+      } catch (err) {
+        console.error("Failed to fetch docking data", err);
+      }
+    };
+    fetchTargets();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTarget) {
+      // Fetch ligands
+      const fetchLigands = async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/docking/available-ligands/${selectedTarget}/${selectedTarget}`, { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            setAvailableLigands(data.ligands || []);
+            if (data.ligands && data.ligands.length > 0) {
+              setSelectedLigand(data.ligands[0]);
+            } else {
+              setSelectedLigand(null);
+            }
+          } else {
+            setAvailableLigands([]);
+            setSelectedLigand(null);
+          }
+        } catch(e) {
+          console.error(e);
+          setAvailableLigands([]);
+          setSelectedLigand(null);
+        }
+      }
+      fetchLigands();
+    }
+  }, [selectedTarget]);
+
+  // Results fetch effect
+  useEffect(() => {
+    if (activeResultTarget) {
+      const fetchResultCsv = async () => {
+        setLoadingResults(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/docking/csv/${activeResultTarget}`);
+          if (res.ok) {
+            const data = await res.json();
+            setResultsData({ headers: data.headers, rows: data.rows });
+          }
+        } catch (err) {
+          console.error("Failed to fetch result CSV", err);
+        } finally {
+          setLoadingResults(false);
+        }
+      };
+      fetchResultCsv();
+    }
+  }, [activeResultTarget]);
+
+  // Polling for task status
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (runningTaskId) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/docking/status/${runningTaskId}`);
+          if (res.ok) {
+            const data = await res.json();
+            setTaskStatus(data);
+            setExecutionLogs(data.logs || "");
+            
+            if (data.status === 'completed' || data.status === 'error') {
+              setRunningTaskId(null);
+              onTaskEnd();
+              const resultsRes = await fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`);
+              if (resultsRes.ok) {
+                const results = await resultsRes.json();
+                setAvailableResults(results);
+                if (data.status === 'completed') setActiveResultTarget(selectedTarget);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error polling status", err);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [runningTaskId]);
+
+  const runDocking = async () => {
+    if (!selectedTarget || !selectedLigand) return;
+    try {
+      setExecutionLogs("");
+      setTaskStatus({ status: 'starting', message: 'Initializing task...' });
+      const res = await fetch(`${API_BASE_URL}/api/docking/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          target: selectedTarget, 
+          pdb_code: selectedLigand,
+          library,
+          charge_type: chargeType, 
+          prepare_complex: prepareComplex,
+          radius,
+          exhaustiveness
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setRunningTaskId(data.task_id);
+        onTaskStart(data.task_id);
+      } else {
+        const error = await res.json();
+        setTaskStatus({ status: 'error', message: error.message });
+      }
+    } catch (err) {
+      setTaskStatus({ status: 'error', message: "Failed to start docking task." });
+    }
+  };
+
+  const downloadCsv = () => {
+    if (activeResultTarget) {
+      window.open(`${API_BASE_URL}/api/docking/download/${activeResultTarget}`, '_blank');
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '20px' }}>
+      {pdbTargets.length === 0 && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! No PDB targets available.</strong>
+            <span>You must first download at least one target on the </span>
+            <Link href="/pdb" style={{ fontWeight: 'bold', textDecoration: 'underline', color: '#856404' }}>
+              PDB Search page
+            </Link>
+            <span> before you can perform a docking simulation.</span>
+          </div>
+        </div>
+      )}
+
+      {selectedTarget && library === 'chembl' && !chemblTargets.includes(selectedTarget) && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! Missing ChEMBL Target.</strong>
+            <span>You selected {selectedTarget}, but no ligands were found in the ChEMBL database for it. You must download it on the </span>
+            <Link href="/chembl" style={{ fontWeight: 'bold', textDecoration: 'underline', color: '#856404' }}>
+              ChEMBL Search page
+            </Link>
+            <span> before running docking with this library.</span>
+          </div>
+        </div>
+      )}
+
+      {selectedTarget && library === 'zinc' && !zincTargets.includes(selectedTarget) && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! Missing ZINC Target.</strong>
+            <span>You selected {selectedTarget}, but no ligands were found in the ZINC database for it. You must download it on the </span>
+            <Link href="/zinc" style={{ fontWeight: 'bold', textDecoration: 'underline', color: '#856404' }}>
+              ZINC Search page
+            </Link>
+            <span> before running docking with this library.</span>
+          </div>
+        </div>
+      )}
+      <div style={{ 
+        backgroundColor: '#fff', 
+        padding: '25px', 
+        borderRadius: '12px', 
+        boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+        border: '1px solid #eee',
+        marginBottom: '30px'
+      }}>
+        <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>Virtual Screening / Docking Parameters</h3>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Target:</label>
+            <select 
+              value={selectedTarget} 
+              onChange={(e) => setSelectedTarget(e.target.value)} 
+              disabled={isTaskRunning}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              {pdbTargets.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Binding Site (Ligand):</label>
+            <select 
+              value={selectedLigand ? JSON.stringify(selectedLigand) : ""} 
+              onChange={(e) => setSelectedLigand(JSON.parse(e.target.value))} 
+              disabled={isTaskRunning || availableLigands.length === 0}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              {availableLigands.length === 0 && <option value="">No ligands found</option>}
+              {availableLigands.map(l => (
+                <option key={JSON.stringify(l)} value={JSON.stringify(l)}>{`${l.resname} (Chain: ${l.chain}, Num: ${l.resnum})`}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Library:</label>
+            <select 
+              value={library} 
+              onChange={(e) => setLibrary(e.target.value)} 
+              disabled={isTaskRunning}
+              style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              <option value="chembl">ChEMBL (DrugBank)</option>
+              <option value="zinc">ZINC</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <button 
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            {showAdvanced ? '- Hide Advanced Parameters' : '+ Show Advanced Parameters'}
+          </button>
+        </div>
+
+        {showAdvanced && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type:</label>
+              <select 
+                value={chargeType} 
+                onChange={(e) => setChargeType(e.target.value)}
+                disabled={isTaskRunning}
+                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
+              >
+                <option value="am1">AM1 (Recommended)</option>
+                <option value="gas">Gasteiger</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Radius (Dock6):</label>
+              <input type="number" step="0.1" value={radius} onChange={(e) => setRadius(parseFloat(e.target.value))} disabled={isTaskRunning} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Exhaustiveness (Vina):</label>
+              <input type="number" value={exhaustiveness} onChange={(e) => setExhaustiveness(parseInt(e.target.value))} disabled={isTaskRunning} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <input 
+                type="checkbox" 
+                id="prepCompDock" 
+                checked={prepareComplex} 
+                onChange={(e) => setPrepareComplex(e.target.checked)}
+                disabled={isTaskRunning}
+                style={{ width: '18px', height: '18px', marginRight: '10px' }}
+              />
+              <label htmlFor="prepCompDock" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex (Missing Hydrogens, Charges)</label>
+            </div>
+          </div>
+        )}
+
+        <button 
+          onClick={runDocking} 
+          disabled={isTaskRunning || !selectedTarget || !selectedLigand || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))}
+          style={{ 
+            padding: '12px 30px', 
+            backgroundColor: 'var(--primary-color)', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px', 
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            opacity: (isTaskRunning || !selectedTarget || !selectedLigand || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))) ? 0.6 : 1,
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+          }}
+        >
+          {isTaskRunning ? 'Running...' : 'Run Virtual Screening (Consensus)'}
+        </button>
+      </div>
+
+      {taskStatus?.status === 'error' && (
+        <div className="error" style={{ marginBottom: '30px' }}>
+          <strong>Error:</strong> {taskStatus.message}
+        </div>
+      )}
+
+      {/* RESULTS SECTION */}
+      {availableResults.length > 0 && (
+        <div style={{ marginTop: '50px' }}>
+          <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>Docking Results</h3>
+          
+          <div style={{ display: 'flex', borderBottom: '1px solid #eee', marginBottom: '25px', gap: '5px', overflowX: 'auto' }}>
+            {availableResults.map(target => (
+              <button 
+                key={target}
+                onClick={() => setActiveResultTarget(target)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: activeResultTarget === target ? '#f3f0ff' : 'transparent',
+                  color: activeResultTarget === target ? '#6b46c1' : '#666',
+                  border: 'none',
+                  borderBottom: activeResultTarget === target ? '3px solid #6b46c1' : '3px solid transparent',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {target}
+              </button>
+            ))}
+          </div>
+
+          {activeResultTarget && (
+            <div style={{ 
+              backgroundColor: '#fff', 
+              padding: '25px', 
+              borderRadius: '12px', 
+              boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+              border: '1px solid #eee'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+                <h4 style={{ margin: 0, color: '#333' }}>Target: {activeResultTarget}</h4>
+                <button 
+                  onClick={downloadCsv}
+                  style={{ 
+                    padding: '10px 25px', 
+                    backgroundColor: '#6b46c1', 
+                    color: 'white', 
+                    border: 'none', 
+                    borderRadius: '8px', 
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    boxShadow: '0 2px 4px rgba(107, 70, 193, 0.3)'
+                  }}
+                >
+                  <i className="fas fa-download"></i> Download CSV
+                </button>
+              </div>
+
+              {/* RESULTS TABLE (First) */}
+              {loadingResults ? (
+                <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>Loading result table...</p>
+              ) : resultsData ? (
+                <div style={{ marginBottom: '40px', position: 'relative' }}>
+                  <div style={{ overflowX: 'auto', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', maxHeight: isTableExpanded ? 'none' : '400px', overflowY: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                        <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
+                          {resultsData.headers.map((h, idx) => <th key={idx} style={{ padding: '14px 16px', textAlign: 'left', color: '#374151', fontWeight: 600, fontSize: '0.95rem' }}>{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {resultsData.rows.slice(0, isTableExpanded ? resultsData.rows.length : 5).map((row, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #f3f4f6', transition: 'background-color 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                            {row.map((cell: any, j: number) => <td key={j} style={{ padding: '12px 16px', color: '#4b5563', fontSize: '0.9rem' }}>{cell}</td>)}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {!isTableExpanded && resultsData.rows.length > 5 && (
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0, height: '80px',
+                      background: 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,1) 80%)',
+                      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '10px'
+                    }}>
+                      <button onClick={() => setIsTableExpanded(true)} style={{ padding: '8px 16px', backgroundColor: '#fff', color: 'var(--primary-color)', border: '2px solid var(--primary-color)', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 10 }}>
+                        <i className="fas fa-chevron-down"></i> Show more ({resultsData.rows.length - 5} remaining)
+                      </button>
+                    </div>
+                  )}
+                  {isTableExpanded && resultsData.rows.length > 5 && (
+                    <div style={{ textAlign: 'center', marginTop: '15px' }}>
+                      <button onClick={() => setIsTableExpanded(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline' }}>Show less</button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>No result data available for this target.</p>
+              )}
+
+              {/* Correlation Plot Images (Second) */}
+              <div style={{ marginBottom: '30px', textAlign: 'center' }}>
+                <h5 style={{ color: '#555', marginBottom: '15px' }}>Score Correlation (Vina vs Dock6 Footprint)</h5>
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img 
+                    src={`${API_BASE_URL}/api/docking/plot/${activeResultTarget}?t=${Date.now()}`} 
+                    alt="Correlation Plot" 
+                    style={{ maxWidth: '100%', maxHeight: '400px', border: '1px solid #eee', borderRadius: '8px', padding: '10px', objectFit: 'contain', backgroundColor: 'white' }}
+                    onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+                  />
+                  <a 
+                    href={`${API_BASE_URL}/api/docking/plot/${activeResultTarget}?t=${Date.now()}`} 
+                    download={`correlation_${activeResultTarget}.png`} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    style={{ position: 'absolute', top: '20px', right: '20px', backgroundColor: 'rgba(255,255,255,0.9)', color: 'var(--primary-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold', textDecoration: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                    title="Download Image"
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--primary-color)', e.currentTarget.style.color = 'white')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.9)', e.currentTarget.style.color = 'var(--primary-color)')}
+                  >
+                    <i className="fas fa-download"></i> Download
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==========================================
 // MAIN ANALYSIS PAGE
 // ==========================================
 
 export default function AnalysisPage() {
-  const [activeTab, setActiveTab] = useState<"similarity" | "redocking" | "admet">("similarity");
+  const [activeTab, setActiveTab] = useState<"similarity" | "docking" | "redocking" | "admet">("similarity");
   const [isTaskRunning, setIsTaskRunning] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [executionLogs, setExecutionLogs] = useState("");
@@ -1531,7 +2086,9 @@ export default function AnalysisPage() {
     setLoadingMessage(
       activeTab === 'admet'
         ? 'ADMET analysis is running in background...'
-        : 'Redocking simulation is running in background...'
+        : activeTab === 'docking' 
+          ? 'Virtual Screening (Docking) is running in background...'
+          : 'Redocking simulation is running in background...'
     );
   };
 
@@ -1575,6 +2132,23 @@ export default function AnalysisPage() {
             Molecular Similarity
           </button>
           <button
+            onClick={() => setActiveTab("docking")}
+            style={{
+              padding: '12px 25px',
+              backgroundColor: activeTab === "docking" ? 'var(--primary-color)' : 'transparent',
+              color: activeTab === "docking" ? 'white' : '#333',
+              border: 'none',
+              borderTopLeftRadius: '8px',
+              borderTopRightRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              transition: 'all 0.3s'
+            }}
+          >
+            <i className="fas fa-layer-group" style={{ marginRight: '8px' }}></i>
+            Docking (Virtual Screening)
+          </button>
+          <button
             onClick={() => setActiveTab("redocking")}
             style={{
               padding: '12px 25px',
@@ -1611,6 +2185,15 @@ export default function AnalysisPage() {
         </div>
 
         {activeTab === "similarity" && <SimilarityTab />}
+        {activeTab === "docking" && (
+          <DockingTab 
+            onTaskStart={handleTaskStart} 
+            onTaskEnd={handleTaskEnd} 
+            executionLogs={executionLogs}
+            setExecutionLogs={setExecutionLogs}
+            isTaskRunning={isTaskRunning}
+          />
+        )}
         {activeTab === "redocking" && (
           <RedockingTab 
             onTaskStart={handleTaskStart} 

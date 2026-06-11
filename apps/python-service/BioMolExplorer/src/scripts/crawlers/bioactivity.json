@@ -1,6 +1,9 @@
 {
     "standard_type__in": [
-        "Ki"
+        "No. of survivors",
+        "Ki",
+        "Km",
+        "Ratio"
     ],
     "molecule_type": "small molecule",
     "max_value_ref": 1000,

@@ -20,22 +20,25 @@ active_tasks = {}
 import ast
 
 # Michel's files
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer', 'src')))
+BIOMOL_ROOT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), 'BioMolExplorer'))
+sys.path.insert(0, os.path.join(BIOMOL_ROOT_PATH, 'src'))
 from wrappers.crawlers import load_pdb, load_chembl, load_zinc
 from crawlers.complex import PolymerEntityType, ExperimentalMethod
 from wrappers.molecular_analyzer import compute_similarity, analyze_graphs, generate_fingerprints
 from kernel.descriptors import similarityFunctions, fingerprints
 from wrappers.redocking import perform_redocking
 from wrappers.admet import ADMETWrapper
+from wrappers.docking import perform_consensus, get_available_ligands, get_better_complex
 
 # PATHs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
-PDB_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'PDB')
-CHEMBL_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL')
-JSON_CRAWLERS_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'src', 'scripts', 'crawlers')
-ZINC_BASE_PATH = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ZINC')
-DRUGBANK_PATH    = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank')
+BIOMOL_ROOT_PATH = os.path.abspath(os.path.join(BASE_DIR, 'BioMolExplorer'))
+PDB_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
+CHEMBL_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL')
+JSON_CRAWLERS_PATH = os.path.join(BIOMOL_ROOT_PATH, 'src', 'scripts', 'crawlers')
+ZINC_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
+DRUGBANK_PATH    = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
 ADMET_BASE_PATH  = os.path.join(DRUGBANK_PATH, 'ADMET')
 
 # --- PDB functions ---
@@ -52,7 +55,7 @@ def run_load_pdb():
                 data['max_resolution'] = None
         
         original_cwd = os.getcwd()
-        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        biomol_explorer_path = BIOMOL_ROOT_PATH
         os.chdir(biomol_explorer_path)
         
         try:
@@ -329,6 +332,12 @@ def delete_pdb_target():
     try:
         if os.path.exists(target_dir_path) and os.path.isdir(target_dir_path):
             shutil.rmtree(target_dir_path) # Remove the entire folder and its contents
+            
+            # Also remove docking results if the PDB target is deleted
+            docking_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target)
+            if os.path.isdir(docking_dir):
+                shutil.rmtree(docking_dir)
+                
             return jsonify({'status': 'success', 'message': f'Target {target} deleted successfully'})
         else:
             return jsonify({'status': 'error', 'message': 'Target directory not found'}), 404
@@ -395,7 +404,7 @@ def run_load_chembl():
         # --- End Validation ---
 
         # Temporary change of the correct directory so that the code work
-        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        biomol_explorer_path = BIOMOL_ROOT_PATH
         os.chdir(biomol_explorer_path)
         
         def update_json_file(file_path, new_data):
@@ -634,12 +643,18 @@ def delete_chembl_target():
                     deleted_something = True
                     
         # 4. Delete Graph Cache
-        maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
+        maxcomp_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'data', 'maxcomp')
         if os.path.isdir(maxcomp_dir):
             for fname in os.listdir(maxcomp_dir):
                 if fname.startswith(f"Tanimoto_morgan_{target}_"):
                     os.remove(os.path.join(maxcomp_dir, fname))
                     deleted_something = True
+                    
+        # 5. Delete Docking results
+        docking_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target)
+        if os.path.isdir(docking_dir):
+            shutil.rmtree(docking_dir)
+            deleted_something = True
 
         if deleted_something:
             return jsonify({'status': 'success', 'message': f'Target "{target}" deleted successfully'})
@@ -678,7 +693,8 @@ def delete_chembl():
                 os.path.join(CHEMBL_BASE_PATH, 'similars', target),
                 os.path.join(CHEMBL_BASE_PATH, 'bioactivity', target),
                 DRUGBANK_PATH,
-                ADMET_BASE_PATH
+                ADMET_BASE_PATH,
+                os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target)
             ]
             
             for directory in search_dirs:
@@ -715,7 +731,7 @@ def delete_chembl():
                  os.rmdir(target_path) 
                  
             # 3. Delete Graph Cache to force re-generation without the deleted molecule
-            maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
+            maxcomp_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'data', 'maxcomp')
             if os.path.isdir(maxcomp_dir):
                 for fname in os.listdir(maxcomp_dir):
                     if fname.startswith(f"Tanimoto_morgan_{target}_"):
@@ -790,7 +806,7 @@ def run_load_zinc():
 
         # 5. Run the Crawler Wrapper
         original_cwd = os.getcwd()
-        biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+        biomol_explorer_path = BIOMOL_ROOT_PATH
         os.chdir(biomol_explorer_path)
 
         try:
@@ -1055,7 +1071,7 @@ def process_graphs():
     """
     original_cwd = os.getcwd()
     try:
-        target_dir = os.path.join(BASE_DIR, 'BioMolExplorer')
+        target_dir = BIOMOL_ROOT_PATH
         os.chdir(target_dir)
 
         rel_db_path = '/datasets/ChEMBL/DrugBank'
@@ -1092,7 +1108,7 @@ def get_graph_data():
         target = request.args.get('target', 'Acetylcholinesterase')
         
         # --- 0. Run Analysis Pipeline (as requested by user) ---
-        target_dir = os.path.join(BASE_DIR, 'BioMolExplorer')
+        target_dir = BIOMOL_ROOT_PATH
         os.chdir(target_dir)
 
         # Defining paths relative to CWD
@@ -1123,7 +1139,7 @@ def get_graph_data():
                 elif f.endswith('_SIMS.csv') and f.replace('_SIMS.csv', '').replace(' ', '').lower() == target_normalized:
                     source_sims = os.path.join(full_db_path, f)
 
-        maxcomp_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'data', 'maxcomp')
+        maxcomp_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'data', 'maxcomp')
         csv_file = None
         correct_alvo = target # fallback
         
@@ -1154,7 +1170,7 @@ def get_graph_data():
         edges_df = pd.read_csv(csv_file)
         
         # Read molecule data (to map ID -> SMILES) flexibly
-        mols_file = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank', f'{correct_alvo}_{dataset_type}.csv')
+        mols_file = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', f'{correct_alvo}_{dataset_type}.csv')
         
         smiles_map = {}
         if os.path.exists(mols_file):
@@ -1201,7 +1217,7 @@ def get_graph_data():
             if csv_file:
                 # The actual filename was picked up in the loop (e.g., Tanimoto_morgan_...csv)
                 filename = os.path.basename(csv_file)
-                full_graph_file = os.path.join(BASE_DIR, 'BioMolExplorer', 'datasets', 'ChEMBL', 'DrugBank', 'Similarity', filename)
+                full_graph_file = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'Similarity', filename)
                 
                 if os.path.exists(full_graph_file):
                     import networkx as nx
@@ -1237,7 +1253,7 @@ def get_graph_data():
 def list_analysis_plots():
     """Returns a list of filename names of the images generated in the analysis."""
     try:
-        plots_dir = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'plots')
+        plots_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'plots')
         if not os.path.exists(plots_dir):
             return jsonify({'success': True, 'data': []})
             
@@ -1254,7 +1270,7 @@ def get_analysis_plot(filename):
         if '..' in filename or '/' in filename:
             return jsonify({'success': False, 'message': 'Invalid filename.'}), 400
             
-        file_path = os.path.join(BASE_DIR, 'BioMolExplorer', 'resultados', 'grafos', 'plots', filename)
+        file_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'plots', filename)
         
         if os.path.exists(file_path):
             return send_file(file_path, mimetype='image/png')
@@ -1309,7 +1325,7 @@ task_logs = {}
 def redocking_worker(task_id, target, charge_type, prepare_complex):
     import logging
     original_cwd = os.getcwd()
-    biomol_explorer_path = os.path.join(BASE_DIR, 'BioMolExplorer')
+    biomol_explorer_path = BIOMOL_ROOT_PATH
     os.chdir(biomol_explorer_path)
     
     # Create a stream to capture stdout
@@ -1728,6 +1744,237 @@ def list_admet_available_targets():
                 break
 
     return jsonify(sorted(targets))
+
+
+# ==========================================
+# DOCKING ROUTES
+# ==========================================
+
+docking_task_logs = {}
+
+def docking_worker(task_id: str, target: str, pdb_code: list, library: str, dock_kwargs: dict):
+    original_cwd = os.getcwd()
+    biomol_explorer_path = BIOMOL_ROOT_PATH
+    os.chdir(biomol_explorer_path)
+    
+    # Add Dock6 binaries to PATH
+    if '/home/lucas-roseno/progs/dock6/bin' not in os.environ['PATH']:
+        os.environ['PATH'] += os.pathsep + '/home/lucas-roseno/progs/dock6/bin'
+        
+    log_stream = io.StringIO()
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+
+    class Tee:
+        def __init__(self, *files): self.files = files
+        def write(self, obj):
+            for f in self.files: f.write(obj); f.flush()
+        def flush(self):
+            for f in self.files: f.flush()
+        def fileno(self):
+            for f in self.files:
+                if hasattr(f, 'fileno'): return f.fileno()
+            return sys.__stdout__.fileno()
+
+    sys.stdout = Tee(log_stream, sys.__stdout__)
+    sys.stderr = Tee(log_stream, sys.__stderr__)
+
+    def update_logs():
+        while active_tasks.get(task_id, {}).get('status') == 'running':
+            docking_task_logs[task_id] = log_stream.getvalue()
+            threading.Event().wait(0.5)
+        docking_task_logs[task_id] = log_stream.getvalue()
+
+    log_updater = threading.Thread(target=update_logs)
+    log_updater.daemon = True
+    log_updater.start()
+
+    try:
+        active_tasks[task_id] = {'status': 'running', 'message': f'Running Docking for {target}...'}
+        docking_task_logs[task_id] = ''
+        
+        # Define paths
+        base_input_path = 'datasets/PDB'
+        base_output_path = 'resultados/docking'
+        
+        if library == 'zinc':
+            base_selected_mols = 'datasets/ZINC'
+        else:
+            base_selected_mols = 'datasets/ChEMBL/DrugBank/Molecules'
+            
+        dock6_app_path = '/home/lucas-roseno/progs/dock6/'
+        
+        # We must construct the correct pdb_code tuple: (pdb_id, ligand_name, resnum, chain)
+        # The frontend sends a dict with resname, resnum, chain. We need to find the best pdb_id.
+        best = get_better_complex('/' + os.path.join(base_input_path, target) + '/')
+        if best and len(best) > 0:
+            real_pdb_id = best[0][0]
+        else:
+            raise Exception("No valid complex found for target")
+            
+        if isinstance(pdb_code, dict):
+            pdb_tuple = (real_pdb_id, pdb_code.get('resname'), pdb_code.get('resnum'), pdb_code.get('chain'))
+        else:
+            pdb_tuple = tuple(pdb_code)
+        
+        perform_consensus(
+            base_input_path=base_input_path,
+            target=target,
+            base_output_path=base_output_path,
+            base_selected_mols=base_selected_mols,
+            dock6_app_path=dock6_app_path,
+            pdb_code=pdb_tuple,
+            **dock_kwargs
+        )
+        
+        active_tasks[task_id]['status'] = 'completed'
+        active_tasks[task_id]['message'] = f'Docking for {target} completed successfully.'
+        
+    except Exception as e:
+        print(f"FATAL ERROR in docking_worker: {str(e)}", file=sys.__stderr__)
+        active_tasks[task_id]['status'] = 'error'
+        active_tasks[task_id]['message'] = str(e)
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        os.chdir(original_cwd)
+
+
+@app.route('/api/docking/available-ligands/<target>/<pdb_code>', methods=['GET'])
+def get_ligands_docking(target, pdb_code):
+    if '..' in target or '..' in pdb_code:
+        return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
+        
+    original_cwd = os.getcwd()
+    biomol_explorer_path = BIOMOL_ROOT_PATH
+    os.chdir(biomol_explorer_path)
+    
+    try:
+        # PDB_BASE_PATH is absolute, but get_better_complex needs a relative path from BIOMOL_ROOT_PATH
+        target_path_relative = '/' + os.path.join('datasets', 'PDB', target) + '/'
+        target_path_absolute = os.path.join(PDB_BASE_PATH, target)
+        
+        if pdb_code == target:
+            # Resolve the best complex automatically using relative path
+            best = get_better_complex(target_path_relative)
+            if best and len(best) > 0:
+                real_pdb_code = best[0][0]
+                file_path = os.path.join(target_path_absolute, f"{real_pdb_code}.pdb")
+            else:
+                return jsonify({'status': 'error', 'message': 'No valid complex found in target directory'}), 404
+        else:
+            file_path = os.path.join(target_path_absolute, f"{pdb_code}.pdb")
+
+        if not os.path.exists(file_path):
+            return jsonify({'status': 'error', 'message': 'PDB file not found'}), 404
+            
+        ligands = get_available_ligands(file_path)
+        return jsonify({'status': 'success', 'ligands': ligands})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        os.chdir(original_cwd)
+
+
+@app.route('/api/docking/run', methods=['POST'])
+def run_docking_task():
+    data = request.json or {}
+    target = data.get('target')
+    pdb_code = data.get('pdb_code') # Should be a list/tuple like ['7AIS', 'NAG', 604, 'A']
+    library = data.get('library', 'chembl')
+    
+    if not target or not pdb_code:
+        return jsonify({'status': 'error', 'message': 'target and pdb_code are required'}), 400
+        
+    dock_kwargs = {
+        'conformer_search_type': data.get('conformer_search_type', 'flex'),
+        'density': data.get('density', 0.5),
+        'radius': data.get('radius', 1.4),
+        'distance': data.get('distance', 10.0),
+        'plot_max_residues': data.get('plot_max_residues', 50),
+        'pH': data.get('pH', 7.4),
+        'sizeof_box': data.get('sizeof_box', [24, 24, 24]),
+        'exhaustiveness': data.get('exhaustiveness', 20),
+        'num_modes': data.get('num_modes', 10),
+        'prepare_complex': data.get('prepare_complex', True),
+        'charge_type': data.get('charge_type', 'gas'),
+        'mol_filename': data.get('mol_filename', 'molecules')
+    }
+
+    task_id = str(uuid.uuid4())
+    thread = threading.Thread(target=docking_worker, args=(task_id, target, pdb_code, library, dock_kwargs))
+    thread.start()
+
+    return jsonify({'status': 'success', 'task_id': task_id})
+
+
+@app.route('/api/docking/status/<task_id>', methods=['GET'])
+def get_docking_status(task_id):
+    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
+    logs = docking_task_logs.get(task_id, '')
+    return jsonify({**status, 'logs': logs})
+
+
+@app.route('/api/docking/results', methods=['GET'])
+def list_docking_results():
+    results = []
+    docking_base_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+    if not os.path.exists(docking_base_path):
+        return jsonify([])
+
+    for target_dir in os.listdir(docking_base_path):
+        csv_path = os.path.join(docking_base_path, target_dir, f"{target_dir}.csv")
+        if os.path.exists(csv_path):
+            results.append(target_dir)
+            
+    return jsonify(sorted(results))
+
+
+@app.route('/api/docking/csv/<target>', methods=['GET'])
+def get_docking_csv(target):
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
+        
+    csv_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, f"{target}.csv")
+    if not os.path.exists(csv_path):
+        return jsonify({'status': 'error', 'message': 'Results not found'}), 404
+
+    try:
+        df = pd.read_csv(csv_path)
+        return jsonify({
+            'status': 'success',
+            'headers': df.columns.tolist(),
+            'rows': df.values.tolist()
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/docking/plot/<target>', methods=['GET'])
+def get_docking_plot(target):
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
+
+    file_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, 'correlation.png')
+    if not os.path.exists(file_path):
+        return jsonify({'status': 'error', 'message': 'Plot not found'}), 404
+
+    return send_file(file_path, mimetype='image/png')
+
+
+@app.route('/api/docking/download/<target>', methods=['GET'])
+def download_docking_csv(target):
+    if '..' in target:
+        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
+        
+    csv_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, f"{target}.csv")
+    if not os.path.exists(csv_path):
+        return jsonify({'status': 'error', 'message': 'Results not found'}), 404
+
+    return send_file(
+        csv_path,
+        as_attachment=True,
+        download_name=f'docking_{target}.csv'
+    )
 
 
 if __name__ == '__main__':

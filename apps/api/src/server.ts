@@ -412,6 +412,86 @@ app.get('/api/files/molecule/:subdir/:target/:file', async (req, res) => {
 
 // ==========================================
 // ==========================================
+// DOCKING ROUTES (FORWARDING TO PYTHON)
+// ==========================================
+
+app.get('/api/docking/available-ligands/:target/:pdb_code', async (req, res) => {
+  try {
+    const { target, pdb_code } = req.params;
+    const response = await fetch(`${PYTHON_URL}/api/docking/available-ligands/${encodeURIComponent(target)}/${encodeURIComponent(pdb_code)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/docking/run', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/docking/status/:task_id', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/status/${req.params.task_id}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/docking/results', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/results`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/docking/csv/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/csv/${encodeURIComponent(req.params.target)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/docking/plot/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/plot/${encodeURIComponent(req.params.target)}`);
+    if (!response.ok) return res.status(response.status).json({ success: false, message: 'Plot not found.' });
+    res.setHeader('Content-Type', 'image/png');
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/docking/download/:target', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/download/${encodeURIComponent(req.params.target)}`);
+    if (!response.ok) throw new Error('Not found');
+    res.set('Content-Disposition', `attachment; filename="docking_results_${req.params.target}.csv"`);
+    res.send(Buffer.from(await response.arrayBuffer()));
+  } catch (e) { res.status(404).send('Not found'); }
+});
+
+// ==========================================
+// ==========================================
 // REDOCKING ROUTES (FORWARDING TO PYTHON)
 // ==========================================
 

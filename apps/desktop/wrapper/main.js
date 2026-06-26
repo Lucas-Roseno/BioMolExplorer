@@ -1,63 +1,35 @@
 const { app, BrowserWindow } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
-// =============================================================================
-//  Detecta o caminho base onde estao init.bat / init.sh / biomolexplorer.tar
-//
-//  IMPORTANTE: cada formato de empacotamento expoe o "diretorio do executavel"
-//  de uma forma diferente:
-//    - Windows portable -> PORTABLE_EXECUTABLE_DIR
-//    - Linux AppImage   -> APPIMAGE (caminho do .AppImage)
-//    - macOS .dmg/.app  -> process.execPath aponta para .../Contents/MacOS/
-//    - Dev (npm start)  -> process.cwd()
-// =============================================================================
+// Detecta o caminho base onde estao init-native.sh e biomolexplorer-src.tar.gz.
+// Linux AppImage expoe APPIMAGE; macOS usa process.execPath; dev usa process.cwd().
 function resolveBasePath() {
-  // Windows portable
-  if (process.env.PORTABLE_EXECUTABLE_DIR) {
-    return process.env.PORTABLE_EXECUTABLE_DIR;
-  }
-
-  // Linux AppImage: variavel APPIMAGE = caminho do .AppImage em si
   if (process.env.APPIMAGE) {
     return path.dirname(process.env.APPIMAGE);
   }
-
-  // macOS empacotado: subir do Contents/MacOS/ ate a pasta que contem o .app
   if (app.isPackaged && process.platform === 'darwin') {
-    // process.execPath: .../BioMolExplorer.app/Contents/MacOS/BioMolExplorer
     return path.resolve(path.dirname(process.execPath), '..', '..', '..');
   }
-
-  // Empacotado em geral (fallback)
   if (app.isPackaged) {
     return path.dirname(process.execPath);
   }
-
-  // Modo dev
   return process.cwd();
 }
 
-// =============================================================================
-//  Escolhe o script motor de acordo com o OS
-// =============================================================================
 function resolveLauncher(basePath) {
-  if (process.platform === 'win32') {
-    return {
-      script: path.join(basePath, 'init.bat'),
-      command: 'cmd.exe',
-      args: (script) => ['/c', `"${script}"`],
-      shell: true,
-    };
-  }
-  // Linux e macOS
   return {
-    script: path.join(basePath, 'init.sh'),
+    script: path.join(basePath, 'init-native.sh'),
     command: 'bash',
     args: (script) => [script],
     shell: false,
+    isNative: true,
   };
 }
+
+// Rastreado globalmente para uso no cleanup ao fechar
+let isNativeMode = false;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -68,9 +40,21 @@ function createWindow() {
     autoHideMenuBar: true,
   });
 
+  const basePath = resolveBasePath();
+  const launcher = resolveLauncher(basePath);
+  isNativeMode = launcher.isNative;
+
+  const modeLabel = launcher.isNative
+    ? 'Ativando ambiente Conda e iniciando serviços locais...'
+    : 'Carregando o Docker e os serviços locais...';
+
+  const firstRunNote = launcher.isNative
+    ? 'Na primeira execução, o setup pode levar alguns minutos.'
+    : 'Isso pode levar alguns instantes na primeira execução.';
+
   win.loadURL(`data:text/html;charset=utf-8,
     <body style="margin:0; padding:0; background-color:%23F4F6F8; display:flex; flex-direction:column; height:100vh; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-      
+
       <div style="background-color:%235b4382; color:white; padding: 15px 30px; display:flex; align-items:center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         <div style="font-size:26px; font-weight:500; letter-spacing: 0.5px; display:flex; align-items:center;">
           <span style="font-size:32px; margin-right: 12px; margin-bottom: 4px;">⬡</span>BioMolExplorer
@@ -79,34 +63,31 @@ function createWindow() {
 
       <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding: 20px;">
         <div style="background:white; padding: 50px 80px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); display:flex; flex-direction:column; align-items:center;">
-          
+
           <div style="width: 50px; height: 50px; border: 5px solid %23e0e0e0; border-top: 5px solid %235b4382; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 25px;"></div>
-          
+
           <h2 style="color:%23333333; margin:0 0 10px 0; font-weight:500; font-size: 24px;">Iniciando o Sistema</h2>
-          <p style="color:%23666666; margin:0; font-size:16px; max-width: 400px; line-height: 1.5;">Carregando o Docker e os serviços locais...<br>Isso pode levar alguns instantes na primeira execução.</p>
+          <p style="color:%23666666; margin:0; font-size:16px; max-width: 400px; line-height: 1.5;">${modeLabel}<br>${firstRunNote}</p>
         </div>
       </div>
       <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     </body>`);
 
-  const basePath = resolveBasePath();
-  const launcher = resolveLauncher(basePath);
-
   console.log(`[main] OS: ${process.platform} | basePath: ${basePath}`);
+  console.log(`[main] Modo: ${launcher.isNative ? 'Nativo (Conda)' : 'Docker'}`);
   console.log(`[main] Script motor: ${launcher.script}`);
 
-  // Acumulador de log completo do motor (para mostrar em caso de erro)
   let motorLogs = '';
   let appReady = false;
   let failMessage = null;
   let failHint = null;
 
-  // Validacao prematura: se o script motor nao existe, falha cedo com mensagem util.
-  const fs = require('fs');
   if (!fs.existsSync(launcher.script)) {
     showErrorScreen(win,
       `Script de inicializacao nao encontrado: ${launcher.script}`,
-      'Verifique se o AppImage foi extraido junto com init.sh e biomolexplorer.tar na mesma pasta.',
+      launcher.isNative
+        ? 'Verifique se o AppImage foi extraido junto com init-native.sh e biomolexplorer-src.tar.gz na mesma pasta.'
+        : 'Verifique se o AppImage foi extraido junto com init.sh e biomolexplorer.tar na mesma pasta.',
       `basePath resolvido: ${basePath}\nprocess.execPath: ${process.execPath}\nprocess.env.APPIMAGE: ${process.env.APPIMAGE || '(nao definido)'}`
     );
     return;
@@ -115,11 +96,7 @@ function createWindow() {
   const launcherProcess = spawn(
     launcher.command,
     launcher.args(launcher.script),
-    {
-      windowsHide: true,
-      cwd: basePath,
-      shell: launcher.shell,
-    }
+    { cwd: basePath, shell: launcher.shell }
   );
 
   let serverCheckInterval = setInterval(() => {
@@ -174,7 +151,7 @@ function createWindow() {
     if (appReady) return;
 
     const title = failMessage || `O script encerrou inesperadamente (codigo ${code}).`;
-    const hint = failHint || 'Tente novamente ou verifique se o Docker esta instalado e em execucao.';
+    const hint = failHint || 'Verifique se Node.js 18+ esta instalado e tente novamente.';
     showErrorScreen(win, title, hint, motorLogs);
   });
 }
@@ -211,11 +188,7 @@ function showErrorScreen(win, title, hint, logs) {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  const cleanupCmd = process.platform === 'win32'
-    ? 'docker rm -f biomolexplorer_app'
-    : 'docker rm -f biomolexplorer_app || sudo docker rm -f biomolexplorer_app';
-
-  exec(cleanupCmd, () => {
+  exec('fuser -k 3000/tcp 3001/tcp 5000/tcp 2>/dev/null || true', () => {
     app.quit();
   });
 });

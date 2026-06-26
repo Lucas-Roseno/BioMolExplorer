@@ -5,9 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win portable && node scripts/pack-release.js win",
-    "build:linux": "electron-builder --linux AppImage && node scripts/pack-release.js linux",
-    "build:mac": "electron-builder --mac dmg && node scripts/pack-release.js mac"
+    "build:linux-native": "npm install --no-workspaces && node scripts/pack-source.js && electron-builder --linux AppImage && node scripts/pack-release.js linux-native",
+    "build:mac-native": "npm install --no-workspaces && node scripts/pack-source.js && electron-builder --mac dmg && node scripts/pack-release.js mac-native"
   },
   "build": {
     "appId": "com.onrender.biomolexplorer",
@@ -15,14 +14,9 @@
     "directories": {
       "output": "dist"
     },
-    "win": {
-      "target": "portable",
-      "icon": "assets/icon.ico",
-      "artifactName": "BioMolExplorer.exe"
-    },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/icon.png",
+      "icon": "assets/icons",
       "category": "Science",
       "artifactName": "BioMolExplorer.AppImage"
     },

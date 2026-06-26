@@ -19,3 +19,4 @@ dependencies:
   - vina=1.2.5
   - pip:
     - rcsbsearchapi==1.6.0
+    - flask>=2.3.0

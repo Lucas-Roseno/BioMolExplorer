@@ -8,12 +8,10 @@ node_modules/
 **/resultados/
 apps/python-service/BioMolExplorer/resultados/
 # Desktop temporary files, dependencies and builds
-apps/desktop/teste-desktop/
 apps/desktop/wrapper/dist/
 apps/desktop/wrapper/node_modules/
-apps/desktop/BioMolExplorer-Launcher/*.tar
+apps/desktop/BioMolExplorer-Launcher/*.tar.gz
 apps/desktop/BioMolExplorer-Launcher-*.zip
-apps/desktop/BioMolExplorer-Launcher-linux
 # Repositório do professor clonado na raiz (não faz parte do projeto monorepo)
 BioMolExplorer/
 # Backups temporários

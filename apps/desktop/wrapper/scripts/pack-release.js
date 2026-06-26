@@ -2,17 +2,7 @@
 //  pack-release.js
 //  Monta o .zip final de distribuicao do BioMolExplorer.
 //
-//  Uso: node scripts/pack-release.js <win|linux|mac>
-//
-//  Pre-requisitos por plataforma:
-//    win   -> wrapper/dist/BioMolExplorer.exe
-//    linux -> wrapper/dist/BioMolExplorer.AppImage
-//    mac   -> wrapper/dist/BioMolExplorer.dmg
-//
-//  Auxiliares (todos as plataformas):
-//    ../BioMolExplorer-Launcher/init.bat
-//    ../BioMolExplorer-Launcher/init.sh
-//    ../BioMolExplorer-Launcher/biomolexplorer.tar
+//  Uso: node scripts/pack-release.js <linux-native|mac-native>
 //
 //  Saida: ../BioMolExplorer-Launcher-<plataforma>.zip
 // =============================================================================
@@ -22,7 +12,7 @@ const path = require('path');
 const archiver = require('archiver');
 
 const PLATFORM = process.argv[2];
-const VALID_PLATFORMS = ['win', 'linux', 'mac'];
+const VALID_PLATFORMS = ['linux-native', 'mac-native'];
 
 if (!VALID_PLATFORMS.includes(PLATFORM)) {
   console.error(`[pack-release] ERRO: plataforma invalida ou ausente.`);
@@ -38,19 +28,19 @@ const LAUNCHER_DIR = path.join(DESKTOP_DIR, 'BioMolExplorer-Launcher');
 const ZIP_ROOT = 'BioMolExplorer-Launcher';
 const OUTPUT_ZIP = path.join(DESKTOP_DIR, `BioMolExplorer-Launcher-${PLATFORM}.zip`);
 
+const isNative = PLATFORM.endsWith('-native');
+
 // Configuracao por plataforma
 const PLATFORM_CONFIG = {
-  win: {
-    executable: { from: path.join(DIST_DIR, 'BioMolExplorer.exe'), name: 'BioMolExplorer.exe' },
-    aux: ['init.bat', 'biomolexplorer.tar'],
-  },
-  linux: {
+  'linux-native': {
     executable: { from: path.join(DIST_DIR, 'BioMolExplorer.AppImage'), name: 'BioMolExplorer.AppImage', mode: 0o755 },
-    aux: ['init.sh', 'biomolexplorer.tar'],
+    aux: ['init-native.sh', 'biomolexplorer-src.tar.gz'],
+    missingMsg: 'Garanta que o biomolexplorer-src.tar.gz foi gerado (node scripts/pack-source.js).',
   },
-  mac: {
+  'mac-native': {
     executable: { from: path.join(DIST_DIR, 'BioMolExplorer.dmg'), name: 'BioMolExplorer.dmg' },
-    aux: ['init.sh', 'biomolexplorer.tar'],
+    aux: ['init-native.sh', 'biomolexplorer-src.tar.gz'],
+    missingMsg: 'Garanta que o biomolexplorer-src.tar.gz foi gerado (node scripts/pack-source.js).',
   },
 };
 
@@ -73,7 +63,7 @@ const auxFiles = config.aux.map((name) => ({
 }));
 for (const f of auxFiles) {
   if (!fs.existsSync(f.from)) {
-    fail(`Arquivo ausente: ${f.from}\n        Garanta que o biomolexplorer.tar foi gerado (Passo 1 do README).`);
+    fail(`Arquivo ausente: ${f.from}\n        ${config.missingMsg}`);
   }
 }
 log('Todos os arquivos estao presentes.');
@@ -112,7 +102,6 @@ archive.file(config.executable.from, execEntry);
 
 // Auxiliares
 for (const f of auxFiles) {
-  // .sh precisa de bit de execucao
   const entry = { name: `${ZIP_ROOT}/${f.name}` };
   if (f.name.endsWith('.sh')) entry.mode = 0o755;
   archive.file(f.from, entry);

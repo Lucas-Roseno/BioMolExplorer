@@ -41,8 +41,8 @@ if command -v docker >/dev/null 2>&1; then
     fi
 fi
 
-# 1. Inicia o Python Flask em background (já tem hot-reload via debug=True)
-python apps/python-service/app.py &
+# 1. Inicia o Python Flask em background com hot-reload ativado
+FLASK_DEBUG=1 python apps/python-service/app.py &
 
 # 2. Inicia a API Node.js com NODEMON para hot-reload
 npx nodemon --watch apps/api/src -e ts,js --exec "ts-node" apps/api/src/server.ts &

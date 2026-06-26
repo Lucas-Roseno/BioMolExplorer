@@ -1,162 +1,134 @@
-# 🧬 BioMolExplorer - Desktop Environment & Distribution
+# BioMolExplorer - Desktop Environment & Distribution
 
-This directory contains all the instructions needed to generate an installable and distributable **Desktop Application** of BioMolExplorer for end users.
+This directory contains all the instructions to generate a distributable Desktop application of BioMolExplorer for end users.
 
 ---
 
-## 📂 Directory Structure
+## Directory Structure
 
 ```text
 desktop/
-├── BioMolExplorer-Launcher/        # Auxiliary files included in every release
-│   ├── biomolexplorer.tar          # Exported Docker image (generated in Step 1)
-│   ├── init.bat                    # Startup engine for Windows
-│   └── init.sh                     # Startup engine for Linux/macOS
+├── BioMolExplorer-Launcher/        # Auxiliary files included in the release
+│   ├── biomolexplorer-src.tar.gz   # Compressed source code (auto-generated)
+│   └── init-native.sh              # Native launcher for Linux/macOS (Conda + Node.js)
 │
-└── wrapper/                        # Source code for the visual executable (Electron)
-    ├── main.js                     # Electron logic (splash screen + bridge to scripts)
+└── wrapper/                        # Electron executable source code
+    ├── main.js                     # Main logic (splash screen + bridge to init-native.sh)
     ├── package.json                # Dependencies and electron-builder configuration
-    ├── assets/                     # Icons (.ico, .icns, .png)
+    ├── assets/                     # Icons (.png for Linux, .icns for Mac)
     ├── scripts/
-    │   └── pack-release.js         # Script that assembles the final .zip per platform
-    └── dist/                       # Intermediate output from electron-builder
+    │   ├── pack-source.js          # Generates biomolexplorer-src.tar.gz
+    │   └── pack-release.js         # Assembles the final .zip for distribution
+    └── dist/                       # electron-builder output (AppImage, .dmg)
 ```
 
-After the build, the final distribution `.zip` is generated **at the root of `desktop/`**, outside the `wrapper/` folder.
+The final `.zip` is generated at the root of `desktop/`, outside `wrapper/`.
 
 ---
 
-## ⚙️ Initial Setup (first time only)
+## Platform Status
 
-Before the first build, install the wrapper dependencies:
+| Platform | Mode | Script | Status |
+|---|---|---|---|
+| Linux | Native (Conda + Node.js) | `init-native.sh` | ✅ Implemented and working |
+| macOS | Native (Conda + Node.js) | `init-native.sh` | 🟡 Script ready, not yet tested on Mac |
 
-```bash
-cd apps/desktop/wrapper
-npm install --no-workspaces
-```
-
-Repeat this step only if:
-- You clone the repository on a new machine.
-- You add/update dependencies in `package.json`.
+> The only active build currently distributed is **`linux-native`**.
 
 ---
 
-## 👨‍💻 Developer Guide: Generating a New Release
+## Current Distribution Mode: Native (Conda + Node.js)
 
-Whenever there are changes to the system (Frontend/Backend) and a new version needs to be released, follow these **2 steps**:
+The current mode is **Native**, without Docker. The launcher automatically installs Miniconda and the scientific environment on the user's machine. The user only needs to click the executable.
 
-### Step 1: Generate the Docker Image
+> **End-user prerequisite:** Node.js 18+ installed (`node --version` must return 18+).
+> Miniconda, RDKit, OpenBabel, Vina, PyMOL, and Flask are installed automatically on the first run.
 
-Go to the root of the main project (`~/BioMolExplorer`):
+---
 
-```bash
-cd ../../../
-```
+## Developer Guide: Generating a New Release
 
-Generate the latest version of the image and export it to the Launcher folder:
+### Full Build (single command)
 
-```bash
-# 1. Build the image
-docker build -t biomolexplorer .
-
-# 2. Export to .tar
-docker save -o apps/desktop/BioMolExplorer-Launcher/biomolexplorer.tar biomolexplorer
-```
-
-### Step 2: Generate the Package for the Desired Platform
+Generates the tarball, compiles Electron, and assembles the `.zip` in one step:
 
 ```bash
 cd apps/desktop/wrapper
 
-# For Windows
-npm run build:win
+# Linux (only active build currently)
+npm run build:linux-native
 
-# For Linux
-npm run build:linux
-
-# For macOS (must be run on a Mac)
-npm run build:mac
+# macOS — script ready, requires a Mac machine to build
+# npm run build:mac-native
 ```
 
-Each command does **everything at once**: compiles Electron, validates the auxiliary files, and produces the final `.zip` ready for delivery.
-
-The final package is generated at:
-
-```text
-desktop/BioMolExplorer-Launcher-win.zip
-desktop/BioMolExplorer-Launcher-linux.zip
-desktop/BioMolExplorer-Launcher-mac.zip
-```
-
-Each `.zip` contains a `BioMolExplorer-Launcher/` folder with the correct structure for "Extract here":
-
-```text
-BioMolExplorer-Launcher-win.zip
-└── BioMolExplorer-Launcher/
-    ├── BioMolExplorer.exe
-    ├── biomolexplorer.tar
-    └── init.bat
-
-BioMolExplorer-Launcher-linux.zip
-└── BioMolExplorer-Launcher/
-    ├── BioMolExplorer.AppImage
-    ├── biomolexplorer.tar
-    └── init.sh
-
-BioMolExplorer-Launcher-mac.zip
-└── BioMolExplorer-Launcher/
-    ├── BioMolExplorer.dmg
-    ├── biomolexplorer.tar
-    └── init.sh
-```
-
-> ⚠️ **Prerequisite:** the `biomolexplorer.tar` (Step 1) must be in `apps/desktop/BioMolExplorer-Launcher/` before running the build, otherwise the script fails with a clear error message.
-
-> ℹ️ **About cross-platform builds:** `build:win` and `build:linux` run on any OS. `build:mac` **only works on macOS** (Apple limitation). For Linux builds from Windows, using WSL2 is recommended to avoid permission issues.
+Internally, `build:linux-native` runs:
+1. `node scripts/pack-source.js` → generates `BioMolExplorer-Launcher/biomolexplorer-src.tar.gz`
+2. `electron-builder --linux AppImage` → compiles Electron to `dist/BioMolExplorer.AppImage`
+3. `node scripts/pack-release.js linux-native` → assembles the final `.zip`
 
 ---
 
-## 📖 End-User Instructions
+### Package Output
 
-(Copy and send to the client along with the `.zip` corresponding to their OS.)
+```text
+desktop/BioMolExplorer-Launcher-linux-native.zip   ← only active package currently
+```
 
-### 🪟 Windows
+Contents of the `.zip` (Linux native mode):
 
-1. Extract the `.zip` on your computer (e.g., Desktop).
-2. Open the `BioMolExplorer-Launcher/` folder.
-3. Double-click **`BioMolExplorer.exe`**.
-4. If Windows asks for Administrator permission, click "Yes".
-5. Wait for the loading screen: Docker and the servers will start in the background, and the application will open shortly after.
-
-> On the first run, an internet connection is required if Docker is not yet installed.
+```text
+BioMolExplorer-Launcher-linux-native.zip
+└── BioMolExplorer-Launcher/
+    ├── BioMolExplorer.AppImage      ← executable — user double-clicks here
+    ├── init-native.sh               ← startup engine (called by the AppImage)
+    └── biomolexplorer-src.tar.gz    ← source code extracted on first run
+```
 
 ---
 
-### 🐧 Linux
+## End-User Instructions
 
-1. Extract the `.zip` on your computer.
+### Linux — Native Mode
+
+**Prerequisite:** Node.js 18+ installed. To check:
+```bash
+node --version   # must return v18.x.x or higher
+```
+If not installed, get it at [nodejs.org](https://nodejs.org/) or via your package manager.
+
+**Steps:**
+
+1. Extract the `.zip` to any folder on your computer.
 2. Open the `BioMolExplorer-Launcher/` folder.
-3. Double-click **`BioMolExplorer.AppImage`**.
+3. Double-click **`BioMolExplorer.AppImage`** to launch the app.
 
-If the system complains about permissions, open a terminal in the extracted folder and run:
-
+If the system complains about permissions, open a terminal in the folder and run:
 ```bash
 chmod +x BioMolExplorer.AppImage
 ./BioMolExplorer.AppImage
 ```
 
-> On some distros (Ubuntu 22.04+), you may need to install `libfuse2` for the AppImage to work:
+**On the first run**, the launcher will automatically (no user action required):
+- Install Miniconda at `~/.biomolexplorer/miniconda/`
+- Create the Conda environment with RDKit, OpenBabel, Vina, PyMOL, Flask, etc. *(5–15 minutes)*
+- Install JavaScript dependencies
+
+Subsequent runs are fast — it just starts the services.
+
+> **Ubuntu 22.04+ / Debian:** you may need to install `libfuse2` to run AppImages:
 > ```bash
 > sudo apt install libfuse2
 > ```
 
 ---
 
-### 🍎 macOS
+### macOS — Native Mode
+
+> Not yet tested. The `init-native.sh` script supports macOS (bash + Conda), but no Mac build has been validated.
 
 1. Extract the `.zip`.
-2. Double-click **`BioMolExplorer.dmg`** to open it.
-3. Drag the BioMolExplorer icon to the **Applications** folder.
-4. Open the app for the first time (you may need to right-click → "Open" to authorize it, since the app is not signed).
-
-> On the first run, an internet connection is required if Docker Desktop is not yet installed.
+2. Open the `BioMolExplorer-Launcher/` folder.
+3. Double-click **`BioMolExplorer.dmg`**.
+4. Drag the BioMolExplorer icon to the **Applications** folder.
+5. On first open: right-click the icon → **Open** to authorize it.

@@ -1,0 +1,32 @@
+# BioMolExplorer — Guia do Usuário (Windows)
+
+> **O suporte a Windows ainda não está disponível.**
+>
+> Um instalador nativo para Windows está em desenvolvimento. Esta página será atualizada quando uma versão estável for lançada.
+
+---
+
+## O Que Esperar
+
+Quando o suporte a Windows for lançado, a instalação seguirá estas etapas:
+
+1. Baixe o instalador `BioMolExplorer-Setup.exe`.
+2. Execute o instalador e siga as instruções na tela.
+3. Abra o **BioMolExplorer** pelo Menu Iniciar ou pelo atalho na área de trabalho.
+
+Na **primeira abertura**, o aplicativo irá configurar automaticamente o ambiente científico (Miniconda, Node.js, RDKit, OpenBabel, Vina, PyMOL, Flask) — nenhuma configuração manual é necessária.
+
+---
+
+## Enquanto Isso
+
+Se você precisar usar o BioMolExplorer agora, considere uma destas alternativas:
+
+- **Linux (recomendado):** Use uma instalação nativa de Linux ou uma máquina virtual com Ubuntu 20.04+.
+- **Versão web:** Acesse o BioMolExplorer diretamente em [biomolexplorer.onrender.com](https://biomolexplorer.onrender.com) sem precisar instalar nada.
+
+---
+
+## Fique Atualizado
+
+Acompanhe o repositório do projeto para novidades sobre o suporte a Windows.

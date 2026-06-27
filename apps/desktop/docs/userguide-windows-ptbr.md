@@ -20,10 +20,9 @@ Na **primeira abertura**, o aplicativo irá configurar automaticamente o ambient
 
 ## Enquanto Isso
 
-Se você precisar usar o BioMolExplorer agora, considere uma destas alternativas:
+Se você precisar usar o BioMolExplorer agora, considere a seguinte alternativa:
 
 - **Linux (recomendado):** Use uma instalação nativa de Linux ou uma máquina virtual com Ubuntu 20.04+.
-- **Versão web:** Acesse o BioMolExplorer diretamente em [biomolexplorer.onrender.com](https://biomolexplorer.onrender.com) sem precisar instalar nada.
 
 ---
 

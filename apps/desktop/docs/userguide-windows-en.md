@@ -20,10 +20,9 @@ On the **first launch**, the application will automatically set up the scientifi
 
 ## In the Meantime
 
-If you need to use BioMolExplorer now, consider one of these alternatives:
+If you need to use BioMolExplorer now, consider the following alternative:
 
 - **Linux (recommended):** Use a native Linux installation or a virtual machine with Ubuntu 20.04+.
-- **Web version:** Access BioMolExplorer directly at [biomolexplorer.onrender.com](https://biomolexplorer.onrender.com) without installing anything.
 
 ---
 

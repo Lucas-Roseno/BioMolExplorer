@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:linux-native": "npm install --no-workspaces && node scripts/pack-source.js && electron-builder --linux AppImage && node scripts/pack-release.js linux-native",
+    "sync-version": "node -e \"const fs=require('fs');const v=JSON.parse(fs.readFileSync('../../../package.json')).version;const p=JSON.parse(fs.readFileSync('package.json'));p.version=v;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');console.log('[sync-version] version ->',v)\"",
+    "build:linux-native": "npm run sync-version && npm install --no-workspaces && node scripts/pack-source.js && electron-builder --linux deb",
     "build:mac-native": "npm install --no-workspaces && node scripts/pack-source.js && electron-builder --mac dmg && node scripts/pack-release.js mac-native"
   },
   "build": {
@@ -15,10 +16,26 @@
       "output": "dist"
     },
     "linux": {
-      "target": "AppImage",
+      "target": "deb",
       "icon": "assets/icons",
       "category": "Science",
-      "artifactName": "BioMolExplorer.AppImage"
+      "extraFiles": [
+        {
+          "from": "../BioMolExplorer-Launcher/init-native.sh",
+          "to": "init-native.sh"
+        },
+        {
+          "from": "../BioMolExplorer-Launcher/biomolexplorer-src.tar.gz",
+          "to": "biomolexplorer-src.tar.gz"
+        }
+      ]
+    },
+    "deb": {
+      "depends": [
+        "curl",
+        "psmisc"
+      ],
+      "maintainer": "Pedro Dias <pedro.dias@aluno.cefetmg.br>"
     },
     "mac": {
       "target": "dmg",
@@ -27,8 +44,12 @@
       "artifactName": "BioMolExplorer.dmg"
     }
   },
-  "author": "Pedro Dias",
-  "license": "MIT",
+  "homepage": "https://biomolexplorer.onrender.com",
+  "author": {
+    "name": "Pedro Dias",
+    "email": "pedro.dias@aluno.cefetmg.br"
+  },
+  "license": "UNLICENSED",
   "devDependencies": {
     "7zip-bin": "^5.2.0",
     "archiver": "^7.0.1",

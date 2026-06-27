@@ -35,7 +35,8 @@
         "curl",
         "psmisc"
       ],
-      "maintainer": "Pedro Dias <pedro.dias@aluno.cefetmg.br>"
+      "maintainer": "Pedro Dias <pedro.dias@aluno.cefetmg.br>",
+      "artifactName": "biomolexplorer_amd64.deb"
     },
     "mac": {
       "target": "dmg",

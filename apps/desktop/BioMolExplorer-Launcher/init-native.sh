@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  BioMolExplorer - Inicializador Nativo Linux / macOS
-#  Chamado pelo Electron. Gerencia extração, Miniconda, Conda env e serviços.
+#  BioMolExplorer - Native Launcher for Linux / macOS
+#  Called by Electron. Manages extraction, Miniconda, Conda env and services.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_TAR="$SCRIPT_DIR/biomolexplorer-src.tar.gz"
 
-# Electron não carrega ~/.bashrc, então são injetados diretórios comuns no PATH.
+# Electron does not load ~/.bashrc, so common directories are injected into PATH.
 _prepend_path() { case ":$PATH:" in *":$1:"*) ;; *) export PATH="$1:$PATH" ;; esac; }
 for _nd in "$HOME/.local/bin" "$HOME/.biomolexplorer/miniconda/bin" \
            "$HOME/miniconda3/bin" "$HOME/anaconda3/bin" "/usr/local/bin"; do
@@ -15,7 +15,7 @@ for _nd in "$HOME/.local/bin" "$HOME/.biomolexplorer/miniconda/bin" \
 done
 unset -f _prepend_path 2>/dev/null; unset _nd
 
-# Ativa nvm se já foi instalado anteriormente
+# Activate nvm if already installed
 export NVM_DIR="$HOME/.biomolexplorer/nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
 
@@ -25,7 +25,7 @@ CONDA_DIR="$INSTALL_DIR/miniconda"
 CONDA_ENV_NAME="BioMolExplorer"
 PORT=3000
 
-# -------- Helpers de log --------
+# -------- Log helpers --------
 step() { printf '  [..] %s\n' "$1"; }
 ok()   { printf '  [OK] %s\n' "$1"; }
 warn() { printf '  [!!] %s\n' "$1"; }
@@ -38,13 +38,13 @@ fail() {
 banner() {
   printf '\n'
   printf '  +--------------------------------------------------+\n'
-  printf '  |      BioMolExplorer 2.0  --  Launcher Nativo     |\n'
-  printf '  |        Plataforma de Analise Molecular            |\n'
+  printf '  |      BioMolExplorer 2.0  --  Native Launcher     |\n'
+  printf '  |        Molecular Analysis Platform                |\n'
   printf '  +--------------------------------------------------+\n'
   printf '\n'
 }
 
-# Wrapper de download: usa curl ou wget
+# Download wrapper: uses curl or wget
 _download() {
   local url="$1" dest="$2"
   if command -v curl >/dev/null 2>&1; then
@@ -52,12 +52,12 @@ _download() {
   elif command -v wget >/dev/null 2>&1; then
     wget -q "$url" -O "$dest"
   else
-    fail "Nenhuma ferramenta de download encontrada (curl/wget)." \
-      "Reinstale o BioMolExplorer via .deb para corrigir dependências."
+    fail "No download tool found (curl/wget)." \
+      "Reinstall BioMolExplorer via .deb to fix dependencies."
   fi
 }
 
-# Wrapper de health check HTTP
+# HTTP health check wrapper
 _http_ok() {
   local url="$1"
   if command -v curl >/dev/null 2>&1; then
@@ -68,119 +68,119 @@ _http_ok() {
 }
 
 # =============================================================================
-#  [1/5] Extrair código-fonte (apenas primeira execução)
+#  [1/5] Extract source code (first run only)
 # =============================================================================
 extract_source() {
   if [ -d "$APP_DIR" ] && [ -f "$APP_DIR/package.json" ]; then
-    ok "Instalação encontrada em $APP_DIR"
+    ok "Installation found at $APP_DIR"
     return
   fi
-  [ ! -f "$SRC_TAR" ] && fail "Pacote não encontrado: $SRC_TAR" \
-    "Tente reinstalar o BioMolExplorer via .deb."
-  step "Instalando BioMolExplorer em $INSTALL_DIR..."
+  [ ! -f "$SRC_TAR" ] && fail "Package not found: $SRC_TAR" \
+    "Try reinstalling BioMolExplorer via .deb."
+  step "Installing BioMolExplorer at $INSTALL_DIR..."
   mkdir -p "$APP_DIR"
   tar -xzf "$SRC_TAR" -C "$APP_DIR" --strip-components=1 \
-    || fail "Falha ao extrair o código-fonte." "O arquivo pode estar corrompido. Reinstale o .deb."
-  ok "Código-fonte instalado!"
+    || fail "Failed to extract source code." "The file may be corrupted. Reinstall the .deb."
+  ok "Source code installed!"
 }
 
 # =============================================================================
-#  [2/5] Instalar Miniconda (apenas primeira execução)
+#  [2/5] Install Miniconda (first run only)
 # =============================================================================
 install_miniconda() {
   if [ -f "$CONDA_DIR/bin/conda" ]; then
-    ok "Miniconda já instalado."
+    ok "Miniconda already installed."
     return
   fi
-  step "Baixando Miniconda..."
+  step "Downloading Miniconda..."
   local url
   case "$(uname -sm)" in
     "Linux x86_64")  url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" ;;
     "Linux aarch64") url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh" ;;
     "Darwin x86_64") url="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" ;;
     "Darwin arm64")  url="https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh" ;;
-    *) fail "Arquitetura não suportada: $(uname -sm)" ;;
+    *) fail "Unsupported architecture: $(uname -sm)" ;;
   esac
   local installer="/tmp/biomol-miniconda-$$.sh"
   _download "$url" "$installer" \
-    || fail "Falha ao baixar Miniconda." "Verifique sua conexão com a internet."
+    || fail "Failed to download Miniconda." "Check your internet connection."
   bash "$installer" -b -p "$CONDA_DIR" \
-    || fail "Falha ao instalar o Miniconda."
+    || fail "Failed to install Miniconda."
   rm -f "$installer"
-  ok "Miniconda instalado em $CONDA_DIR!"
+  ok "Miniconda installed at $CONDA_DIR!"
 }
 
 # =============================================================================
-#  [3/5] Criar ambiente Conda com dependências científicas (apenas primeira vez)
+#  [3/5] Create Conda environment with scientific dependencies (first run only)
 # =============================================================================
 setup_conda_env() {
   source "$CONDA_DIR/etc/profile.d/conda.sh"
-  # Aceita os Termos de Serviço da Anaconda (exigido desde 2024 em modo não-interativo)
+  # Accept Anaconda Terms of Service (required since 2024 in non-interactive mode)
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
   if conda env list | grep -q "^$CONDA_ENV_NAME "; then
-    ok "Ambiente Conda '$CONDA_ENV_NAME' já existe."
+    ok "Conda environment '$CONDA_ENV_NAME' already exists."
     return
   fi
-  step "Criando ambiente Conda com dependências científicas..."
-  warn "Esta etapa pode levar de 5 a 15 minutos na primeira execução..."
+  step "Creating Conda environment with scientific dependencies..."
+  warn "This step may take 5 to 15 minutes on the first run..."
   local req_file="$APP_DIR/apps/python-service/BioMolExplorer/requirements.yml"
-  [ ! -f "$req_file" ] && fail "Arquivo requirements.yml não encontrado: $req_file"
+  [ ! -f "$req_file" ] && fail "requirements.yml file not found: $req_file"
   conda env create -f "$req_file" -y \
-    || fail "Falha ao criar o ambiente Conda." "Verifique sua conexão com a internet e tente novamente."
-  ok "Ambiente '$CONDA_ENV_NAME' criado!"
+    || fail "Failed to create Conda environment." "Check your internet connection and try again."
+  ok "Environment '$CONDA_ENV_NAME' created!"
 }
 
 # =============================================================================
-#  [3.5] Instalar Node.js via nvm se ausente (sem sudo)
+#  [3.5] Install Node.js via nvm if missing (no sudo)
 # =============================================================================
 install_node() {
-  # Verifica se já tem node >= 18 no PATH (sistema ou nvm)
+  # Check if node >= 18 is already in PATH (system or nvm)
   if command -v node >/dev/null 2>&1; then
     local ver; ver=$(node --version | sed 's/v//' | cut -d. -f1)
-    [ "$ver" -ge 18 ] && { ok "Node.js $(node --version) encontrado."; return; }
+    [ "$ver" -ge 18 ] && { ok "Node.js $(node --version) found."; return; }
   fi
 
-  step "Instalando Node.js 20 via nvm..."
+  step "Installing Node.js 20 via nvm..."
   export NVM_DIR="$HOME/.biomolexplorer/nvm"
   mkdir -p "$NVM_DIR"
   local nvm_install="/tmp/nvm-install-$$.sh"
   _download "https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh" "$nvm_install" \
-    || fail "Falha ao baixar nvm." "Verifique sua conexão com a internet."
+    || fail "Failed to download nvm." "Check your internet connection."
   PROFILE=/dev/null bash "$nvm_install" >/dev/null 2>&1
   rm -f "$nvm_install"
-  [ -s "$NVM_DIR/nvm.sh" ] || fail "Falha ao instalar nvm." "Verifique sua conexão com a internet."
+  [ -s "$NVM_DIR/nvm.sh" ] || fail "Failed to install nvm." "Check your internet connection."
   source "$NVM_DIR/nvm.sh"
   nvm install 20 \
-    || fail "Falha ao instalar Node.js 20." "Verifique sua conexão com a internet."
-  ok "Node.js $(node --version) instalado via nvm!"
+    || fail "Failed to install Node.js 20." "Check your internet connection."
+  ok "Node.js $(node --version) installed via nvm!"
 }
 
 # =============================================================================
-#  [4/5] Instalar dependências JavaScript (apenas primeira execução)
+#  [4/5] Install JavaScript dependencies (first run only)
 # =============================================================================
 setup_npm() {
   if [ -d "$APP_DIR/node_modules" ]; then
-    ok "Dependências JavaScript já instaladas."
+    ok "JavaScript dependencies already installed."
     return
   fi
   command -v node >/dev/null 2>&1 \
-    || fail "Node.js não encontrado." "Reinstale o BioMolExplorer via .deb para corrigir dependências."
+    || fail "Node.js not found." "Reinstall BioMolExplorer via .deb to fix dependencies."
   local node_ver
   node_ver=$(node --version | sed 's/v//' | cut -d. -f1)
-  [ "$node_ver" -lt 18 ] && fail "Node.js $node_ver detectado. É necessário Node.js 18+." \
-    "Reinstale o BioMolExplorer via .deb para atualizar o Node.js."
+  [ "$node_ver" -lt 18 ] && fail "Node.js $node_ver detected. Node.js 18+ is required." \
+    "Reinstall BioMolExplorer via .deb to update Node.js."
   local npm_bin
   npm_bin=$(command -v npm 2>/dev/null) \
-    || fail "npm não encontrado." "Reinstale o BioMolExplorer via .deb para corrigir dependências."
-  step "Instalando dependências JavaScript..."
+    || fail "npm not found." "Reinstall BioMolExplorer via .deb to fix dependencies."
+  step "Installing JavaScript dependencies..."
   (cd "$APP_DIR" && "$npm_bin" install) \
-    || fail "Falha ao instalar dependências JavaScript." "Verifique sua conexão com a internet."
-  ok "Dependências JavaScript instaladas!"
+    || fail "Failed to install JavaScript dependencies." "Check your internet connection."
+  ok "JavaScript dependencies installed!"
 }
 
 # =============================================================================
-#  Integrar ícone no sistema do usuário (apenas primeira execução)
+#  Integrate icon into user's system (first run only)
 # =============================================================================
 integrate_desktop() {
   local icon_src="$APP_DIR/apps/desktop/wrapper/assets/icons/256x256.png"
@@ -189,67 +189,67 @@ integrate_desktop() {
   [ -f "$icon_dst" ] && return
   [ ! -f "$icon_src" ] && return
 
-  step "Integrando ícone no sistema..."
+  step "Integrating icon into the system..."
   mkdir -p "$(dirname "$icon_dst")"
   cp "$icon_src" "$icon_dst"
   gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
-  ok "Ícone integrado!"
+  ok "Icon integrated!"
 }
 
 # =============================================================================
-#  [5/5] Iniciar os 3 serviços nativos
+#  [5/5] Start the 3 native services
 # =============================================================================
 start_services() {
   local CONDA_ENV_DIR="$CONDA_DIR/envs/$CONDA_ENV_NAME"
   local PYTHON_BIN="$CONDA_ENV_DIR/bin/python"
 
-  [ -f "$PYTHON_BIN" ] || fail "Python não encontrado em $PYTHON_BIN." \
-    "O ambiente conda pode não ter sido criado. Delete ~/.biomolexplorer e reabra o app."
+  [ -f "$PYTHON_BIN" ] || fail "Python not found at $PYTHON_BIN." \
+    "The conda environment may not have been created. Delete ~/.biomolexplorer and reopen the app."
 
-  # Ativa o ambiente conda manualmente (sem depender de conda activate em subshell)
+  # Manually activate conda environment (without relying on conda activate in subshell)
   export CONDA_PREFIX="$CONDA_ENV_DIR"
   export CONDA_DEFAULT_ENV="$CONDA_ENV_NAME"
   export PATH="$CONDA_ENV_DIR/bin:$PATH"
   export LD_LIBRARY_PATH="$CONDA_ENV_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
   local NPM_BIN
-  NPM_BIN=$(command -v npm 2>/dev/null) || fail "npm não encontrado no PATH."
+  NPM_BIN=$(command -v npm 2>/dev/null) || fail "npm not found in PATH."
 
   local LOG_DIR="$INSTALL_DIR/logs"
   mkdir -p "$LOG_DIR"
 
-  step "Liberando portas 3000, 3001 e 5000..."
+  step "Freeing ports 3000, 3001 and 5000..."
   fuser -k -9 3000/tcp 3001/tcp 5000/tcp >/dev/null 2>&1 || true
 
-  step "Iniciando Flask (porta 5000)..."
+  step "Starting Flask (port 5000)..."
   (cd "$APP_DIR/apps/python-service" && "$PYTHON_BIN" app.py) > "$LOG_DIR/flask.log" 2>&1 &
   local FLASK_PID=$!
 
-  step "Iniciando API Node.js (porta 3001)..."
+  step "Starting Node.js API (port 3001)..."
   (cd "$APP_DIR" && "$NPM_BIN" run start --workspace=api) > "$LOG_DIR/api.log" 2>&1 &
 
-  step "Aguardando backends ficarem prontos..."
+  step "Waiting for backends to be ready..."
   local count=0
   while [ $count -lt 90 ]; do
     sleep 1
     count=$((count + 1))
 
-    # Verifica se Flask morreu com erro
+    # Check if Flask died with an error
     if ! kill -0 "$FLASK_PID" 2>/dev/null; then
-      warn "Flask encerrou inesperadamente. Últimas linhas do log:"
+      warn "Flask exited unexpectedly. Last log lines:"
       tail -20 "$LOG_DIR/flask.log" | while IFS= read -r line; do printf '  [flask] %s\n' "$line"; done
-      fail "Flask falhou ao iniciar." "Verifique o log em $LOG_DIR/flask.log"
+      fail "Flask failed to start." "Check the log at $LOG_DIR/flask.log"
     fi
 
     FLASK_OK=$(_http_ok http://127.0.0.1:5000/pdb_files && echo 1 || echo 0)
     NODE_OK=$(_http_ok http://127.0.0.1:3001/api/files/list/PDB && echo 1 || echo 0)
     if [ "$FLASK_OK" = "1" ] && [ "$NODE_OK" = "1" ]; then
-      ok "Backends prontos!"
+      ok "Backends ready!"
       break
     fi
   done
 
-  step "Iniciando Next.js (porta 3000)..."
+  step "Starting Next.js (port 3000)..."
   (cd "$APP_DIR" && "$NPM_BIN" run dev --workspace=web) &
 
   count=0
@@ -257,12 +257,12 @@ start_services() {
     sleep 2
     count=$((count + 2))
     _http_ok "http://localhost:$PORT" && break
-    [ "$count" -ge 120 ] && fail "Frontend demorou demais para responder." \
-      "Verifique os logs do terminal para mais detalhes."
-    printf '  ... Next.js iniciando %ds / 120s\n' "$count"
+    [ "$count" -ge 120 ] && fail "Frontend took too long to respond." \
+      "Check the terminal logs for more details."
+    printf '  ... Next.js starting %ds / 120s\n' "$count"
   done
 
-  printf '  [OK] BioMolExplorer pronto!\n'
+  printf '  [OK] BioMolExplorer ready!\n'
   wait
 }
 
@@ -270,28 +270,28 @@ start_services() {
 #  MAIN
 # =============================================================================
 banner
-printf '  [INFO] Modo: Nativo (Conda + Node.js)\n\n'
+printf '  [INFO] Mode: Native (Conda + Node.js)\n\n'
 
-printf '  [1/5] Verificando instalação...\n'
+printf '  [1/5] Checking installation...\n'
 extract_source
 printf '\n'
 
-printf '  [2/5] Verificando Miniconda...\n'
+printf '  [2/5] Checking Miniconda...\n'
 install_miniconda
 printf '\n'
 
-printf '  [3/5] Configurando ambiente científico...\n'
+printf '  [3/5] Setting up scientific environment...\n'
 setup_conda_env
 printf '\n'
 
-printf '  [3.5/5] Verificando Node.js...\n'
+printf '  [3.5/5] Checking Node.js...\n'
 install_node
 printf '\n'
 
-printf '  [4/5] Instalando dependências JavaScript...\n'
+printf '  [4/5] Installing JavaScript dependencies...\n'
 setup_npm
 printf '\n'
 
-printf '  [5/5] Iniciando serviços...\n'
+printf '  [5/5] Starting services...\n'
 integrate_desktop
 start_services

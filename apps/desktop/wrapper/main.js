@@ -3,8 +3,8 @@ const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Detecta o caminho base onde estao init-native.sh e biomolexplorer-src.tar.gz.
-// Linux AppImage expoe APPIMAGE; macOS usa process.execPath; dev usa process.cwd().
+// Resolves the base path where init-native.sh and biomolexplorer-src.tar.gz are located.
+// Linux AppImage exposes APPIMAGE; macOS uses process.execPath; dev uses process.cwd().
 function resolveBasePath() {
   if (process.env.APPIMAGE) {
     return path.dirname(process.env.APPIMAGE);
@@ -28,7 +28,7 @@ function resolveLauncher(basePath) {
   };
 }
 
-// Rastreado globalmente para uso no cleanup ao fechar
+// Tracked globally for use in cleanup on close
 let isNativeMode = false;
 
 function createWindow() {
@@ -45,12 +45,12 @@ function createWindow() {
   isNativeMode = launcher.isNative;
 
   const modeLabel = launcher.isNative
-    ? 'Ativando ambiente Conda e iniciando serviços locais...'
-    : 'Carregando o Docker e os serviços locais...';
+    ? 'Activating Conda environment and starting local services...'
+    : 'Loading Docker and local services...';
 
   const firstRunNote = launcher.isNative
-    ? 'Na primeira execução, o setup pode levar alguns minutos.'
-    : 'Isso pode levar alguns instantes na primeira execução.';
+    ? 'On the first run, setup may take a few minutes.'
+    : 'This may take a moment on the first run.';
 
   win.loadURL(`data:text/html;charset=utf-8,
     <body style="margin:0; padding:0; background-color:%23F4F6F8; display:flex; flex-direction:column; height:100vh; font-family:'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -66,7 +66,7 @@ function createWindow() {
 
           <div style="width: 50px; height: 50px; border: 5px solid %23e0e0e0; border-top: 5px solid %235b4382; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 25px;"></div>
 
-          <h2 style="color:%23333333; margin:0 0 10px 0; font-weight:500; font-size: 24px;">Iniciando o Sistema</h2>
+          <h2 style="color:%23333333; margin:0 0 10px 0; font-weight:500; font-size: 24px;">Starting Up</h2>
           <p style="color:%23666666; margin:0; font-size:16px; max-width: 400px; line-height: 1.5;">${modeLabel}<br>${firstRunNote}</p>
         </div>
       </div>
@@ -74,8 +74,8 @@ function createWindow() {
     </body>`);
 
   console.log(`[main] OS: ${process.platform} | basePath: ${basePath}`);
-  console.log(`[main] Modo: ${launcher.isNative ? 'Nativo (Conda)' : 'Docker'}`);
-  console.log(`[main] Script motor: ${launcher.script}`);
+  console.log(`[main] Mode: ${launcher.isNative ? 'Native (Conda)' : 'Docker'}`);
+  console.log(`[main] Engine script: ${launcher.script}`);
 
   let motorLogs = '';
   let appReady = false;
@@ -84,11 +84,11 @@ function createWindow() {
 
   if (!fs.existsSync(launcher.script)) {
     showErrorScreen(win,
-      `Script de inicializacao nao encontrado: ${launcher.script}`,
+      `Initialization script not found: ${launcher.script}`,
       launcher.isNative
-        ? 'Verifique se o AppImage foi extraido junto com init-native.sh e biomolexplorer-src.tar.gz na mesma pasta.'
-        : 'Verifique se o AppImage foi extraido junto com init.sh e biomolexplorer.tar na mesma pasta.',
-      `basePath resolvido: ${basePath}\nprocess.execPath: ${process.execPath}\nprocess.env.APPIMAGE: ${process.env.APPIMAGE || '(nao definido)'}`
+        ? 'Make sure the AppImage was extracted alongside init-native.sh and biomolexplorer-src.tar.gz in the same folder.'
+        : 'Make sure the AppImage was extracted alongside init.sh and biomolexplorer.tar in the same folder.',
+      `resolved basePath: ${basePath}\nprocess.execPath: ${process.execPath}\nprocess.env.APPIMAGE: ${process.env.APPIMAGE || '(not set)'}`
     );
     return;
   }
@@ -106,20 +106,20 @@ function createWindow() {
           clearInterval(serverCheckInterval);
           appReady = true;
           if (!win.getURL().includes('localhost:3000')) {
-            console.log('[main] Servidor detectado via polling.');
+            console.log('[main] Server detected via polling.');
             win.loadURL('http://localhost:3000');
           }
         }
       })
-      .catch(() => { /* servidor ainda nao subiu */ });
+      .catch(() => { /* server not up yet */ });
   }, 2000);
 
   const handleOutput = (data, channel = 'stdout') => {
     const log = data.toString();
     motorLogs += log;
-    process.stdout.write(`[motor:${channel}] ${log}`);
+    process.stdout.write(`[engine:${channel}] ${log}`);
 
-    if (log.includes('BioMolExplorer pronto')) {
+    if (log.includes('BioMolExplorer ready')) {
       clearInterval(serverCheckInterval);
       appReady = true;
       if (!win.getURL().includes('localhost:3000')) {
@@ -140,7 +140,7 @@ function createWindow() {
   launcherProcess.on('error', (err) => {
     clearInterval(serverCheckInterval);
     showErrorScreen(win,
-      'Falha ao executar o script de inicializacao.',
+      'Failed to execute the initialization script.',
       err.message,
       motorLogs
     );
@@ -150,8 +150,8 @@ function createWindow() {
     clearInterval(serverCheckInterval);
     if (appReady) return;
 
-    const title = failMessage || `O script encerrou inesperadamente (codigo ${code}).`;
-    const hint = failHint || 'Verifique se Node.js 18+ esta instalado e tente novamente.';
+    const title = failMessage || `The script exited unexpectedly (code ${code}).`;
+    const hint = failHint || 'Make sure Node.js 18+ is installed and try again.';
     showErrorScreen(win, title, hint, motorLogs);
   });
 }
@@ -167,20 +167,20 @@ function showErrorScreen(win, title, hint, logs) {
         </div>
       </div>
       <div style="padding: 40px; max-width: 800px; margin: 0 auto;">
-        <h2 style="color:%23c0392b; margin-top:0;">Erro na Inicializacao</h2>
+        <h2 style="color:%23c0392b; margin-top:0;">Startup Error</h2>
         <p style="color:%23333; font-size:16px; line-height:1.5;">${escape(title)}</p>
 
         <div style="background:%23fff5e6; border-left:4px solid %23f39c12; padding: 15px 20px; margin: 25px 0; border-radius: 4px;">
-          <strong style="color:%23d35400;">O que fazer:</strong>
+          <strong style="color:%23d35400;">What to do:</strong>
           <p style="margin: 8px 0 0 0; color:%23333; line-height:1.5;">${escape(hint)}</p>
         </div>
 
         <details style="margin-top: 30px;">
-          <summary style="cursor:pointer; color:%23666; font-size:13px; user-select:none;">Ver detalhes tecnicos</summary>
-          <pre style="background:%23272822; color:%23f8f8f2; padding:15px; border-radius:6px; font-size:12px; max-height:300px; overflow:auto; margin-top:10px;">${escape(logs) || '(sem logs disponiveis)'}</pre>
+          <summary style="cursor:pointer; color:%23666; font-size:13px; user-select:none;">View technical details</summary>
+          <pre style="background:%23272822; color:%23f8f8f2; padding:15px; border-radius:6px; font-size:12px; max-height:300px; overflow:auto; margin-top:10px;">${escape(logs) || '(no logs available)'}</pre>
         </details>
 
-        <p style="margin-top: 30px; color:%23999; font-size:13px;">Apos resolver o problema, feche esta janela e abra o BioMolExplorer novamente.</p>
+        <p style="margin-top: 30px; color:%23999; font-size:13px;">After resolving the issue, close this window and reopen BioMolExplorer.</p>
       </div>
     </body>`);
 }

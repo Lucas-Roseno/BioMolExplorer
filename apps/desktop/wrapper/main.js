@@ -1,7 +1,9 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+
+const VERSION_URL = 'https://raw.githubusercontent.com/Lucas-Roseno/BioMolExplorer/main/package.json';
 
 // Resolves the base path where init-native.sh and biomolexplorer-src.tar.gz are located.
 // Linux AppImage exposes APPIMAGE; macOS uses process.execPath; dev uses process.cwd().
@@ -28,6 +30,48 @@ function resolveLauncher(basePath) {
   };
 }
 
+async function checkForUpdates(win, currentVersion) {
+  try {
+    const res = await fetch(VERSION_URL, { headers: { 'User-Agent': 'BioMolExplorer' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const latest = data.version;
+    if (!/^\d+\.\d+/.test(latest)) throw new Error(`Invalid version format: ${latest}`);
+    const isOutdated = latest !== currentVersion;
+
+    const text = isOutdated
+      ? `v${currentVersion} · Update available: v${latest}`
+      : `v${currentVersion} · Up to date`;
+    const color = isOutdated ? '%23e67e22' : '%2327ae60';
+
+    win.webContents.executeJavaScript(`
+      var el = document.getElementById('version-badge');
+      if (el) { el.textContent = ${JSON.stringify(text)}; el.style.color = '${color}'; }
+    `).catch(() => {});
+
+    if (isOutdated) {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'info',
+        title: 'Update Available',
+        message: `BioMolExplorer v${latest} is available`,
+        detail: `You are currently running v${currentVersion}.\nWould you like to go to the download page?`,
+        buttons: ['Download Update', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (response === 0) {
+        shell.openExternal('https://biomolexplorer.github.io/download/');
+      }
+    }
+  } catch {
+    // Network unavailable or API error — just show the current version silently
+    win.webContents.executeJavaScript(`
+      var el = document.getElementById('version-badge');
+      if (el) { el.textContent = 'v${currentVersion}'; }
+    `).catch(() => {});
+  }
+}
+
 // Tracked globally for use in cleanup on close
 let isNativeMode = false;
 
@@ -43,6 +87,8 @@ function createWindow() {
   const basePath = resolveBasePath();
   const launcher = resolveLauncher(basePath);
   isNativeMode = launcher.isNative;
+
+  const currentVersion = app.getVersion();
 
   const modeLabel = launcher.isNative
     ? 'Activating Conda environment and starting local services...'
@@ -68,6 +114,8 @@ function createWindow() {
 
           <h2 style="color:%23333333; margin:0 0 10px 0; font-weight:500; font-size: 24px;">Starting Up</h2>
           <p style="color:%23666666; margin:0; font-size:16px; max-width: 400px; line-height: 1.5;">${modeLabel}<br>${firstRunNote}</p>
+
+          <p id="version-badge" style="margin-top: 24px; font-size: 12px; color: %23aaaaaa;">v${currentVersion} · Checking for updates...</p>
         </div>
       </div>
       <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
@@ -76,6 +124,11 @@ function createWindow() {
   console.log(`[main] OS: ${process.platform} | basePath: ${basePath}`);
   console.log(`[main] Mode: ${launcher.isNative ? 'Native (Conda)' : 'Docker'}`);
   console.log(`[main] Engine script: ${launcher.script}`);
+  console.log(`[main] Version: ${currentVersion}`);
+
+  win.webContents.once('did-finish-load', () => {
+    checkForUpdates(win, currentVersion);
+  });
 
   let motorLogs = '';
   let appReady = false;

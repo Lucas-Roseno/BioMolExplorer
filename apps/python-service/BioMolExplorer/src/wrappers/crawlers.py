@@ -73,8 +73,11 @@ logger = LoggerManager.get_logger('crawlers', log_file='logs/loaders.log')
 
 def read_filters(path:str):
     try:
-        # Use os.path.join for safer path construction
-        full_path = os.path.join(os.getcwd(), path.lstrip('/'))
+        # Resolve path relative to the package root (apps/python-service/BioMolExplorer/)
+        # __file__ -> .../src/wrappers/crawlers.py
+        # go up 3 levels: wrappers -> src -> BioMolExplorer (package root)
+        package_root = Path(__file__).resolve().parents[2]
+        full_path = package_root / path.lstrip('/')
         with open(full_path, 'r') as fp:
             filters = json.load(fp)
         return filters
@@ -83,9 +86,29 @@ def read_filters(path:str):
         raise
 
 
+_ALIASES_PATH = '/src/scripts/crawlers/target_aliases.json'
+
+def resolve_target_alias(target_name: str) -> str:
+    """Resolve um nome popular/alternativo para o pref_name oficial no ChEMBL.
+    Retorna o nome original caso não haja alias mapeado.
+    A busca no dicionário é case-insensitive."""
+    try:
+        aliases = read_filters(_ALIASES_PATH)
+        # Ignora a chave especial de comentário
+        aliases = {k: v for k, v in aliases.items() if not k.startswith('_')}
+        # Busca case-insensitive
+        lower_map = {k.lower(): v for k, v in aliases.items()}
+        resolved = lower_map.get(target_name.lower(), target_name)
+        if resolved != target_name:
+            logger.info(f"Alias resolvido: '{target_name}' -> '{resolved}' (ChEMBL pref_name)")
+        return resolved
+    except Exception:
+        # Se o arquivo de aliases não existir ou falhar, continua com o nome original
+        return target_name
+
+
 def load_chembl(target_name:str, base_output_path:str):
     try:
-        # Normalize base_output_path (ensure no leading slash for relative use if intended)
         base_path = base_output_path.lstrip('/')
         
         target_output_path = f'/{os.path.join(base_path, "ChEMBL", "targets")}/'
@@ -99,13 +122,22 @@ def load_chembl(target_name:str, base_output_path:str):
         mols = Molecule()
         sims = SimilarMols()
 
+        # Resolve alias antes de buscar no ChEMBL (ex: 'Butyrylcholinesterase' -> 'Cholinesterase')
+        chembl_target_name = resolve_target_alias(target_name)
+
         script_path = '/src/scripts/crawlers/target.json'
         filters = read_filters(script_path)
+        
+        # Remove campos que o frontend salva mas que não são filtros válidos da API ChEMBL
+        if 'target_name' in filters:
+            del filters['target_name']
+            
         target.set_outputpath(target_output_path)
-        target.search(target_name, filters)
+        target.search(chembl_target_name, filters)
 
         # Check if target was actually found by looking for the generated file
-        target_file = os.path.join(os.getcwd(), target_output_path.lstrip('/'), f"{target_name.upper()}.csv")
+        from kernel.config import BIOMOL_ROOT
+        target_file = os.path.join(BIOMOL_ROOT, target_output_path.lstrip('/'), f"{chembl_target_name.upper()}.csv")
         if not os.path.exists(target_file):
              raise ValueError(f"Target '{target_name}' not found in ChEMBL with the provided filters.")
 
@@ -113,7 +145,7 @@ def load_chembl(target_name:str, base_output_path:str):
         filters = read_filters(script_path)
         bioact.set_outputpath(bioactivity_output_path)
         bioact.set_targetpath(target_output_path)
-        bioact.search(target_name, filters)
+        bioact.search(chembl_target_name, filters)
 
         script_path = '/src/scripts/crawlers/molecules.json'
         filters = read_filters(script_path)

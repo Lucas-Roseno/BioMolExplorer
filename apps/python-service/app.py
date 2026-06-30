@@ -14,6 +14,7 @@ from rdkit.Chem import AllChem, Draw
 import uuid
 import threading
 import logging
+from pathlib import Path
 
 # Global dictionary to track active background tasks
 active_tasks = {}
@@ -54,9 +55,9 @@ def run_load_pdb():
             if any("NMR" in method.value for method in data['ExperimentalMethodID']):
                 data['max_resolution'] = None
         
-        original_cwd = os.getcwd()
-        biomol_explorer_path = BIOMOL_ROOT_PATH
-        os.chdir(biomol_explorer_path)
+        pass
+        pass
+        pass
         
         try:
             warnings = load_pdb(
@@ -75,7 +76,7 @@ def run_load_pdb():
                 'warnings': warnings 
             })
         finally:
-            os.chdir(original_cwd)
+            pass
     
     except Exception as e:
         print(f"Error in load_pdb: {e}")
@@ -348,7 +349,7 @@ def delete_pdb_target():
 @app.route('/load_chembl', methods=['POST'])
 def run_load_chembl():
     """Updates JSON files with user data and runs the ChEMBL crawler."""
-    original_cwd = os.getcwd()
+    pass
     try:
         user_data = request.json
         
@@ -404,8 +405,8 @@ def run_load_chembl():
         # --- End Validation ---
 
         # Temporary change of the correct directory so that the code work
-        biomol_explorer_path = BIOMOL_ROOT_PATH
-        os.chdir(biomol_explorer_path)
+        pass
+        pass
         
         def update_json_file(file_path, new_data):
             # Check if file exists, if not, create it
@@ -424,7 +425,6 @@ def run_load_chembl():
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), molecules_data)
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), similarmols_data)
 
-
         load_chembl(
             target_name=target_name,
             base_output_path='datasets'
@@ -436,7 +436,7 @@ def run_load_chembl():
         return jsonify({'status': 'error', 'message': str(e)}), 400
     finally:
     # Come back to the original directory
-        os.chdir(original_cwd)
+        pass
         
 
 @app.route('/chembl_files', methods=['GET'])
@@ -805,9 +805,9 @@ def run_load_zinc():
         file.save(file_path)
 
         # 5. Run the Crawler Wrapper
-        original_cwd = os.getcwd()
-        biomol_explorer_path = BIOMOL_ROOT_PATH
-        os.chdir(biomol_explorer_path)
+        pass
+        pass
+        pass
 
         try:
             load_zinc(
@@ -816,7 +816,7 @@ def run_load_zinc():
                 verbose=verbose_flag
             )
         finally:
-            os.chdir(original_cwd)
+            pass
 
         return jsonify({'status': 'success', 'message': f'ZINC processing for {filename_original} completed.'})
 
@@ -1069,13 +1069,13 @@ def process_graphs():
     """
     Manually runs the similarity pipeline for the graphs.
     """
-    original_cwd = os.getcwd()
+    pass
     try:
-        target_dir = BIOMOL_ROOT_PATH
-        os.chdir(target_dir)
+        pass
+        pass
 
         rel_db_path = '/datasets/ChEMBL/DrugBank'
-        full_db_path = os.path.join(target_dir, 'datasets', 'ChEMBL', 'DrugBank')
+        full_db_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
         
         if not os.path.exists(full_db_path):
              return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
@@ -1095,7 +1095,7 @@ def process_graphs():
         app.logger.error(f"Error processing graphs: {e}", exc_info=True)
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
-        os.chdir(original_cwd)
+        pass
 
 @app.route('/api/analysis/graph-data', methods=['GET'])
 def get_graph_data():
@@ -1103,19 +1103,19 @@ def get_graph_data():
     Runs the analysis pipeline (to ensure fresh data)
     and returns the graph data (nodes and edges).
     """
-    original_cwd = os.getcwd()
+    pass
     try:
         target = request.args.get('target', 'Acetylcholinesterase')
         
         # --- 0. Run Analysis Pipeline (as requested by user) ---
-        target_dir = BIOMOL_ROOT_PATH
-        os.chdir(target_dir)
+        pass
+        pass
 
         # Defining paths relative to CWD
         rel_db_path = '/datasets/ChEMBL/DrugBank'
         
         # Optimization: if datasets do not exist, skip processing
-        full_db_path = os.path.join(target_dir, 'datasets', 'ChEMBL', 'DrugBank')
+        full_db_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
         if not os.path.exists(full_db_path):
              return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
 
@@ -1247,7 +1247,7 @@ def get_graph_data():
         traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
     finally:
-        os.chdir(original_cwd)
+        pass
 
 @app.route('/api/analysis/plots', methods=['GET'])
 def list_analysis_plots():
@@ -1324,9 +1324,9 @@ task_logs = {}
 
 def redocking_worker(task_id, target, charge_type, prepare_complex):
     import logging
-    original_cwd = os.getcwd()
-    biomol_explorer_path = BIOMOL_ROOT_PATH
-    os.chdir(biomol_explorer_path)
+    pass
+    pass
+    pass
     
     # Create a stream to capture stdout
     log_stream = io.StringIO()
@@ -1384,9 +1384,9 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
         log_updater.start()
 
         perform_redocking(
-            base_input_path='datasets/PDB',
+            base_input_path=os.path.join(BIOMOL_ROOT_PATH, 'datasets/PDB'),
             target=target,
-            base_output_path='resultados/redocking',
+            base_output_path=os.path.join(BIOMOL_ROOT_PATH, 'resultados/redocking'),
             prepare_complex=prepare_complex,
             charge_type=charge_type
         )
@@ -1405,7 +1405,7 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
             
         sys.stdout = original_stdout
         sys.stderr = original_stderr
-        os.chdir(original_cwd)
+        pass
 
 @app.route('/api/redocking/targets', methods=['GET'])
 def get_redocking_targets():
@@ -1752,70 +1752,131 @@ def list_admet_available_targets():
 
 docking_task_logs = {}
 
-def docking_worker(task_id: str, target: str, pdb_code: list, library: str, dock_kwargs: dict):
-    original_cwd = os.getcwd()
-    biomol_explorer_path = BIOMOL_ROOT_PATH
-    os.chdir(biomol_explorer_path)
-    
-    # Add Dock6 binaries to PATH
-    if '/home/lucas-roseno/progs/dock6/bin' not in os.environ['PATH']:
-        os.environ['PATH'] += os.pathsep + '/home/lucas-roseno/progs/dock6/bin'
-        
+
+def _resolve_dock6_app_path() -> str:
+    """
+    Resolves the dock6 application directory (the folder containing bin/dock6)
+    in a portable way, without hardcoding any user-specific paths.
+
+    Resolution order:
+      1. Find 'dock6' binary via shutil.which() -> return its grandparent dir (bin/../)
+      2. DOCK6_PATH environment variable (pointing to the dock6 installation dir)
+      3. Raise RuntimeError with a clear installation message.
+    """
+    dock6_bin = shutil.which('dock6')
+    if dock6_bin:
+        # binary lives at <dock6_root>/bin/dock6 -> return <dock6_root>/
+        return str(Path(dock6_bin).parent.parent) + '/'
+
+    env_path = os.environ.get('DOCK6_PATH')
+    if env_path and os.path.isdir(env_path):
+        return env_path if env_path.endswith('/') else env_path + '/'
+
+    fallback_path = os.path.expanduser('~/progs/dock6/')
+    if os.path.isdir(fallback_path):
+        return fallback_path
+
+    raise RuntimeError(
+        "dock6 binary not found in your system PATH.\n"
+        "Please install DOCK 6 and add its bin/ directory to PATH, "
+        "or set the DOCK6_PATH environment variable to the DOCK 6 installation directory."
+    )
+
+
+def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwargs: dict):
+    """
+    Background thread that orchestrates the full consensus docking pipeline.
+    Calls perform_consensus() exactly as the professor's code does.
+    """
     log_stream = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
 
     class Tee:
-        def __init__(self, *files): self.files = files
+        def __init__(self, *files):
+            self.files = files
         def write(self, obj):
-            for f in self.files: f.write(obj); f.flush()
+            for f in self.files:
+                f.write(obj)
+                f.flush()
         def flush(self):
-            for f in self.files: f.flush()
+            for f in self.files:
+                f.flush()
         def fileno(self):
             for f in self.files:
-                if hasattr(f, 'fileno'): return f.fileno()
+                if hasattr(f, 'fileno'):
+                    return f.fileno()
             return sys.__stdout__.fileno()
 
     sys.stdout = Tee(log_stream, sys.__stdout__)
     sys.stderr = Tee(log_stream, sys.__stderr__)
 
-    def update_logs():
+    def _update_logs():
         while active_tasks.get(task_id, {}).get('status') == 'running':
             docking_task_logs[task_id] = log_stream.getvalue()
             threading.Event().wait(0.5)
         docking_task_logs[task_id] = log_stream.getvalue()
 
-    log_updater = threading.Thread(target=update_logs)
-    log_updater.daemon = True
+    log_updater = threading.Thread(target=_update_logs, daemon=True)
     log_updater.start()
 
     try:
         active_tasks[task_id] = {'status': 'running', 'message': f'Running Docking for {target}...'}
         docking_task_logs[task_id] = ''
-        
-        # Define paths
-        base_input_path = 'datasets/PDB'
-        base_output_path = 'resultados/docking'
-        
+
+        # ── Paths (all absolute, portable) ────────────────────────────────────
+        base_input_path  = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
+        base_output_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+
         if library == 'zinc':
-            base_selected_mols = 'datasets/ZINC'
+            base_selected_mols = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
+            mol_filename = dock_kwargs.get('mol_filename', 'molecules')
         else:
-            base_selected_mols = 'datasets/ChEMBL/DrugBank/Molecules'
+            base_selected_mols = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET')
             
-        dock6_app_path = '/home/lucas-roseno/progs/dock6/'
-        
-        # We must construct the correct pdb_code tuple: (pdb_id, ligand_name, resnum, chain)
-        # The frontend sends a dict with resname, resnum, chain. We need to find the best pdb_id.
-        best = get_better_complex('/' + os.path.join(base_input_path, target) + '/')
-        if best and len(best) > 0:
-            real_pdb_id = best[0][0]
-        else:
-            raise Exception("No valid complex found for target")
-            
+            # Determine which ADMET file to use for this target
+            if dock_kwargs.get('mol_filename'):
+                mol_filename = dock_kwargs.get('mol_filename')
+            else:
+                if os.path.exists(os.path.join(base_selected_mols, f"{target}_FULL.csv")):
+                    mol_filename = f"{target}_FULL"
+                elif os.path.exists(os.path.join(base_selected_mols, f"{target}_MOLS.csv")):
+                    mol_filename = f"{target}_MOLS"
+                else:
+                    mol_filename = f"{target}_MOLS"
+
+        # Resolve dock6 installation directory portably (no hardcoded user paths)
+        dock6_app_path = _resolve_dock6_app_path()
+
+        # ── Build the pdb_code tuple (pdb_id, ligand, resnum, chain) ──────────
+        pdb_tuple = None
         if isinstance(pdb_code, dict):
-            pdb_tuple = (real_pdb_id, pdb_code.get('resname'), pdb_code.get('resnum'), pdb_code.get('chain'))
-        else:
+            target_pdb_id = pdb_code.get('pdb_id')
+            if not target_pdb_id:
+                best = get_better_complex(os.path.join(base_input_path, target) + '/')
+                if best and len(best) > 0:
+                    # best[0] is e.g. ('9L27', 'ACT', 301, 'A')
+                    pdb_tuple = (best[0][0], best[0][1], str(best[0][2]), best[0][3])
+                else:
+                    raise ValueError(f"No valid complex found for target '{target}'")
+            else:
+                pdb_tuple = (
+                    target_pdb_id,
+                    pdb_code.get('resname'),
+                    str(pdb_code.get('resnum')) if pdb_code.get('resnum') is not None else None,
+                    pdb_code.get('chain'),
+                )
+        elif isinstance(pdb_code, (list, tuple)):
             pdb_tuple = tuple(pdb_code)
-        
+            
+        if not pdb_tuple or len(pdb_tuple) != 4 or any(x is None for x in pdb_tuple):
+            # Fallback to the best complex if tuple is invalid
+            best = get_better_complex(os.path.join(base_input_path, target) + '/')
+            if best and len(best) > 0:
+                pdb_tuple = (best[0][0], best[0][1], str(best[0][2]), best[0][3])
+            else:
+                raise ValueError(f"Invalid pdb_code format and no best complex found: {pdb_tuple}")
+
+        # ── Call perform_consensus() exactly as the professor's workflow does ──
         perform_consensus(
             base_input_path=base_input_path,
             target=target,
@@ -1823,85 +1884,106 @@ def docking_worker(task_id: str, target: str, pdb_code: list, library: str, dock
             base_selected_mols=base_selected_mols,
             dock6_app_path=dock6_app_path,
             pdb_code=pdb_tuple,
-            **dock_kwargs
+            **{**dock_kwargs, 'mol_filename': mol_filename}
         )
-        
-        active_tasks[task_id]['status'] = 'completed'
+
+        active_tasks[task_id]['status']  = 'completed'
         active_tasks[task_id]['message'] = f'Docking for {target} completed successfully.'
-        
+
     except Exception as e:
         print(f"FATAL ERROR in docking_worker: {str(e)}", file=sys.__stderr__)
-        active_tasks[task_id]['status'] = 'error'
+        active_tasks[task_id]['status']  = 'error'
         active_tasks[task_id]['message'] = str(e)
     finally:
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        os.chdir(original_cwd)
 
 
 @app.route('/api/docking/available-ligands/<target>/<pdb_code>', methods=['GET'])
 def get_ligands_docking(target, pdb_code):
+    """Returns a list of ligands available in a given PDB file for docking."""
     if '..' in target or '..' in pdb_code:
         return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
-        
-    original_cwd = os.getcwd()
-    biomol_explorer_path = BIOMOL_ROOT_PATH
-    os.chdir(biomol_explorer_path)
-    
+
     try:
-        # PDB_BASE_PATH is absolute, but get_better_complex needs a relative path from BIOMOL_ROOT_PATH
-        target_path_relative = '/' + os.path.join('datasets', 'PDB', target) + '/'
-        target_path_absolute = os.path.join(PDB_BASE_PATH, target)
-        
+        target_path = os.path.join(PDB_BASE_PATH, target)
+
+        # If pdb_code == target, auto-resolve the best complex via scoring CSV
         if pdb_code == target:
-            # Resolve the best complex automatically using relative path
-            best = get_better_complex(target_path_relative)
+            best = get_better_complex(target_path + '/')
             if best and len(best) > 0:
                 real_pdb_code = best[0][0]
-                file_path = os.path.join(target_path_absolute, f"{real_pdb_code}.pdb")
+                file_path = os.path.join(target_path, f"{real_pdb_code}.pdb")
             else:
                 return jsonify({'status': 'error', 'message': 'No valid complex found in target directory'}), 404
         else:
-            file_path = os.path.join(target_path_absolute, f"{pdb_code}.pdb")
+            file_path = os.path.join(target_path, f"{pdb_code}.pdb")
 
         if not os.path.exists(file_path):
             return jsonify({'status': 'error', 'message': 'PDB file not found'}), 404
-            
+
         ligands = get_available_ligands(file_path)
         return jsonify({'status': 'success', 'ligands': ligands})
+
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-    finally:
-        os.chdir(original_cwd)
 
 
 @app.route('/api/docking/run', methods=['POST'])
 def run_docking_task():
-    data = request.json or {}
-    target = data.get('target')
-    pdb_code = data.get('pdb_code') # Should be a list/tuple like ['7AIS', 'NAG', 604, 'A']
-    library = data.get('library', 'chembl')
-    
+    """Starts a docking job in a background thread and returns a task_id for polling."""
+    data     = request.json or {}
+    target   = data.get('target')
+    pdb_code = data.get('pdb_code')  # list/tuple: [pdb_id, resname, resnum, chain]
+    library  = data.get('library', 'chembl')
+
     if not target or not pdb_code:
         return jsonify({'status': 'error', 'message': 'target and pdb_code are required'}), 400
-        
+
     dock_kwargs = {
         'conformer_search_type': data.get('conformer_search_type', 'flex'),
-        'density': data.get('density', 0.5),
-        'radius': data.get('radius', 1.4),
-        'distance': data.get('distance', 10.0),
-        'plot_max_residues': data.get('plot_max_residues', 50),
-        'pH': data.get('pH', 7.4),
-        'sizeof_box': data.get('sizeof_box', [24, 24, 24]),
-        'exhaustiveness': data.get('exhaustiveness', 20),
-        'num_modes': data.get('num_modes', 10),
-        'prepare_complex': data.get('prepare_complex', True),
-        'charge_type': data.get('charge_type', 'gas'),
-        'mol_filename': data.get('mol_filename', 'molecules')
+        'density':               data.get('density', 0.5),
+        'radius':                data.get('radius', 1.4),
+        'distance':              data.get('distance', 10.0),
+        'plot_max_residues':     data.get('plot_max_residues', 50),
+        'pH':                    data.get('pH', 7.4),
+        'sizeof_box':            data.get('sizeof_box', [24, 24, 24]),
+        'exhaustiveness':        data.get('exhaustiveness', 20),
+        'num_modes':             data.get('num_modes', 10),
+        'prepare_complex':       data.get('prepare_complex', True),
+        'charge_type':           data.get('charge_type', 'gas'),
+        'mol_filename':          data.get('mol_filename'),
     }
 
+    # Pre-flight validation (Fail-fast)
+    prepare_complex = dock_kwargs['prepare_complex']
+    target_clean = target.replace(' ', '')
+    
+    # 1. Check if Prepared folder exists when prepare_complex is False
+    if not prepare_complex:
+        prepared_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB', target_clean, 'Prepared')
+        if not os.path.isdir(prepared_path):
+            return jsonify({'status': 'error', 'message': f'Receptor not prepared for {target}. Please run Redocking or prepare the complex first.'}), 400
+
+    # 2. Check if molecules.csv exists in the ADMET folder
+    mol_filename = dock_kwargs.get('mol_filename')
+    if library == 'zinc':
+        mol_filename = mol_filename or 'molecules'
+        molecules_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC', mol_filename + '.csv')
+    else:
+        mol_filename = mol_filename or (f"{target}_FULL" if os.path.exists(os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET', f"{target}_FULL.csv")) else f"{target}_MOLS")
+        molecules_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET', mol_filename + '.csv')
+
+        
+    if not os.path.isfile(molecules_path):
+        return jsonify({'status': 'error', 'message': f'ADMET filter has not been run for this target/library. Missing: {molecules_path}'}), 400
+
     task_id = str(uuid.uuid4())
-    thread = threading.Thread(target=docking_worker, args=(task_id, target, pdb_code, library, dock_kwargs))
+    thread  = threading.Thread(
+        target=docking_worker,
+        args=(task_id, target, pdb_code, library, {**dock_kwargs, 'mol_filename': mol_filename}),
+        daemon=True
+    )
     thread.start()
 
     return jsonify({'status': 'success', 'task_id': task_id})
@@ -1909,48 +1991,46 @@ def run_docking_task():
 
 @app.route('/api/docking/status/<task_id>', methods=['GET'])
 def get_docking_status(task_id):
+    """Returns the current status and live logs of a running docking task."""
     status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
-    logs = docking_task_logs.get(task_id, '')
+    logs   = docking_task_logs.get(task_id, '')
     return jsonify({**status, 'logs': logs})
 
 
 @app.route('/api/docking/results', methods=['GET'])
 def list_docking_results():
-    results = []
-    docking_base_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
-    if not os.path.exists(docking_base_path):
+    """Lists targets that have a completed docking consensus CSV."""
+    docking_base = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+    if not os.path.exists(docking_base):
         return jsonify([])
 
-    for target_dir in os.listdir(docking_base_path):
-        csv_path = os.path.join(docking_base_path, target_dir, f"{target_dir}.csv")
-        if os.path.exists(csv_path):
-            results.append(target_dir)
-            
+    results = [
+        d for d in os.listdir(docking_base)
+        if os.path.isfile(os.path.join(docking_base, d, f"{d}.csv"))
+    ]
     return jsonify(sorted(results))
 
 
 @app.route('/api/docking/csv/<target>', methods=['GET'])
 def get_docking_csv(target):
+    """Returns the consensus docking results CSV as JSON for a given target."""
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
-        
+
     csv_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, f"{target}.csv")
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
 
     try:
         df = pd.read_csv(csv_path)
-        return jsonify({
-            'status': 'success',
-            'headers': df.columns.tolist(),
-            'rows': df.values.tolist()
-        })
+        return jsonify({'status': 'success', 'headers': df.columns.tolist(), 'rows': df.values.tolist()})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/docking/plot/<target>', methods=['GET'])
 def get_docking_plot(target):
+    """Serves the correlation plot PNG for a completed docking target."""
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
@@ -1963,18 +2043,15 @@ def get_docking_plot(target):
 
 @app.route('/api/docking/download/<target>', methods=['GET'])
 def download_docking_csv(target):
+    """Downloads the consensus docking CSV for a given target."""
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
-        
+
     csv_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, f"{target}.csv")
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
 
-    return send_file(
-        csv_path,
-        as_attachment=True,
-        download_name=f'docking_{target}.csv'
-    )
+    return send_file(csv_path, as_attachment=True, download_name=f'docking_{target}.csv')
 
 
 if __name__ == '__main__':

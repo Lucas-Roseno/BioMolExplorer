@@ -1,8 +1,0 @@
-{
-    "organism": "Homo sapiens",
-    "type__in": [
-        "SINGLE PROTEIN"
-    ],
-    "relationship_type": "DIRECT",
-    "target_name": "Beta-secretase 1"
-}

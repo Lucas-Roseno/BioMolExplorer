@@ -55,6 +55,7 @@ from pathlib import Path
 from crawlers.settings import CrawlerSettings
 from kernel.utilities import fileHandling
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 #----------------------------------------------------------------------------------------------
 
 
@@ -63,7 +64,7 @@ class Targets(CrawlerSettings):
     def __init__(self, path=None, extension='csv') -> None:
         super().__init__()
         self.__target    = super().get_client_connection().target
-        self.__path      = str(Path.cwd())
+        self.__path      = BIOMOL_ROOT
         self.__extension = extension
         self.logger      = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/targets.log')
         self.set_outputpath(path) if path != None else None

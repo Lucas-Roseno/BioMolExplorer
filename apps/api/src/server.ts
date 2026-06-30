@@ -51,7 +51,7 @@ app.post('/api/chembl/search', async (req, res) => {
       target: { target_name: s.target_name, organism: s.organism || "Homo sapiens" },
       bioactivity: { standard_type__in: s.standard_type__in, standard_value__lte: s.max_value_ref ? parseFloat(s.max_value_ref) : 1000 },
       similarmols: { similarity: s.similarity ? parseFloat(s.similarity) : 60, mw_freebase__lte: s.molecule_weight ? parseFloat(s.molecule_weight) : 500 },
-      molecules: { natural_product_molecules: s.natural_product_molecules }
+      molecules: { natural_product: s.natural_product_molecules ? 1 : 0 }
     };
     const response = await fetch(`${PYTHON_URL}/load_chembl`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)

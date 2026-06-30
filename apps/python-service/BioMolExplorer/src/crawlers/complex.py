@@ -57,6 +57,7 @@ from rcsbsearchapi.search import AttributeQuery
 
 #----------------------------------------------------------------------------------------------
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 #----------------------------------------------------------------------------------------------
 
 
@@ -88,7 +89,7 @@ class ExperimentalMethod(Enum):
 class PDBComplex():
 
     def __init__(self, output_path=None):
-        self.__path = str(Path.cwd()) 
+        self.__path = BIOMOL_ROOT
         self.set_outputpath(output_path) if output_path != None else None
         self.logger = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/complex.log')
 
@@ -96,8 +97,28 @@ class PDBComplex():
 
     def set_outputpath(self, output_path:str):
         self.__outputpath = output_path
-        if not os.path.exists(self.__path + self.__outputpath):
-            os.makedirs(self.__path + self.__outputpath, exist_ok=True)
+        if self.__outputpath:
+            full_path = self._resolve_outputpath()
+            if not os.path.exists(full_path):
+                os.makedirs(full_path, exist_ok=True)
+
+    def _resolve_outputpath(self) -> str:
+        """Returns the absolute output path regardless of how it was set."""
+        if not self.__outputpath:
+            return self.__path
+        
+        # If it already includes the root path, return it directly
+        if self.__outputpath.startswith(self.__path):
+            return self.__outputpath
+            
+        # Mimic utilities.fileHandling string concatenation for legacy paths starting with '/'
+        if self.__outputpath.startswith('/'):
+            # Check if it's a true absolute path that exists and is not just /datasets
+            if os.path.isabs(self.__outputpath) and os.path.exists(os.path.dirname(self.__outputpath)) and not self.__outputpath.startswith('/datasets'):
+                return self.__outputpath
+            return self.__path + self.__outputpath
+            
+        return os.path.join(self.__path, self.__outputpath)
             
 
 
@@ -187,10 +208,11 @@ class PDBComplex():
 
             if pdb_codes:
                 
-                pdb_crawler.download_pdb_files(pdb_codes, pdir=self.__path + self.__outputpath, file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
+                pdb_crawler.download_pdb_files(pdb_codes, pdir=self._resolve_outputpath(), file_format='pdb', overwrite=True, max_num_threads=os.cpu_count()-1)
 
-                datain  = [self.__outputpath[1:]+'pdb'+code.lower()+'.ent' for code in pdb_codes]
-                dataout = [self.__outputpath[1:]+code+'.pdb' for code in pdb_codes]
+                resolved = self._resolve_outputpath()
+                datain  = [os.path.join(resolved, 'pdb'+code.lower()+'.ent') for code in pdb_codes]
+                dataout = [os.path.join(resolved, code+'.pdb') for code in pdb_codes]
                 codes   = {}
 
                 for input, output, idx in zip(datain, dataout, pdb_codes): 
@@ -212,7 +234,7 @@ class PDBComplex():
                     except Exception as e:
                         self.logger.error(f"[ERROR]: Erro ao processar o arquivo {idx}: {e}", exc_info=True)
                      
-                with open(self.__outputpath[1:] + 'pdb_codes.csv', 'w') as fp:
+                with open(os.path.join(self._resolve_outputpath(), 'pdb_codes.csv'), 'w') as fp:
                     fp.write('PDB_CODE,LIGAND,RESNUM,CHAIN,RESOLUTION\n')
                     for code in codes.keys():
                         resolution = codes[code][1]

@@ -17,5 +17,12 @@ dependencies:
   - matplotlib>=3.8
   - pymol-open-source=3.0.0
   - vina=1.2.5
+  - scipy
   - pip:
     - rcsbsearchapi==1.6.0
+    - flask
+    - flask-cors
+    - requests
+    - pytest
+    - pytest-cov
+    - gunicorn

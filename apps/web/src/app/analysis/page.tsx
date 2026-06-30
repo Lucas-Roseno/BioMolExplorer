@@ -456,9 +456,14 @@ interface RedockingTabProps {
 
 function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: RedockingTabProps) {
   const [pdbTargets, setPdbTargets] = useState<string[]>([]);
-  const [selectedTarget, setSelectedTarget] = useState("");
+  const [availableLigands, setAvailableLigands] = useState<any[]>([]);
+  const [selectedLigand, setSelectedLigand] = useState<any>(null);
+  const [library, setLibrary] = useState('chembl');
+  const [radius, setRadius] = useState(15.0);
+  const [exhaustiveness, setExhaustiveness] = useState(8);
   const [prepareComplex, setPrepareComplex] = useState(true);
-  const [chargeType, setChargeType] = useState("am1");
+  const [chargeType, setChargeType] = useState('am1');
+  const [selectedTarget, setSelectedTarget] = useState("");
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<any>(null);
   
@@ -1562,6 +1567,8 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
   const [pdbTargets, setPdbTargets] = useState<string[]>([]);
   const [chemblTargets, setChemblTargets] = useState<string[]>([]);
   const [zincTargets, setZincTargets] = useState<string[]>([]);
+  const [targetsWithRedocking, setTargetsWithRedocking] = useState<string[]>([]);
+  const [targetsWithAdmet, setTargetsWithAdmet] = useState<string[]>([]);
   const [selectedTarget, setSelectedTarget] = useState("");
   const [availableLigands, setAvailableLigands] = useState<any[]>([]);
   const [selectedLigand, setSelectedLigand] = useState<any>(null); // Should hold the array [Residue, Name, Number, Chain]
@@ -1588,11 +1595,13 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
     // fetch targets from /api/redocking/targets and others
     const fetchTargets = async () => {
       try {
-        const [targetsRes, resultsRes, chemblRes, zincRes] = await Promise.all([
+        const [targetsRes, resultsRes, chemblRes, zincRes, redockRes, admetRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
           fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`),
           fetch(`${API_BASE_URL}/chembl_files?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/zinc_files?t=${Date.now()}`)
+          fetch(`${API_BASE_URL}/zinc_files?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/api/admet/results?t=${Date.now()}`)
         ]);
         
         if (targetsRes.ok) {
@@ -1601,12 +1610,22 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           if (targets.length > 0) setSelectedTarget(targets[0]);
         }
         
+        if (redockRes.ok) {
+          const redockTargets = await redockRes.json();
+          setTargetsWithRedocking(redockTargets);
+        }
+        
         if (resultsRes.ok) {
           const results = await resultsRes.json();
           setAvailableResults(results);
           if (results.length > 0 && !activeResultTarget) {
             setActiveResultTarget(results[0]);
           }
+        }
+        
+        if (admetRes.ok) {
+          const admetTargets = await admetRes.json();
+          setTargetsWithAdmet(admetTargets);
         }
 
         if (chemblRes.ok) {
@@ -1628,31 +1647,56 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
 
   useEffect(() => {
     if (selectedTarget) {
-      // Fetch ligands
-      const fetchLigands = async () => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/docking/available-ligands/${selectedTarget}/${selectedTarget}`, { cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            setAvailableLigands(data.ligands || []);
-            if (data.ligands && data.ligands.length > 0) {
-              setSelectedLigand(data.ligands[0]);
+      if (targetsWithRedocking.includes(selectedTarget)) {
+        // Fetch ligands from redocking results
+        const fetchLigands = async () => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/redocking/csv/${selectedTarget}`, { cache: 'no-store' });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.headers && data.rows) {
+                const pdbIdx = data.headers.findIndex((h: string) => h.toUpperCase() === 'PDB_CODE');
+                const ligIdx = data.headers.findIndex((h: string) => h.toUpperCase() === 'LIGAND');
+                const resIdx = data.headers.findIndex((h: string) => h.toUpperCase() === 'RESNUM');
+                const chainIdx = data.headers.findIndex((h: string) => h.toUpperCase() === 'CHAIN');
+                const rmsdIdx = data.headers.findIndex((h: string) => h.toUpperCase() === 'RMSD');
+
+                const parsedLigands = data.rows.map((row: any) => ({
+                  pdb_id: row[pdbIdx],
+                  resname: row[ligIdx],
+                  resnum: row[resIdx],
+                  chain: row[chainIdx],
+                  rmsd: row[rmsdIdx] !== null && row[rmsdIdx] !== undefined ? parseFloat(row[rmsdIdx]).toFixed(2) : 'N/A'
+                }));
+                
+                setAvailableLigands(parsedLigands);
+                if (parsedLigands.length > 0) {
+                  setSelectedLigand(parsedLigands[0]);
+                } else {
+                  setSelectedLigand(null);
+                }
+              } else {
+                setAvailableLigands([]);
+                setSelectedLigand(null);
+              }
             } else {
+              setAvailableLigands([]);
               setSelectedLigand(null);
             }
-          } else {
+          } catch(e) {
+            console.error(e);
             setAvailableLigands([]);
             setSelectedLigand(null);
           }
-        } catch(e) {
-          console.error(e);
-          setAvailableLigands([]);
-          setSelectedLigand(null);
         }
+        fetchLigands();
+      } else {
+        // Redocking not run
+        setAvailableLigands([]);
+        setSelectedLigand(null);
       }
-      fetchLigands();
     }
-  }, [selectedTarget]);
+  }, [selectedTarget, targetsWithRedocking]);
 
   // Results fetch effect
   useEffect(() => {
@@ -1770,6 +1814,46 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         </div>
       )}
 
+      {!targetsWithRedocking.includes(selectedTarget) && selectedTarget && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! Redocking Required.</strong>
+            <span>You must run the redocking simulation first for target <b>{selectedTarget}</b> on the Redocking tab.</span>
+          </div>
+        </div>
+      )}
+
+      {!targetsWithAdmet.includes(selectedTarget) && selectedTarget && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '20px', 
+          borderRadius: '10px', 
+          marginBottom: '30px',
+          border: '1px solid #ffeeba',
+          color: '#856404',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
+          <div>
+            <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! ADMET Filter Required.</strong>
+            <span>You must run the ADMET analysis first for target <b>{selectedTarget}</b> to filter ligands. Do this on the ADMET Filter tab before you can perform a docking simulation.</span>
+          </div>
+        </div>
+      )}
+
       {selectedTarget && library === 'chembl' && !chemblTargets.includes(selectedTarget) && (
         <div style={{ 
           backgroundColor: '#fff3cd', 
@@ -1850,7 +1934,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
             >
               {availableLigands.length === 0 && <option value="">No ligands found</option>}
               {availableLigands.map(l => (
-                <option key={JSON.stringify(l)} value={JSON.stringify(l)}>{`${l.resname} (Chain: ${l.chain}, Num: ${l.resnum})`}</option>
+                <option key={JSON.stringify(l)} value={JSON.stringify(l)}>{`${l.pdb_id} - ${l.resname} (Chain: ${l.chain}, Num: ${l.resnum}) - RMSD: ${l.rmsd}`}</option>
               ))}
             </select>
           </div>
@@ -1869,54 +1953,36 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           </div>
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <button 
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            {showAdvanced ? '- Hide Advanced Parameters' : '+ Show Advanced Parameters'}
-          </button>
-        </div>
-
-        {showAdvanced && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type:</label>
-              <select 
-                value={chargeType} 
-                onChange={(e) => setChargeType(e.target.value)}
-                disabled={isTaskRunning}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
-              >
-                <option value="am1">AM1 (Recommended)</option>
-                <option value="gas">Gasteiger</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Radius (Dock6):</label>
-              <input type="number" step="0.1" value={radius} onChange={(e) => setRadius(parseFloat(e.target.value))} disabled={isTaskRunning} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Exhaustiveness (Vina):</label>
-              <input type="number" value={exhaustiveness} onChange={(e) => setExhaustiveness(parseInt(e.target.value))} disabled={isTaskRunning} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <input 
-                type="checkbox" 
-                id="prepCompDock" 
-                checked={prepareComplex} 
-                onChange={(e) => setPrepareComplex(e.target.checked)}
-                disabled={isTaskRunning}
-                style={{ width: '18px', height: '18px', marginRight: '10px' }}
-              />
-              <label htmlFor="prepCompDock" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex (Missing Hydrogens, Charges)</label>
-            </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type:</label>
+            <select 
+              value={chargeType} 
+              onChange={(e) => setChargeType(e.target.value)}
+              disabled={isTaskRunning}
+              style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ccc' }}
+            >
+              <option value="am1">AM1 (Recommended)</option>
+              <option value="gas">Gasteiger</option>
+            </select>
           </div>
-        )}
+
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <input 
+              type="checkbox" 
+              id="prepCompDock" 
+              checked={prepareComplex} 
+              onChange={(e) => setPrepareComplex(e.target.checked)}
+              disabled={isTaskRunning}
+              style={{ width: '18px', height: '18px', marginRight: '10px' }}
+            />
+            <label htmlFor="prepCompDock" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex (Missing Hydrogens, Charges)</label>
+          </div>
+        </div>
 
         <button 
           onClick={runDocking} 
-          disabled={isTaskRunning || !selectedTarget || !selectedLigand || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))}
+          disabled={isTaskRunning || !selectedTarget || !selectedLigand || !targetsWithRedocking.includes(selectedTarget) || !targetsWithAdmet.includes(selectedTarget) || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))}
           style={{ 
             padding: '12px 30px', 
             backgroundColor: 'var(--primary-color)', 
@@ -1925,7 +1991,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
             borderRadius: '8px', 
             fontWeight: 'bold',
             cursor: 'pointer',
-            opacity: (isTaskRunning || !selectedTarget || !selectedLigand || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))) ? 0.6 : 1,
+            opacity: (isTaskRunning || !selectedTarget || !selectedLigand || !targetsWithRedocking.includes(selectedTarget) || !targetsWithAdmet.includes(selectedTarget) || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))) ? 0.6 : 1,
             boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
           }}
         >
@@ -2005,7 +2071,17 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
                     <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white' }}>
                       <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                         <tr style={{ backgroundColor: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
-                          {resultsData.headers.map((h, idx) => <th key={idx} style={{ padding: '14px 16px', textAlign: 'left', color: '#374151', fontWeight: 600, fontSize: '0.95rem' }}>{h}</th>)}
+                          {resultsData.headers.map((h, idx) => {
+                            let displayHeader = h;
+                            if (h === 'vina') displayHeader = 'vina (kcal/mol)';
+                            else if (h === 'dock6') displayHeader = 'dock6 (Grid Score)';
+                            
+                            return (
+                              <th key={idx} style={{ padding: '14px 16px', textAlign: 'left', color: '#374151', fontWeight: 600, fontSize: '0.95rem' }}>
+                                {displayHeader}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
@@ -2039,30 +2115,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
                 <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>No result data available for this target.</p>
               )}
 
-              {/* Correlation Plot Images (Second) */}
-              <div style={{ marginBottom: '30px', textAlign: 'center' }}>
-                <h5 style={{ color: '#555', marginBottom: '15px' }}>Score Correlation (Vina vs Dock6 Footprint)</h5>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <img 
-                    src={`${API_BASE_URL}/api/docking/plot/${activeResultTarget}?t=${Date.now()}`} 
-                    alt="Correlation Plot" 
-                    style={{ maxWidth: '100%', maxHeight: '400px', border: '1px solid #eee', borderRadius: '8px', padding: '10px', objectFit: 'contain', backgroundColor: 'white' }}
-                    onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
-                  />
-                  <a 
-                    href={`${API_BASE_URL}/api/docking/plot/${activeResultTarget}?t=${Date.now()}`} 
-                    download={`correlation_${activeResultTarget}.png`} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    style={{ position: 'absolute', top: '20px', right: '20px', backgroundColor: 'rgba(255,255,255,0.9)', color: 'var(--primary-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold', textDecoration: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
-                    title="Download Image"
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--primary-color)', e.currentTarget.style.color = 'white')}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.9)', e.currentTarget.style.color = 'var(--primary-color)')}
-                  >
-                    <i className="fas fa-download"></i> Download
-                  </a>
-                </div>
-              </div>
+              {/* Correlation Plot section removed */}
             </div>
           )}
         </div>

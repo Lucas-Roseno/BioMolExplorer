@@ -52,6 +52,7 @@ warnings.filterwarnings("ignore")
 #----------------------------------------------------------------------------------------------
 import logging
 import os
+from kernel.config import BIOMOL_ROOT
 from pathlib import Path
 #----------------------------------------------------------------------------------------------
 
@@ -61,7 +62,7 @@ class LoggerManager:
 
     @classmethod
     def get_logger(cls, name, log_file=None, level=logging.ERROR):
-        path    = str(Path.cwd())
+        path    = BIOMOL_ROOT
         logpath = path + '/logs/'
         
         if not os.path.exists(logpath):

@@ -59,6 +59,7 @@ import ast
 #----------------------------------------------------------------------------------------------
 from kernel.utilities import fileHandling, fileReading
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 from crawlers.settings import CrawlerSettings
 #----------------------------------------------------------------------------------------------
 
@@ -71,7 +72,7 @@ from urllib3.util.retry import Retry
 class MyMolecules():
     
     def __init__(self) -> None:
-        self.path   = str(Path.cwd())
+        self.path   = BIOMOL_ROOT
         self.logger = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/molecules.log')
         
     def get_path(self):
@@ -178,7 +179,8 @@ class Molecule(CrawlerSettings, MyMolecules):
     def search(self, filter_params:dict):
         
         f1    = fileHandling(input_path=self.__bioactivitypath, ext=self.__extension)
-        files = [f.rsplit('.')[0] for f in os.listdir(self.__bioactivitypath[1:]) if f.endswith('.csv')]
+        from kernel.config import BIOMOL_ROOT
+        files = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__bioactivitypath.lstrip('/'))) if f.endswith('.csv')]
         
         mols = []
         for file in files:
@@ -299,7 +301,8 @@ class SimilarMols(CrawlerSettings, MyMolecules):
     def search(self, filter_params:dict) -> None:
         
         f1    = fileHandling(input_path=self.__bioactivitypath, ext=self.__extension)
-        files = [f.rsplit('.')[0] for f in os.listdir(self.__bioactivitypath[1:]) if f.endswith('.csv')]
+        from kernel.config import BIOMOL_ROOT
+        files = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__bioactivitypath.lstrip('/'))) if f.endswith('.csv')]
         
         mols = []
         for file in files:

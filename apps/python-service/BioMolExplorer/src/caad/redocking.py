@@ -71,6 +71,7 @@ from pymol import cmd
 #----------------------------------------------------------------------------------------------
 from kernel.utilities import fileHandling, MolConverter, MolExplorer
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 from kernel.descriptors import Descriptors
 #----------------------------------------------------------------------------------------------
 
@@ -81,12 +82,14 @@ class Docking():
                  complex_input_path:Optional[str]=None, output_path:Optional[str]=None,
                  mol_filename:Optional[str]='molecules') -> None:
         
-        self.path           = str(Path.cwd())
-        # Calculate project root relative to this file to find templates
+        self.path           = BIOMOL_ROOT if BIOMOL_ROOT.endswith('/') else BIOMOL_ROOT + '/'       # Calculate project root relative to this file to find templates
         self.project_root   = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        self.ligandpath     = ligand_input_path if ligand_input_path != None else None
-        self.receptorpath   = receptor_input_path if receptor_input_path != None else None
-        self.complexpath    = complex_input_path if complex_input_path != None else None
+        self.ligandpath = None
+        if ligand_input_path: self.set_ligandpath(ligand_input_path)
+        self.receptorpath = None
+        if receptor_input_path: self.set_receptorpath(receptor_input_path)
+        self.complexpath = None
+        if complex_input_path: self.set_complexpath(complex_input_path)
         self.nprocess       = os.cpu_count() - 2
         self.centers        = None
         self.logpath        = self.path + '/logs/'
@@ -100,7 +103,11 @@ class Docking():
 
 
     def set_ligandpath(self, path) -> None:
-       if not os.path.exists(self.path + path):
+       if path:
+           import os
+           path = path if os.path.isabs(path) else os.path.join(self.path, path)
+
+       if not os.path.exists(path):
            print(f'[ERROR]: The ligand path {path} does not exist!')
            exit(1)
 
@@ -108,7 +115,11 @@ class Docking():
     
     
     def set_receptorpath(self, path) -> None:
-       if not os.path.exists(self.path + path):
+       if path:
+           import os
+           path = path if os.path.isabs(path) else os.path.join(self.path, path)
+
+       if not os.path.exists(path):
            print(f'[ERROR]: The receptor path {path} does not exist!')
            exit(1)
        
@@ -116,7 +127,11 @@ class Docking():
        
        
     def set_complexpath(self, path) -> None:
-       if not os.path.exists(self.path + path):
+       if path:
+           import os
+           path = path if os.path.isabs(path) else os.path.join(self.path, path)
+
+       if not os.path.exists(path):
            print(f'[ERROR]: The complex path {path} does not exist!')
            exit(1)
        
@@ -124,10 +139,14 @@ class Docking():
        
        
     def set_outputpath(self, path) -> None:
-        if not os.path.exists(self.path + path):
-            os.makedirs(self.path + path, exist_ok=True)
+        if path:
+            import os
+            path = path if os.path.isabs(path) else os.path.join(self.path, path)
+
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
         
-        if not os.path.exists(self.path + path):
+        if not os.path.exists(path):
             print(f'[ERROR]: The output path {path} can not be created!')
             exit(1)
 
@@ -152,7 +171,10 @@ class Docking():
 
         """
         try:
-            with open(input_template, 'r') as template_file:
+            # input_template may be an absolute path (from callers using os.path.join(self.project_root, ...))
+            # or a relative path - use os.path.isabs to handle both cases safely
+            template_path = input_template if os.path.isabs(input_template) else os.path.join(self.path, input_template.lstrip('/'))
+            with open(template_path, 'r') as template_file:
                 template_content = template_file.read()
 
             config_content = template_content.format(**kwargs)
@@ -165,7 +187,7 @@ class Docking():
         
         finally:
             time.sleep(1)
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
            
 
@@ -177,7 +199,10 @@ class Docking():
         """
         
         try:
-            cwd = (self.path + local_path) if local_path != None else None
+            if local_path is not None:
+                cwd = local_path if os.path.isabs(local_path) else os.path.join(self.path, local_path.lstrip('/'))
+            else:
+                cwd = None
             
             # Use capture_output to ensure we can relay the output to our captured sys.stdout
             # This is necessary because sys.stdout might be a Tee object (no real fileno for subprocess)
@@ -216,10 +241,11 @@ class Docking():
         
         finally:
             if local_path != None:
-                dir_fd = os.open((self.path + local_path), os.O_DIRECTORY)
+                dir_fd_path = local_path if os.path.isabs(local_path) else os.path.join(self.path, local_path.lstrip('/'))
+                dir_fd = os.open(dir_fd_path, os.O_DIRECTORY)
                 os.fsync(dir_fd)
             else:
-                dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+                dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
                 os.fsync(dir_fd)
             time.sleep(1)
         
@@ -250,8 +276,8 @@ class Docking():
         
         finally:
             time.sleep(1)
-            os.remove((self.path + self.outputpath) + filename) if os.path.isfile((self.path + self.outputpath) + filename) else None
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            os.remove((self.outputpath) + filename) if os.path.isfile((self.outputpath) + filename) else None
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
                 
 
@@ -278,7 +304,7 @@ class Docking():
         """
         try:
             
-            input_file = self.path + self.outputpath + inputfile 
+            input_file = self.outputpath + inputfile 
             
             if input_format != 'smi':
                 command = f'obabel -i {input_format} "{input_file}" -o {output_format} -O "{outputfile}" '
@@ -296,7 +322,7 @@ class Docking():
 
         finally:
             time.sleep(1)
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
             
             
@@ -320,7 +346,7 @@ class Docking():
         """
         try:
 
-            file = self.path + self.outputpath + inputfile
+            file = self.outputpath + inputfile
             cmd.reinitialize()
             cmd.load(file, 'ligand')
             cmd.select('ligante', 'resn ' + ligand)
@@ -432,9 +458,9 @@ class Docking():
                 
                 if f'prepare_complex_{receptor}_{chain}.com' not in complexes:
                     self.generate_docking_script(input_template=os.path.join(self.project_root, 'src', 'scripts', 'chimera', 'prepare_complex.template'),
-                                                output_script=(self.path + self.outputpath) + f'prepare_complex_{receptor}_{chain}.com',
-                                                pdb_code=self.path + self.complexpath + receptor,
-                                                input_complex=self.path + self.complexpath + receptor,
+                                                output_script=(self.outputpath) + f'prepare_complex_{receptor}_{chain}.com',
+                                                pdb_code=self.complexpath + receptor,
+                                                input_complex=self.complexpath + receptor,
                                                 chain=chain_id,
                                                 output_complex=f'{receptor}_{chain}')
                     complexes.append(f'prepare_complex_{receptor}_{chain}.com')
@@ -442,21 +468,21 @@ class Docking():
                 
                 if f'prepare_receptor_{receptor}_{chain}.com' not in receptors:
                     self.generate_docking_script(input_template=os.path.join(self.project_root, 'src', 'scripts', 'chimera', 'prepare_receptor.template'),
-                                                output_script=(self.path + self.outputpath) + f'prepare_receptor_{receptor}_{chain}.com',
-                                                input_complex=self.path + self.outputpath + f'{receptor}_{chain}' + '.complex',
-                                                receptor=self.path + self.outputpath + f'{receptor}_{chain}')
+                                                output_script=(self.outputpath) + f'prepare_receptor_{receptor}_{chain}.com',
+                                                input_complex=self.outputpath + f'{receptor}_{chain}' + '.complex',
+                                                receptor=self.outputpath + f'{receptor}_{chain}')
                     receptors.append(f'prepare_receptor_{receptor}_{chain}.com')
             
                 
                 extention = f'{receptor}_{ligand}_{resnum}{chain}'
                 self.generate_docking_script(input_template=os.path.join(self.project_root, 'src', 'scripts', 'chimera', 'prepare_ligand.template'),
-                                             output_script=(self.path + self.outputpath) + f'prepare_ligand_{extention}.com',
-                                             input_complex=self.path + self.outputpath + f'{receptor}_{chain}' + '.complex',
+                                             output_script=(self.outputpath) + f'prepare_ligand_{extention}.com',
+                                             input_complex=self.outputpath + f'{receptor}_{chain}' + '.complex',
                                              resnum=resnum,
                                              chain=chain[0],
                                              charge_type=charge_type,
-                                             input_ligand=self.path + self.outputpath + f'{extention}',
-                                             output_ligand=self.path + self.outputpath + f'{extention}')
+                                             input_ligand=self.outputpath + f'{extention}',
+                                             output_ligand=self.outputpath + f'{extention}')
                 ligands.append(f'prepare_ligand_{extention}.com')
                
             
@@ -501,7 +527,7 @@ class Docking():
              return None
         
         finally:
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
             time.sleep(1)
                 
@@ -545,6 +571,11 @@ class DockVina(Docking):
 
             f1 = fileHandling(input_path=self.ligandpath, output_path=self.ligandpath)
             df = f1.csv_to_dataframe(self.mol_filename)
+            
+            if 'canonical_smiles' not in df.columns and 'molecule_structures' in df.columns:
+                df['canonical_smiles'] = f1.convert_str_to_dict(df, 'molecule_structures', 'canonical_smiles')
+                
+            df.dropna(subset=['canonical_smiles'], inplace=True)
             df['molecule_chembl_id'] = df['molecule_chembl_id'].astype(str)
             data = df[['molecule_chembl_id', 'canonical_smiles']].to_records(index=False)
             
@@ -553,19 +584,21 @@ class DockVina(Docking):
     
 
         except Exception as e:
+            chemblid = chemblid if 'chemblid' in locals() else 'unknown_id'
+            smiles = smiles if 'smiles' in locals() else 'unknown_smiles'
             self.logger.error(f'during to perform {chemblid} -> {smiles} in prepare_compounds function', exc_info=True)
             self.logger.error(f'STDERR: {e}', exc_info=True)
 
         finally:
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
             time.sleep(1)
 
-            mols = [f.split('.lig.pdbqt')[0] for f in os.listdir((self.path + self.outputpath)) if f.endswith('.lig.pdbqt')]
+            mols = [f.split('.lig.pdbqt')[0] for f in os.listdir((self.outputpath)) if f.endswith('.lig.pdbqt')]
             df = df[df['molecule_chembl_id'].isin(mols)]
             f1.dataframe_to_csv(self.mol_filename, df)
 
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
             time.sleep(1)
 
@@ -583,7 +616,7 @@ class DockVina(Docking):
 
         """
         
-        files_to_perform = [f for f in os.listdir((self.path + self.outputpath)) if f.endswith('.vina')] 
+        files_to_perform = [f for f in os.listdir((self.outputpath)) if f.endswith('.vina')] 
             
         for file in files_to_perform:
             command = f'vina --config {file}'
@@ -620,9 +653,9 @@ class DockVina(Docking):
                     continue
 
                 self.generate_docking_script(input_template=os.path.join(self.project_root, 'src', 'scripts', 'vina', 'config.template'),
-                                            output_script=(self.path + self.outputpath) + f'{composite}.vina',
-                                            receptor=self.path + self.receptorpath + f'{receptor}_{chain}.dockprep.pdbqt',
-                                            ligand=self.path + self.ligandpath + f'{composite}' + '.lig.pdbqt',
+                                            output_script=(self.outputpath) + f'{composite}.vina',
+                                            receptor=self.receptorpath + f'{receptor}_{chain}.dockprep.pdbqt',
+                                            ligand=self.ligandpath + f'{composite}' + '.lig.pdbqt',
                                             center_x=center[0],
                                             center_y=center[1],
                                             center_z=center[2],
@@ -640,8 +673,8 @@ class DockVina(Docking):
             pdb_codes = np.delete(pdb_codes, idx_to_remove)
             for receptor, ligand, resnum, chain in pdb_codes:
                 composite = f'{receptor}_{ligand}_{resnum}{chain}'
-                iligand  = self.path + self.ligandpath + f'{composite}' + '.lig.pdbqt'
-                vina_model = self.path + self.outputpath + f'{composite}' + '.lig.pdbqt'
+                iligand  = self.ligandpath + f'{composite}' + '.lig.pdbqt'
+                vina_model = self.outputpath + f'{composite}' + '.lig.pdbqt'
                 if os.path.isfile(iligand) and os.path.isfile(vina_model):
                     results.append((f'{receptor}', f'{ligand}', f'{resnum}', f'{chain}', desc.calcRMSD(iligand, vina_model)))
 
@@ -674,20 +707,20 @@ class DockVina(Docking):
 
         try:
             
-            molecules = [f.rsplit('.lig.pdbqt')[0] for f in os.listdir((self.path + self.ligandpath)) if f.endswith('.lig.pdbqt')]
+            molecules = [f.rsplit('.lig.pdbqt')[0] for f in os.listdir((self.ligandpath)) if f.endswith('.lig.pdbqt')]
             
             self.__pdb_codes   = [(pdb[0], pdb[1], pdb[2], pdb[3]) for pdb in self.__pdb_codes]
             
             for receptor, ligand, resnum, chain in self.__pdb_codes:
                 center    = self.retrieve_centerofmass_dataset(self.__centerofmasspath, receptor, ligand, resnum, chain)
-                tmp       = [f.replace('.lig.pdbqt','').replace(f'{receptor}_', '') for f in os.listdir((self.path + self.outputpath)) if f.endswith('.lig.pdbqt')]
+                tmp       = [f.replace('.lig.pdbqt','').replace(f'{receptor}_', '') for f in os.listdir((self.outputpath)) if f.endswith('.lig.pdbqt')]
                 molecules = set(molecules) - set(tmp)
                
                 for mol in molecules:
                      self.generate_docking_script(input_template=os.path.join(self.project_root, 'src', 'scripts', 'vina', 'config.template'),
-                                            output_script=(self.path + self.outputpath) + f'{receptor}_{mol}.vina',
-                                            receptor=self.path + self.receptorpath + f'{receptor}_{chain}' + '.dockprep.pdbqt',
-                                            ligand=self.path + self.ligandpath + mol + '.lig.pdbqt',
+                                            output_script=(self.outputpath) + f'{receptor}_{mol}.vina',
+                                            receptor=self.receptorpath + f'{receptor}_{chain}' + '.dockprep.pdbqt',
+                                            ligand=self.ligandpath + mol + '.lig.pdbqt',
                                             center_x=center[0],
                                             center_y=center[1],
                                             center_z=center[2],
@@ -699,7 +732,7 @@ class DockVina(Docking):
                                             num_modes=self.__num_modes)
                      
                      time.sleep(1)
-                     dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+                     dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
                      os.fsync(dir_fd)
                      time.sleep(1)
                      
@@ -711,7 +744,7 @@ class DockVina(Docking):
                          df = f1.csv_to_dataframe(self.mol_filename)
                          df = df[df['molecule_chembl_id'] != mol]
                          f1.dataframe_to_csv(self.mol_filename, df)
-                         os.remove(self.path + self.ligandpath + mol + '.lig.pdbqt') if os.path.isfile((self.path + self.ligandpath) + mol + '.lig.pdbqt') else None
+                         os.remove(self.ligandpath + mol + '.lig.pdbqt') if os.path.isfile((self.ligandpath) + mol + '.lig.pdbqt') else None
                          
 
         except Exception as e:
@@ -720,12 +753,12 @@ class DockVina(Docking):
 
         finally:
             time.sleep(1)
-            dir_fd = os.open((self.path + self.outputpath), os.O_DIRECTORY)
+            dir_fd = os.open((self.outputpath), os.O_DIRECTORY)
             os.fsync(dir_fd)
             time.sleep(1)
 
-            [os.remove((self.path + self.outputpath) + file) for file in os.listdir((self.path + self.outputpath)) if file.endswith('.vina')]
-            [os.remove((self.path + self.outputpath) + file) for file in os.listdir((self.path + self.outputpath)) if file.endswith('(2).pdbqt')]
+            [os.remove((self.outputpath) + file) for file in os.listdir((self.outputpath)) if file.endswith('.vina')]
+            [os.remove((self.outputpath) + file) for file in os.listdir((self.outputpath)) if file.endswith('(2).pdbqt')]
             self.centers = None
            
         

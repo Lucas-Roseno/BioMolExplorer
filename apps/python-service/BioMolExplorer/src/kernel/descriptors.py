@@ -80,8 +80,9 @@ from rdkit.DataStructs.cDataStructs import SparseBitVect
 #----------------------------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------------------------
-from kernel.utilities import fileHandling
+from kernel.utilities import fileHandling, fileReading
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 #----------------------------------------------------------------------------------------------
 
 
@@ -109,7 +110,7 @@ class fingerprints(Enum):
 class Descriptors():
     
     def __init__(self, inputpath:Optional[str]=None, outputpath:Optional[str]=None):
-        self.__path = str(Path.cwd())
+        self.__path = BIOMOL_ROOT
         self.set_inputpath(inputpath) if inputpath != None else None
         self.set_outputpath(outputpath) if outputpath != None else None
         self.logger = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/descriptors.log')
@@ -244,7 +245,7 @@ class MolSimilarity():
         self.n_bits = n_bits
         self.lsh = MinHashLSH(threshold=threshold, num_perm=num_perm)
         self.fingerprint_list = []
-        self.__path = str(Path.cwd())
+        self.__path = BIOMOL_ROOT
         self.set_inputpath(inputpath) if inputpath != None else None
         self.set_outputpath(outputpath) if outputpath != None else None
         self.logger = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/molsimilarity.log')
@@ -379,7 +380,8 @@ class MolSimilarity():
         try:
             
             data = fileHandling(input_path=self.__inputpath, output_path=self.__outputpath)
-            files = [f.rsplit('.')[0] for f in os.listdir(self.__inputpath[1:])
+            from kernel.config import BIOMOL_ROOT
+            files = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__inputpath.lstrip('/')))
                      if f.endswith('.csv') and f.startswith(fp) and (f.endswith('MOLS.csv') or f.endswith('SIMS.csv'))] if filename == None else [filename.rsplit('.')[0]]
             
             for filename in files:

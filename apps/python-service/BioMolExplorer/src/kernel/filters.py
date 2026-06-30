@@ -52,6 +52,8 @@ from rdkit import Chem
 #----------------------------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------------------------
+from rdkit.Chem.FilterCatalog import FilterCatalogParams, FilterCatalog
+from kernel.config import BIOMOL_ROOT
 from kernel.loggers import LoggerManager
 #----------------------------------------------------------------------------------------------
 
@@ -59,7 +61,7 @@ from kernel.loggers import LoggerManager
 class MyFilters():
     
     def __init__(self) -> None:
-        self.path   = str(Path.cwd())
+        self.path   = BIOMOL_ROOT
         self.logger = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/filters.log')
         
     def get_path(self):

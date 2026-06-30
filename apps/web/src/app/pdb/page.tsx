@@ -18,11 +18,33 @@ export default function PdbPage() {
   const [pdbEc, setPdbEc] = useState('');
 
   const isFormValid = targetName.trim() !== '' && pdbEc.trim() !== '';
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+
+  // Polls the file list until a new target appears (max 30s)
+  const pollUntilFilesAppear = async (targetName: string) => {
+    const start = Date.now();
+    const timeout = 30000;
+    const interval = 2000;
+    while (Date.now() - start < timeout) {
+      await new Promise(r => setTimeout(r, interval));
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/files/list/PDB`);
+        const data: Record<string, string[]> = await res.json();
+        if (data[targetName] && data[targetName].length > 0) {
+          setDownloadStatus(`✅ ${data[targetName].length} file(s) downloaded for ${targetName}.`);
+          await fetchFiles();
+          return;
+        }
+      } catch {}
+    }
+    setDownloadStatus('⚠️ Download finished but files may still be processing.');
+    await fetchFiles();
+  };
 
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
-    // Parse form data and normalize boolean inputs
+    setDownloadStatus('⏳ Downloading PDB structures...');
     const formData = new FormData(e.currentTarget);
     const payload = Object.fromEntries(formData.entries());
     payload.must_have_ligand = payload.must_have_ligand === 'on' ? 'true' : 'false';
@@ -34,13 +56,17 @@ export default function PdbPage() {
       
       const data = await res.json();
       if (!res.ok) {
+        setDownloadStatus(null);
         alert(`Error downloading PDB: ${data.message || 'Unknown error'}`);
+      } else {
+        // Start polling instead of calling fetchFiles() immediately
+        pollUntilFilesAppear(payload.target as string);
       }
     } catch (error: any) {
+      setDownloadStatus(null);
       alert(`Connection error: ${error.message}`);
     } finally {
       setIsLoading(false);
-      fetchFiles();
     }
   };
 
@@ -153,6 +179,11 @@ export default function PdbPage() {
               <button type="submit" disabled={!isFormValid || isLoading}>
                 {isLoading ? 'Downloading...' : 'Download'}
               </button>
+              {downloadStatus && (
+                <p style={{ marginTop: '10px', fontSize: '0.9rem', color: downloadStatus.startsWith('✅') ? '#2e7d32' : downloadStatus.startsWith('⚠️') ? '#e65100' : '#1565c0' }}>
+                  {downloadStatus}
+                </p>
+              )}
             </form>
           </div>
           <div className="pdb-list-container">

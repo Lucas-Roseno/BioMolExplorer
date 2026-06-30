@@ -57,6 +57,7 @@ from typing import Optional
 from crawlers.settings import CrawlerSettings
 from kernel.utilities import fileHandling
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 #----------------------------------------------------------------------------------------------
 
 
@@ -67,7 +68,7 @@ class Bioactivity(CrawlerSettings):
     def __init__(self, target_path=None, path=None, extension='csv') -> None:
         super().__init__()
         self.__bioactivity = super().get_client_connection().activity
-        self.__path = str(Path.cwd())
+        self.__path = BIOMOL_ROOT
         self.__extension   = extension
         self.set_outputpath(path) if path != None else None
         self.set_targetpath(target_path) if target_path != None else None

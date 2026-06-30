@@ -58,7 +58,8 @@ from caad.complex_network import GraphAnalysis
 from kernel.descriptors import similarityFunctions, fingerprints
 from kernel.loggers import LoggerManager
 from kernel.descriptors import Descriptors
-from kernel.utilities import fileHandling
+from kernel.utilities import fileHandling, fileReading
+from kernel.config import BIOMOL_ROOT
 #----------------------------------------------------------------------------------------------
 
 
@@ -67,7 +68,7 @@ logger = LoggerManager.get_logger('molecular_analyzer', log_file='logs/analyzer.
 def read_filters(path:str):
 
     try:
-        path = str(Path.cwd()) + path
+        path = BIOMOL_ROOT + path
         with open(path, 'r') as fp:
             filters = json.load(fp)
         return filters
@@ -129,7 +130,7 @@ def filter_mutagenic_tumorigenic(base_input_path:str, base_output_path:str, data
         mutagenic = [m.lower() for m in mutagenic]
         tumorigenic = [t.lower() for t in tumorigenic]
         
-        file = str(Path.cwd()) + base_input_path + datawarrior_filename
+        file = BIOMOL_ROOT + base_input_path + datawarrior_filename
         if not os.path.isfile(file):
             logger.error(f'Error during to perform the filter_mutagenic_tumorigenic function', exc_info=True)
             logger.error(f'File {file} not found!!', exc_info=True)
@@ -156,7 +157,8 @@ def generate_fingerprints(base_input_path:str, morgan_n_bits:Optional[int]=2048,
         f1 = fileHandling(input_path=base_input_path, output_path=base_output_path)
         ds = Descriptors(inputpath=base_input_path, outputpath=base_output_path)
                 
-        files = [f for f in os.listdir(base_input_path[1:]) if f.endswith('_MOLS.csv') or f.endswith('_SIMS.csv')]
+        from kernel.config import BIOMOL_ROOT
+        files = [f for f in os.listdir(os.path.join(BIOMOL_ROOT, base_input_path.lstrip('/'))) if f.endswith('_MOLS.csv') or f.endswith('_SIMS.csv')]
         for filename in files:
             filename = filename.split('.')[0]
             data = f1.csv_to_dataframe(filename)

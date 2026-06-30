@@ -49,6 +49,7 @@ import os
 from caad.redocking import DockVina, Docking
 from kernel.loggers import LoggerManager
 from kernel.utilities import fileHandling
+from kernel.config import BIOMOL_ROOT
 #----------------------------------------------------------------------------------------------
 
 #----------------------------------------------------------------------------------------------
@@ -68,7 +69,7 @@ def perform_redocking(base_input_path:str, target:str, base_output_path:str, pdb
         base_prepared_complexes = f'/{base_input_path.strip("/")}/{target.replace(" ", "")}/Prepared/'
         base_input_path         = f'/{base_input_path.strip("/")}/{target.replace(" ", "")}/'
         base_output_path        = f'/{base_output_path.strip("/")}/{target.replace(" ", "")}/'
-        path                    = str(Path.cwd()) + base_input_path
+        path                    = base_input_path if base_input_path.startswith(BIOMOL_ROOT) else BIOMOL_ROOT + base_input_path
 
         print(f"DEBUG: Path: {path}")
         f1 = fileHandling(input_path=base_input_path, output_path=base_input_path)

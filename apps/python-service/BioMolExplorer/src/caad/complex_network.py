@@ -73,6 +73,7 @@ from networkx import Graph
 from kernel.utilities import fileHandling
 from kernel.descriptors import Descriptors, similarityFunctions, fingerprints
 from kernel.loggers import LoggerManager
+from kernel.config import BIOMOL_ROOT
 from kernel.utilities import MolExplorer
 #----------------------------------------------------------------------------------------------
 
@@ -80,7 +81,7 @@ from kernel.utilities import MolExplorer
 class GraphAnalysis():
 
     def __init__(self, input_path:Optional[str]=None, output_path:Optional[str]=None) -> None:
-        self.__path = str(Path.cwd())
+        self.__path = BIOMOL_ROOT
         self.logger = LoggerManager.get_logger(self.__class__.__name__, log_file='logs/graph_analizer.log')
         self.set_inputpath(input_path) 
         self.set_outputpath(output_path)
@@ -289,7 +290,8 @@ class GraphAnalysis():
 
 
             prefix = metric.value + '_' + fp.value + '_'
-            data   = [f.rsplit('.')[0] for f in os.listdir(self.__inputpath[1:] + 'Similarity/') if f.endswith('.csv') and f.startswith(prefix)]
+            from kernel.config import BIOMOL_ROOT
+            data   = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__inputpath.lstrip('/') + 'Similarity/')) if f.endswith('.csv') and f.startswith(prefix)]
             
             molecules = DataFrame(columns=['molecule_chembl_id', 'canonical_smiles']) 
             

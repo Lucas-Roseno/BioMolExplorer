@@ -2056,4 +2056,5 @@ def download_docking_csv(target):
 
 if __name__ == '__main__':
     # Enabled debug mode for development hot-reload
-    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=True)
+    port = int(os.environ.get('PORT', os.environ.get('FLASK_PORT', 5000)))
+    app.run(host="127.0.0.1", port=port, debug=True, use_reloader=True)

@@ -195,7 +195,7 @@ Para usar o BioMolExplorer como um **executável instalável** (.AppImage no Lin
 | `conda: command not found` | Instale o [Anaconda/Miniconda](https://www.anaconda.com/download) e reabra o terminal |
 | `node: command not found` | Instale o [Node.js 18+](https://nodejs.org/) |
 | `ModuleNotFoundError: No module named 'pymol'` | `conda install -c conda-forge pymol-open-source` |
-| `Port 3000 already in use` | `fuser -k 3000/tcp 3001/tcp 5000/tcp` |
+| `Port 3000 already in use` | O script `start.sh` detecta e aloca automaticamente portas livres no seu ambiente |
 | `docker: command not found` | Instale o [Docker](https://www.docker.com/get-started/) |
 | `chimera.bin não encontrado` | Baixe em [rbvi.ucsf.edu/chimera](https://www.rbvi.ucsf.edu/chimera/download.html) e coloque em `apps/python-service/BioMolExplorer/apps/` |
 | Erro CORS na web | Verifique se a API está rodando em `http://localhost:3001` |

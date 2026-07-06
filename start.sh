@@ -15,42 +15,53 @@ conda activate BioMolExplorer
 
 echo "Iniciando os 3 serviços em modo DEV..."
 
-# Limpar processos antigos nas portas 3000, 3001 e 5000
-echo "Limpando processos nas portas 3000, 3001 e 5000..."
-fuser -k -9 3000/tcp 3001/tcp 5000/tcp 2>/dev/null || true
-if command -v lsof >/dev/null 2>&1; then
-    kill -9 $(lsof -t -i:3000 -i:3001 -i:5000) 2>/dev/null || true
-fi
-
-# Verificar se há containers Docker ativos ocupando essas portas
-if command -v docker >/dev/null 2>&1; then
-    CONFLICTING_DOCKER=$(docker ps --format '{{.ID}} {{.Names}} {{.Ports}}' | grep -E '(:3000->|:3001->|:5000->)' || true)
-    if [ -n "$CONFLICTING_DOCKER" ]; then
-        echo "⚠️  Detectado container Docker rodando nas portas do projeto (3000/3001/5000):"
-        echo "$CONFLICTING_DOCKER" | awk '{print "   - ID: " $1 ", Nome: " $2}'
-        echo -n "Deseja parar estes containers conflitantes automaticamente? (s/N): "
-        read -r -t 10 response || response="n"
-        if [[ "$response" =~ ^[Ss]$ ]]; then
-            CONTAINER_IDS=$(echo "$CONFLICTING_DOCKER" | cut -d' ' -f1)
-            echo "Parando container(s)..."
-            docker stop $CONTAINER_IDS
-            sleep 2
-        else
-            echo "Aviso: O conflito de portas pode causar erros de inicialização se os containers não forem parados."
-        fi
+# Função para verificar se a porta está disponível no host (checa IPv4 e IPv6 via kernel ou lsof/netstat)
+is_port_available() {
+    local port=$1
+    if command -v ss >/dev/null 2>&1; then
+        ! ss -tuln | awk '{print $5}' | grep -E ":$port$" >/dev/null 2>&1
+    elif command -v lsof >/dev/null 2>&1; then
+        ! lsof -i :"$port" -sTCP:LISTEN -P -n >/dev/null 2>&1
+    elif command -v netstat >/dev/null 2>&1; then
+        ! netstat -tuln 2>/dev/null | awk '{print $4}' | grep -E ":$port$" >/dev/null 2>&1
+    else
+        python3 -c "import socket, sys; [socket.socket(af, socket.SOCK_STREAM).bind((addr, int(sys.argv[1]))) for af, addr in [(socket.AF_INET, '0.0.0.0'), (socket.AF_INET6, '::')]]" "$port" 2>/dev/null
     fi
-fi
+}
+
+echo "Procurando portas disponíveis para os serviços..."
+
+WEB_PORT=3000
+while ! is_port_available "$WEB_PORT"; do
+    WEB_PORT=$((WEB_PORT + 1))
+done
+
+API_PORT=3001
+while [ "$API_PORT" -eq "$WEB_PORT" ] || ! is_port_available "$API_PORT"; do
+    API_PORT=$((API_PORT + 1))
+done
+
+PYTHON_PORT=5000
+while [ "$PYTHON_PORT" -eq "$WEB_PORT" ] || [ "$PYTHON_PORT" -eq "$API_PORT" ] || ! is_port_available "$PYTHON_PORT"; do
+    PYTHON_PORT=$((PYTHON_PORT + 1))
+done
+
+echo "✅ Portas dinâmicas selecionadas:"
+echo "   - Next.js (Web):  http://localhost:$WEB_PORT"
+echo "   - API (Maestro):  http://localhost:$API_PORT"
+echo "   - Python (Flask): http://127.0.0.1:$PYTHON_PORT"
+echo ""
 
 # 1. Inicia o Python Flask em background (já tem hot-reload via debug=True)
-python apps/python-service/app.py &
+PORT=$PYTHON_PORT FLASK_PORT=$PYTHON_PORT python apps/python-service/app.py &
 
 # 2. Inicia a API Node.js com NODEMON para hot-reload
-npx nodemon --watch apps/api/src -e ts,js --exec "ts-node" apps/api/src/server.ts &
+PORT=$API_PORT PYTHON_URL="http://127.0.0.1:$PYTHON_PORT" npx nodemon --watch apps/api/src -e ts,js --exec "ts-node" apps/api/src/server.ts &
 
 # Aguarda os serviços de backend estarem prontos
 echo "Aguardando serviços de backend..."
 sleep 5
 
-# 3. Inicia o Next.js em modo DEV (Fast Refresh nativo) na porta 3000
-echo "Iniciando Next.js (Front-end) com Hot Reload..."
-npm run dev --workspace=web
+# 3. Inicia o Next.js em modo DEV (Fast Refresh nativo) na porta selecionada
+echo "Iniciando Next.js (Front-end) com Hot Reload na porta $WEB_PORT..."
+PORT=$WEB_PORT API_INTERNAL_URL="http://localhost:$API_PORT" npm run dev --workspace=web -- -p "$WEB_PORT"

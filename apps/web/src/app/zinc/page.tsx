@@ -1,59 +1,90 @@
 'use client';
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import { API_BASE_URL } from '../../config';
 import LoadingOverlay from '../../components/LoadingOverlay';
-
+import { useToast } from '../../components/ToastProvider';
+import InfoTooltip from '../../components/InfoTooltip';
 import { useFiles } from '../../hooks/useFiles';
 
 export default function ZincPage() {
+  const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const { datasets, fetchFiles } = useFiles<Record<string, string[]>>('/api/files/list/ZINC');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
-    setMessage(null);
     try {
       const res = await fetch(`${API_BASE_URL}/api/zinc/upload`, {
         method: 'POST', body: new FormData(e.currentTarget)
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage({ type: 'success', text: data.data?.message || 'ZINC download completed successfully!' });
+        showToast('success', 'Upload completed!', data.data?.message || 'ZINC compounds have been saved successfully.');
       } else {
         const errMsg = data.message || 'Error processing ZINC file.';
         // Check for common server-down patterns
         if (errMsg.toLowerCase().includes('connection') || errMsg.toLowerCase().includes('unreachable') || errMsg.toLowerCase().includes('offline')) {
-          setMessage({ type: 'error', text: '⚠️ The ZINC server (files.docking.org) is unavailable. Please try again later.' });
+          showToast('warning', 'ZINC server unavailable', 'The ZINC server (files.docking.org) is currently unavailable. Please try again later.');
         } else {
-          setMessage({ type: 'error', text: errMsg });
+          showToast('error', 'Upload failed', 'The file could not be processed. Please check the format and try again.');
         }
       }
-    } catch (err) {
-      setMessage({ type: 'error', text: '⚠️ Unable to connect to the server. Check if the services are running.' });
+    } catch {
+      showToast('error', 'Connection error', 'Unable to reach the server. Make sure the application is running and try again.');
+    } finally {
+      setIsLoading(false);
+      fetchFiles();
     }
-    setIsLoading(false);
-    fetchFiles();
   };
 
   const toggleAccordion = (t: string) => setOpenTargets(p => ({ ...p, [t]: !p[t] }));
+
   const handleDelete = async (target: string) => {
-    if (!confirm(`Delete data for ${target}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/ZINC/${target}`, { method: 'DELETE' });
-    fetchFiles();
+    if (!confirm(`Delete data for "${target}"? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/delete/ZINC/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('error', 'Could not delete', 'An error occurred while removing this target. Please try again.');
+        return;
+      }
+      showToast('success', 'Target deleted', `All data for "${target}" has been removed.`);
+      fetchFiles();
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the target.');
+    }
   };
+
   const handleDownloadTarget = (target: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/ZINC/zip/${target}`, '_blank');
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/ZINC/zip/${encodeURIComponent(target)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
-  const handleDownload = (target: string, file: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/ZINC/${file}`, '_blank');
+
+  const handleDownload = (file: string) => {
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/ZINC/${encodeURIComponent(file)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
-  const handleDeleteFile = async (target: string, file: string) => {
-    if (!confirm(`Delete file ${file}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/ZINC/${file}`, { method: 'DELETE' });
-    fetchFiles();
+
+  const handleDeleteFile = async (file: string) => {
+    if (!confirm(`Delete file "${file}"?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/delete/ZINC/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('error', 'Could not delete file', 'An error occurred while removing this file. Please try again.');
+        return;
+      }
+      showToast('success', 'File deleted', `"${file}" has been removed.`);
+      fetchFiles();
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the file.');
+    }
   };
 
   return (
@@ -65,25 +96,12 @@ export default function ZincPage() {
             <form id="zinc-form" onSubmit={handleSearch}>
               <fieldset><legend>Upload (.uri)</legend>
                 <div className="form-group compact-form-group">
-                  <label>URI File:</label><input type="file" name="zinc_file" accept=".uri" required />
+                  <label>URI File: <InfoTooltip content="Upload a ZINC database catalog or URI list file (.uri extension) containing links to compound structures." /></label><input type="file" name="zinc_file" accept=".uri" required />
                 </div>
-                <div className="form-group"><label><input type="checkbox" name="verbose" /> Verbose Mode</label></div>
+                <div className="form-group"><label><input type="checkbox" name="verbose" /> Verbose Mode <InfoTooltip content="Enable detailed logging during the download process to inspect individual compound retrieval." /></label></div>
                 <button type="submit" style={{ width: '100%', marginTop: '10px' }}>Download</button>
               </fieldset>
             </form>
-            {message && (
-              <div style={{
-                marginTop: '12px',
-                padding: '10px 14px',
-                borderRadius: '6px',
-                backgroundColor: message.type === 'success' ? '#d4edda' : '#f8d7da',
-                color: message.type === 'success' ? '#155724' : '#721c24',
-                border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-                fontSize: '14px'
-              }}>
-                {message.text}
-              </div>
-            )}
           </div>
 
           <div className="pdb-list-container">
@@ -110,11 +128,11 @@ export default function ZincPage() {
                         <div key={file} className="pdb-file-item">
                           <span><i className="fas fa-file-alt" style={{ marginRight: '8px' }}></i>{file}</span>
                           <div className="file-actions">
-                            <button type="button" onClick={() => handleDownload(target, file)} className="download-btn" title="Download">
+                            <button type="button" onClick={() => handleDownload(file)} className="download-btn" title="Download">
                               <i className="fas fa-download"></i>
                             </button>
                             <span>|</span>
-                            <button type="button" onClick={() => handleDeleteFile(target, file)} className="delete-btn" title="Delete">
+                            <button type="button" onClick={() => handleDeleteFile(file)} className="delete-btn" title="Delete">
                               <i className="fas fa-trash-alt"></i>
                             </button>
                           </div>

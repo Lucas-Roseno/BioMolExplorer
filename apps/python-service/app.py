@@ -13,8 +13,10 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 import uuid
 import threading
+import time
 import logging
 from pathlib import Path
+import re
 
 # Global dictionary to track active background tasks
 active_tasks = {}
@@ -30,10 +32,12 @@ from kernel.descriptors import similarityFunctions, fingerprints
 from wrappers.redocking import perform_redocking
 from wrappers.admet import ADMETWrapper
 from wrappers.docking import perform_consensus, get_available_ligands, get_better_complex
+from kernel.process_manager import ActiveSubprocesses, TaskCancelledException
 
 # PATHs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
+ActiveSubprocesses.register_signal_handlers()
 BIOMOL_ROOT_PATH = os.path.abspath(os.path.join(BASE_DIR, 'BioMolExplorer'))
 PDB_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
 CHEMBL_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL')
@@ -42,7 +46,182 @@ ZINC_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
 DRUGBANK_PATH    = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
 ADMET_BASE_PATH  = os.path.join(DRUGBANK_PATH, 'ADMET')
 
-# --- PDB functions ---
+# ==========================================
+# FILESYSTEM BROWSER API
+# ==========================================
+
+@app.route('/api/filesystem/browse', methods=['GET'])
+def browse_filesystem():
+    """
+    Returns a directory listing for the file picker modal.
+    Allows browsing any directory on the local machine — the backend
+    is running locally so there is no security boundary to enforce here.
+    """
+    # Open in project root directory by default, while allowing access anywhere on the PC
+    project_root = os.path.abspath(os.path.join(BASE_DIR, '..', '..'))
+    default_path = project_root
+    requested_path = request.args.get('path', default_path)
+
+    # Normalize the path to resolve symlinks and prevent redundant traversal
+    try:
+        resolved = os.path.realpath(os.path.abspath(requested_path))
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'Invalid path.'}), 400
+
+    if not os.path.isdir(resolved):
+        return jsonify({'status': 'error', 'message': 'Path is not a directory.'}), 400
+
+    try:
+        entries = []
+        for name in sorted(os.listdir(resolved)):
+            full = os.path.join(resolved, name)
+            try:
+                entry_type = 'dir' if os.path.isdir(full) else 'file'
+            except PermissionError:
+                entry_type = 'file'  # Treat unreadable entries as files
+            entries.append({'name': name, 'type': entry_type})
+
+        # Parent is None only when already at the filesystem root
+        parent_path = os.path.dirname(resolved)
+        if parent_path == resolved:  # We are at '/'
+            parent_path = None
+
+        return jsonify({
+            'status': 'ok',
+            'current_path': resolved,
+            'parent_path': parent_path,
+            'entries': entries,
+        })
+    except PermissionError:
+        return jsonify({'status': 'error', 'message': 'Permission denied.'}), 403
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/filesystem/native-picker', methods=['GET'])
+def native_folder_picker():
+    """
+    Opens the native OS file explorer dialog starting at the project root directory.
+    """
+    project_root = os.path.abspath(os.path.join(BASE_DIR, '..', '..'))
+    initial_dir = request.args.get('initial_dir', project_root)
+    if not os.path.isdir(initial_dir):
+        initial_dir = project_root
+
+    selected_path = ""
+    # Try Tkinter first
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        selected_path = filedialog.askdirectory(
+            initialdir=initial_dir,
+            title="Select Folder - BioMolExplorer"
+        )
+        root.destroy()
+    except Exception:
+        # Fallback to zenity native Linux file selection dialog
+        try:
+            import subprocess
+            res = subprocess.run(
+                ['zenity', '--file-selection', '--directory', f'--filename={initial_dir}/', '--title=Select Folder - BioMolExplorer'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if res.returncode == 0:
+                selected_path = res.stdout.strip()
+        except Exception as e2:
+            return jsonify({'status': 'error', 'message': f'Could not open native OS picker: {str(e2)}'}), 500
+
+    if selected_path:
+        return jsonify({'status': 'ok', 'path': selected_path})
+    else:
+        return jsonify({'status': 'cancelled', 'path': ''})
+
+
+@app.route('/api/filesystem/validate-folder', methods=['POST'])
+def validate_folder_contents():
+    """
+    Validates if a selected folder contains files compatible with the BioMolExplorer pipeline.
+    folder_type can be:
+      - 'prepared_receptor': expects .pdbqt files (directly or inside a /Prepared subdirectory)
+      - 'molecules': expects .csv or .sdf files
+    """
+    data = request.json or {}
+    folder_path = data.get('path', '')
+    folder_type = data.get('folder_type', 'prepared_receptor')
+
+    if not folder_path:
+        return jsonify({'valid': False, 'message': 'No folder path provided.'}), 400
+
+    try:
+        resolved = os.path.realpath(os.path.abspath(folder_path))
+        if not os.path.isdir(resolved):
+            return jsonify({'valid': False, 'message': f'Directory does not exist: {folder_path}'}), 400
+
+        entries = os.listdir(resolved)
+        if folder_type == 'prepared_receptor':
+            pdbqt_files = [f for f in entries if f.endswith('.pdbqt')]
+            prep_sub = os.path.join(resolved, 'Prepared')
+            if os.path.isdir(prep_sub):
+                pdbqt_files.extend([f"Prepared/{f}" for f in os.listdir(prep_sub) if f.endswith('.pdbqt')])
+            
+            pdb_files = [f for f in entries if f.endswith('.pdb')]
+
+            if len(pdbqt_files) > 0:
+                return jsonify({
+                    'valid': True,
+                    'message': f'Valid Prepared Receptor folder ({len(pdbqt_files)} .pdbqt files found).',
+                    'file_count': len(pdbqt_files),
+                    'files': pdbqt_files[:5]
+                })
+            elif len(pdb_files) > 0:
+                return jsonify({
+                    'valid': False,
+                    'warning': True,
+                    'message': f'Warning: Found {len(pdb_files)} .pdb files but 0 .pdbqt files. Pipeline requires prepared .pdbqt files when "Prepare Complex" is unchecked.',
+                    'file_count': len(pdb_files),
+                    'files': pdb_files[:5]
+                })
+            else:
+                return jsonify({
+                    'valid': False,
+                    'message': 'Invalid folder: No prepared receptor files (.pdbqt) found in this directory.',
+                    'file_count': 0,
+                    'files': []
+                })
+
+        elif folder_type == 'molecules':
+            csv_files = [f for f in entries if f.endswith('.csv') or f.endswith('.sdf')]
+            if len(csv_files) > 0:
+                return jsonify({
+                    'valid': True,
+                    'message': f'Valid Molecules folder ({len(csv_files)} CSV/SDF files found).',
+                    'file_count': len(csv_files),
+                    'files': csv_files[:5]
+                })
+            else:
+                return jsonify({
+                    'valid': False,
+                    'message': 'Invalid folder: No molecule CSV/SDF files found in this directory.',
+                    'file_count': 0,
+                    'files': []
+                })
+
+        return jsonify({'valid': True, 'message': 'Directory exists.'})
+    except Exception as e:
+        return jsonify({'valid': False, 'message': f'Error validating directory: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/status/<task_id>', methods=['GET'])
+def get_general_task_status(task_id):
+    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
+    return jsonify(status)
+
+
 @app.route('/load_pdb', methods=['POST'])
 def run_load_pdb():
     data = request.json
@@ -54,30 +233,45 @@ def run_load_pdb():
             data['ExperimentalMethodID'] = [ExperimentalMethod[item] for item in data['ExperimentalMethodID'] if item]
             if any("NMR" in method.value for method in data['ExperimentalMethodID']):
                 data['max_resolution'] = None
-        
-        pass
-        pass
-        pass
-        
-        try:
-            warnings = load_pdb(
-                target=data.get('target'),
-                base_output_path='datasets',
-                pdb_ec=data.get('pdb_ec'),
-                PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
-                ExperimentalMethodID=data.get('ExperimentalMethodID'),
-                max_resolution=data.get('max_resolution'),
-                must_have_ligand=data.get('must_have_ligand', True)
-            )
-            
-            return jsonify({
-                'status': 'success', 
-                'message': f"PDB data for {data.get('target')} loaded successfully",
-                'warnings': warnings 
-            })
-        finally:
-            pass
-    
+
+        task_id = str(uuid.uuid4())
+        active_tasks[task_id] = {
+            'status': 'running',
+            'message': f"Loading PDB data for {data.get('target')}...",
+            'progress': {'phase': 'Downloading PDB structures...'}
+        }
+
+        def worker():
+            try:
+                warnings = load_pdb(
+                    target=data.get('target'),
+                    base_output_path='datasets',
+                    pdb_ec=data.get('pdb_ec'),
+                    PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
+                    ExperimentalMethodID=data.get('ExperimentalMethodID'),
+                    max_resolution=data.get('max_resolution'),
+                    must_have_ligand=data.get('must_have_ligand', True)
+                )
+                active_tasks[task_id] = {
+                    'status': 'completed',
+                    'message': f"PDB data for {data.get('target')} loaded successfully",
+                    'warnings': warnings
+                }
+            except Exception as e:
+                print(f"Error in load_pdb async worker: {e}")
+                active_tasks[task_id] = {
+                    'status': 'error',
+                    'message': str(e)
+                }
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        return jsonify({
+            'status': 'success',
+            'task_id': task_id,
+            'message': 'PDB download started in background'
+        })
+
     except Exception as e:
         print(f"Error in load_pdb: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 400
@@ -425,11 +619,37 @@ def run_load_chembl():
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), molecules_data)
         update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), similarmols_data)
 
-        load_chembl(
-            target_name=target_name,
-            base_output_path='datasets'
-        )
-        return jsonify({'status': 'success', 'message': f"ChEMBL data for '{target_name}' loaded successfully!"})
+        task_id = str(uuid.uuid4())
+        active_tasks[task_id] = {
+            'status': 'running',
+            'message': f"Loading ChEMBL data for '{target_name}'...",
+            'progress': {'phase': 'Scraping ChEMBL & processing molecules...'}
+        }
+
+        def worker():
+            try:
+                load_chembl(
+                    target_name=target_name,
+                    base_output_path='datasets'
+                )
+                active_tasks[task_id] = {
+                    'status': 'completed',
+                    'message': f"ChEMBL data for '{target_name}' loaded successfully!"
+                }
+            except Exception as e:
+                print(f"Error in load_chembl async worker: {e}")
+                active_tasks[task_id] = {
+                    'status': 'error',
+                    'message': str(e)
+                }
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        return jsonify({
+            'status': 'success',
+            'task_id': task_id,
+            'message': f"ChEMBL download for '{target_name}' started in background"
+        })
 
     except Exception as e:
         print(e)
@@ -1323,6 +1543,7 @@ def get_analysis_molecule_image():
 task_logs = {}
 
 def redocking_worker(task_id, target, charge_type, prepare_complex):
+    threading.current_thread().task_id = task_id
     import logging
     pass
     pass
@@ -1366,20 +1587,73 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
         l.addHandler(h)
         handlers.append((l, h))
     
+    out_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados/redocking', target.replace(' ', ''))
+    in_dir = os.path.join(BIOMOL_ROOT_PATH, 'datasets/PDB', target.replace(' ', ''))
+
+    # Clean stale output files from previous runs so progress counter starts cleanly at 0
+    if os.path.exists(out_dir):
+        try:
+            for old_f in os.listdir(out_dir):
+                if old_f.endswith('.lig.pdbqt') or old_f.endswith('.vina'):
+                    try:
+                        os.remove(os.path.join(out_dir, old_f))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     try:
-        active_tasks[task_id] = {'status': 'running', 'message': f'Running redocking for {target}...'}
+        task_start_time = time.time()
+        active_tasks[task_id] = {
+            'status': 'running',
+            'target': target,
+            'message': f'Running redocking for {target}...',
+            'progress': {
+                'phase': 'Redocking Complexes (Step 1/2)',
+                'molecules_total': 0,
+                'molecules_done': 0
+            }
+        }
         task_logs[task_id] = ""
-        
-        # Start a thread to periodically update task_logs from log_stream
-        def update_logs():
+
+        # Determine total complexes
+        total_complexes = 0
+        csv_p = os.path.join(in_dir, 'pdb_codes.csv')
+        if os.path.exists(csv_p):
+            try:
+                with open(csv_p, 'r', encoding='utf-8', errors='ignore') as f:
+                    total_complexes = max(0, len([l for l in f if l.strip()]) - 1)
+            except Exception:
+                total_complexes = 0
+
+        # Start a thread to periodically update task_logs and progress
+        def update_logs_and_progress():
             while active_tasks.get(task_id, {}).get('status') == 'running':
                 content = log_stream.getvalue()
                 task_logs[task_id] = content
+                done_count = 0
+                phase = 'Redocking Complexes (Step 1/2)'
+                if os.path.exists(out_dir):
+                    try:
+                        done_count = len([
+                            f for f in os.listdir(out_dir)
+                            if f.endswith('.lig.pdbqt') and os.path.getmtime(os.path.join(out_dir, f)) >= task_start_time - 10.0
+                        ])
+                    except Exception:
+                        done_count = 0
+                if total_complexes > 0 and done_count >= total_complexes:
+                    phase = 'Calculating RMSD & Post-Processing (Step 2/2)'
+                    done_count = total_complexes
+                if task_id in active_tasks:
+                    active_tasks[task_id]['progress'] = {
+                        'phase': phase,
+                        'molecules_total': total_complexes,
+                        'molecules_done': done_count
+                    }
                 threading.Event().wait(0.5)
-            # Final update
             task_logs[task_id] = log_stream.getvalue()
 
-        log_updater = threading.Thread(target=update_logs)
+        log_updater = threading.Thread(target=update_logs_and_progress)
         log_updater.daemon = True
         log_updater.start()
 
@@ -1391,9 +1665,19 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
             charge_type=charge_type
         )
         
-        active_tasks[task_id]['status'] = 'completed'
-        active_tasks[task_id]['message'] = f'Redocking for {target} completed successfully.'
-        
+        if active_tasks.get(task_id, {}).get('status') == 'cancelled':
+            active_tasks[task_id]['message'] = f'Redocking for {target} stopped by user. Partial results saved.'
+            if 'progress' in active_tasks[task_id]:
+                active_tasks[task_id]['progress']['phase'] = 'Stopped (Partial Results Saved)'
+        else:
+            active_tasks[task_id]['status'] = 'completed'
+            active_tasks[task_id]['message'] = f'Redocking for {target} completed successfully.'
+
+    except TaskCancelledException:
+        active_tasks[task_id]['status'] = 'cancelled'
+        active_tasks[task_id]['message'] = f'Redocking for {target} stopped by user. Partial results saved.'
+        if 'progress' in active_tasks[task_id]:
+            active_tasks[task_id]['progress']['phase'] = 'Stopped (Partial Results Saved)'
     except Exception as e:
         print(f"FATAL ERROR in redocking_worker: {str(e)}", file=sys.__stderr__)
         active_tasks[task_id]['status'] = 'error'
@@ -1426,13 +1710,28 @@ def get_redocking_targets():
 
 @app.route('/api/redocking/run', methods=['POST'])
 def run_redocking_task():
-    data = request.json
+    data = request.json or {}
     target = data.get('target')
     charge_type = data.get('charge_type', 'am1')
     prepare_complex = data.get('prepare_complex', True)
+    prepared_receptor_path = data.get('prepared_receptor_path')
 
     if not target:
         return jsonify({'status': 'error', 'message': 'Target is required'}), 400
+
+    # If prepare_complex is False, the user must confirm they have a prepared receptor
+    if not prepare_complex:
+        if not prepared_receptor_path:
+            return jsonify({'status': 'error', 'message': 'prepared_receptor_path is required when prepare_complex is false.'}), 400
+        prep_path = os.path.realpath(os.path.abspath(prepared_receptor_path))
+        if not os.path.isdir(prep_path):
+            return jsonify({'status': 'error', 'message': f'Prepared receptor directory not found: {prepared_receptor_path}'}), 400
+        pdbqts = [f for f in os.listdir(prep_path) if f.endswith('.pdbqt')]
+        prep_sub = os.path.join(prep_path, 'Prepared')
+        if os.path.isdir(prep_sub):
+            pdbqts.extend([f for f in os.listdir(prep_sub) if f.endswith('.pdbqt')])
+        if not pdbqts:
+            return jsonify({'status': 'error', 'message': f'Invalid Prepared Receptor folder: No prepared .pdbqt files found inside "{prepared_receptor_path}". Please select a valid Prepared folder.'}), 400
 
     task_id = str(uuid.uuid4())
     thread = threading.Thread(target=redocking_worker, args=(task_id, target, charge_type, prepare_complex))
@@ -1440,11 +1739,67 @@ def run_redocking_task():
 
     return jsonify({'status': 'success', 'task_id': task_id})
 
+
 @app.route('/api/redocking/status/<task_id>', methods=['GET'])
 def get_redocking_status(task_id):
     status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
     logs = task_logs.get(task_id, "")
     return jsonify({**status, 'logs': logs})
+
+
+def finalize_partial_rmsd(target_name):
+    """Calculates RMSD for any existing docked .lig.pdbqt partial results and saves into pdb_codes.csv."""
+    if not target_name:
+        return
+    try:
+        from kernel.descriptors import Descriptors
+        desc = Descriptors()
+        target_clean = target_name.replace(' ', '')
+        in_dir = os.path.join(BIOMOL_ROOT_PATH, 'datasets/PDB', target_clean)
+        out_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados/redocking', target_clean)
+        csv_path = os.path.join(in_dir, 'pdb_codes.csv')
+        
+        if not os.path.exists(csv_path) or not os.path.exists(out_dir):
+            return
+            
+        df = pd.read_csv(csv_path)
+        results = []
+        for idx, row in df.iterrows():
+            receptor = str(row.get('PDB_CODE', ''))
+            ligand = str(row.get('LIGAND', ''))
+            resnum = str(row.get('RESNUM', ''))
+            chain = str(row.get('CHAIN', ''))
+            composite = f'{receptor}_{ligand}_{resnum}{chain}'
+            iligand = os.path.join(in_dir, 'Prepared', f'{composite}.lig.pdbqt')
+            vina_model = os.path.join(out_dir, f'{composite}.lig.pdbqt')
+            rmsd_val = None
+            if os.path.isfile(iligand) and os.path.isfile(vina_model):
+                try:
+                    rmsd_val = desc.calcRMSD(iligand, vina_model)
+                except Exception:
+                    pass
+            results.append(rmsd_val)
+            
+        df['RMSD'] = results
+        df.to_csv(csv_path, index=False)
+    except Exception as e:
+        print(f"Error saving partial RMSD for {target_name}: {e}", file=sys.__stderr__)
+
+
+@app.route('/api/redocking/cancel/<task_id>', methods=['POST'])
+def cancel_redocking_task(task_id):
+    """Cancels a running redocking task and saves partial results."""
+    if task_id in active_tasks:
+        if active_tasks[task_id].get('status') == 'running':
+            active_tasks[task_id]['status'] = 'cancelled'
+            active_tasks[task_id]['message'] = 'Stopping redocking and saving partial results...'
+            ActiveSubprocesses.kill_by_task_id(task_id)
+            ActiveSubprocesses._kill_orphans()
+            target_name = active_tasks[task_id].get('target')
+            finalize_partial_rmsd(target_name)
+            return jsonify({'success': True, 'message': 'Cancellation requested and partial results saved'})
+    return jsonify({'success': False, 'message': 'Task not running or not found'}), 404
+
 
 @app.route('/api/redocking/results', methods=['GET'])
 def list_redocking_results():
@@ -1533,13 +1888,22 @@ def admet_worker(task_id: str, target: str, input_file: str | None = None):
             threading.Event().wait(0.5)
         admet_task_logs[task_id] = log_stream.getvalue()
 
+    active_tasks[task_id] = {
+        'status': 'running',
+        'message': f'Running ADMET for {target}...',
+        'progress': {
+            'phase': 'Loading Molecules',
+            'molecules_total': 0,
+            'molecules_done': 0
+        }
+    }
+    admet_task_logs[task_id] = ''
+
     log_updater = threading.Thread(target=update_logs)
     log_updater.daemon = True
     log_updater.start()
 
     try:
-        active_tasks[task_id] = {'status': 'running', 'message': f'Running ADMET for {target}...'}
-        admet_task_logs[task_id] = ''
 
         # Verify that at least one DrugBank group file exists for this target
         found_any = any(
@@ -1561,11 +1925,28 @@ def admet_worker(task_id: str, target: str, input_file: str | None = None):
             target=target,
             verbose=True,
         )
-        summary = wrapper.run_pipeline()
 
-        active_tasks[task_id]['status']  = 'completed'
-        active_tasks[task_id]['message'] = f'ADMET for {target} completed successfully.'
-        active_tasks[task_id]['summary'] = summary
+        def _on_admet_progress(phase, done, total):
+            if task_id in active_tasks:
+                active_tasks[task_id]['progress'] = {
+                    'phase': phase,
+                    'molecules_total': total,
+                    'molecules_done': done
+                }
+
+        summary = wrapper.run_pipeline(
+            progress_callback=_on_admet_progress,
+            cancel_check=lambda: active_tasks.get(task_id, {}).get('status') == 'cancelled'
+        )
+
+        if active_tasks.get(task_id, {}).get('status') == 'cancelled':
+            active_tasks[task_id]['message'] = f'ADMET for {target} stopped by user. Partial results saved.'
+            if 'progress' in active_tasks[task_id]:
+                active_tasks[task_id]['progress']['phase'] = 'Stopped (Partial Results Saved)'
+        else:
+            active_tasks[task_id]['status']  = 'completed'
+            active_tasks[task_id]['message'] = f'ADMET for {target} completed successfully.'
+            active_tasks[task_id]['summary'] = summary
 
     except Exception as e:
         print(f"FATAL ERROR in admet_worker: {e}", file=sys.__stderr__)
@@ -1602,6 +1983,17 @@ def get_admet_status(task_id):
     return jsonify({**status, 'logs': logs})
 
 
+@app.route('/api/admet/cancel/<task_id>', methods=['POST'])
+def cancel_admet_task(task_id):
+    """Cancels a running ADMET task and saves partial results."""
+    if task_id in active_tasks:
+        if active_tasks[task_id].get('status') == 'running':
+            active_tasks[task_id]['status'] = 'cancelled'
+            active_tasks[task_id]['message'] = 'Stopping ADMET and saving partial results...'
+            return jsonify({'success': True, 'message': 'Cancellation requested'})
+    return jsonify({'success': False, 'message': 'Task not running or not found'}), 404
+
+
 @app.route('/api/admet/results', methods=['GET'])
 def list_admet_results():
     """Lists targets that have completed ADMET results in DrugBank/ADMET/."""
@@ -1620,26 +2012,22 @@ def list_admet_results():
     return jsonify(sorted(results))
 
 
+def _find_matching_admet_csv(base_dir, target, suffix):
+    if not os.path.isdir(base_dir):
+        return None
+    exact_path = os.path.join(base_dir, f"{target}_{suffix}.csv")
+    if os.path.isfile(exact_path):
+        return exact_path
+    norm_t = re.sub(r'[\s\-_]', '', target).lower()
+    for fname in os.listdir(base_dir):
+        if fname.endswith(f"_{suffix}.csv"):
+            base_t = fname[:-len(f"_{suffix}.csv")]
+            if re.sub(r'[\s\-_]', '', base_t).lower() == norm_t:
+                return os.path.join(base_dir, fname)
+    return None
+
 @app.route('/api/admet/csv/<target>', methods=['GET'])
 def get_admet_csv(target):
-    """
-    Returns ADMET results for a given target, broken down by group
-    (MOLS, SIMS, FULL).  Each group has its own headers, rows, and summary.
-
-    Response shape:
-    {
-      "status": "success",
-      "groups": [
-        {
-          "group": "MOLS",
-          "headers": [...],
-          "rows": [[...], ...],
-          "summary": {"total": N, "bbb_plus": N, ...}
-        },
-        ...
-      ]
-    }
-    """
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
@@ -1648,8 +2036,8 @@ def get_admet_csv(target):
 
     groups = []
     for suffix in ('MOLS', 'SIMS', 'FULL'):
-        csv_path = os.path.join(ADMET_BASE_PATH, f"{target}_{suffix}.csv")
-        if not os.path.isfile(csv_path):
+        csv_path = _find_matching_admet_csv(ADMET_BASE_PATH, target, suffix)
+        if not csv_path or not os.path.isfile(csv_path):
             continue
         try:
             df = pd.read_csv(csv_path)
@@ -1783,11 +2171,38 @@ def _resolve_dock6_app_path() -> str:
     )
 
 
+def _resolve_base_mols_path(custom_base_mols: str, library: str) -> str:
+    if not custom_base_mols:
+        if library == 'zinc':
+            return os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
+        return os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET')
+
+    path = custom_base_mols
+    if not os.path.isabs(path):
+        candidate = os.path.join(BIOMOL_ROOT_PATH, path)
+        if os.path.exists(candidate):
+            path = candidate
+        else:
+            path = os.path.abspath(path)
+
+    # Auto-correct if user selected a subdirectory (e.g. .../ADMET/Molecules) where CSV files are in parent directory
+    if os.path.exists(path) and os.path.isdir(path):
+        has_csv = any(f.endswith('.csv') for f in os.listdir(path))
+        if not has_csv:
+            parent_dir = os.path.dirname(path)
+            if os.path.exists(parent_dir) and os.path.isdir(parent_dir):
+                if any(f.endswith('.csv') for f in os.listdir(parent_dir)):
+                    path = parent_dir
+
+    return path
+
+
 def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwargs: dict):
     """
     Background thread that orchestrates the full consensus docking pipeline.
     Calls perform_consensus() exactly as the professor's code does.
     """
+    threading.current_thread().task_id = task_id
     log_stream = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
 
@@ -1810,29 +2225,92 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
     sys.stdout = Tee(log_stream, sys.__stdout__)
     sys.stderr = Tee(log_stream, sys.__stderr__)
 
-    def _update_logs():
+    # Determine total molecules for progress indicator
+    total_mols = 0
+    try:
+        custom_base_mols_temp = dock_kwargs.get('base_selected_mols', None)
+        base_selected_mols_temp = _resolve_base_mols_path(custom_base_mols_temp, library)
+        mol_fn = dock_kwargs.get('mol_filename', 'molecules') if library == 'zinc' else (dock_kwargs.get('mol_filename') or f"{target}_MOLS")
+        csv_p = os.path.join(base_selected_mols_temp, f"{mol_fn}.csv")
+        if os.path.exists(csv_p):
+            with open(csv_p, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = [l.strip() for l in f if l.strip()]
+                total_mols = max(0, len(lines) - 1)
+    except Exception:
+        total_mols = 0
+
+    base_output_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+
+    def _update_logs_and_progress():
+        vina_dir = os.path.join(base_output_path, target.replace(' ', ''), 'Vina')
+        dock6_dir = os.path.join(base_output_path, target.replace(' ', ''), 'Dock6')
+        consensus_file = os.path.join(base_output_path, target.replace(' ', ''), f"{target.replace(' ', '')}.csv")
+
         while active_tasks.get(task_id, {}).get('status') == 'running':
             docking_task_logs[task_id] = log_stream.getvalue()
+
+            done_count = 0
+            phase = 'Preparing Complex'
+            mols_dir = os.path.join(base_output_path, target.replace(' ', ''), 'Molecules')
+            if os.path.exists(mols_dir):
+                mols_done = len([f for f in os.listdir(mols_dir) if f.endswith('.mol2')])
+                done_count = max(done_count, mols_done)
+            if os.path.exists(vina_dir):
+                pdbqts = [f for f in os.listdir(vina_dir) if f.endswith('.lig.pdbqt')]
+                vinas = [f for f in os.listdir(vina_dir) if f.endswith('.vina')]
+                done_count = max(done_count, len(pdbqts), len(vinas))
+                if len(vinas) > 0 and len(vinas) < total_mols:
+                    phase = 'Vina Docking'
+                elif len(vinas) >= total_mols and total_mols > 0:
+                    phase = 'DOCK6 Scoring'
+            if os.path.exists(dock6_dir):
+                dock6_outs = []
+                for root_dir, _, files in os.walk(dock6_dir):
+                    dock6_outs.extend([f for f in files if f.endswith('.out')])
+                if len(dock6_outs) > 0:
+                    done_count = max(done_count, len(dock6_outs))
+                    phase = 'DOCK6 Scoring'
+            if os.path.exists(consensus_file):
+                phase = 'Consensus Evaluation'
+                done_count = total_mols
+
+            if task_id in active_tasks:
+                active_tasks[task_id]['progress'] = {
+                    'phase': phase,
+                    'molecules_total': total_mols,
+                    'molecules_done': done_count
+                }
             threading.Event().wait(0.5)
+
         docking_task_logs[task_id] = log_stream.getvalue()
 
-    log_updater = threading.Thread(target=_update_logs, daemon=True)
+    active_tasks[task_id] = {
+        'status': 'running',
+        'message': f'Running Docking for {target}...',
+        'progress': {
+            'phase': 'Preparing Complex',
+            'molecules_total': total_mols,
+            'molecules_done': 0
+        }
+    }
+    docking_task_logs[task_id] = ''
+
+    log_updater = threading.Thread(target=_update_logs_and_progress, daemon=True)
     log_updater.start()
 
     try:
-        active_tasks[task_id] = {'status': 'running', 'message': f'Running Docking for {target}...'}
-        docking_task_logs[task_id] = ''
 
         # ── Paths (all absolute, portable) ────────────────────────────────────
         base_input_path  = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
-        base_output_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+
+        # Use the user-supplied base_selected_mols if provided, otherwise use the defaults
+        custom_base_mols = dock_kwargs.pop('base_selected_mols', None)
+        base_selected_mols = _resolve_base_mols_path(custom_base_mols, library)
 
         if library == 'zinc':
-            base_selected_mols = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
             mol_filename = dock_kwargs.get('mol_filename', 'molecules')
         else:
-            base_selected_mols = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET')
-            
+
             # Determine which ADMET file to use for this target
             if dock_kwargs.get('mol_filename'):
                 mol_filename = dock_kwargs.get('mol_filename')
@@ -1884,12 +2362,23 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
             base_selected_mols=base_selected_mols,
             dock6_app_path=dock6_app_path,
             pdb_code=pdb_tuple,
+            cancel_check=lambda: active_tasks.get(task_id, {}).get('status') == 'cancelled',
             **{**dock_kwargs, 'mol_filename': mol_filename}
         )
 
-        active_tasks[task_id]['status']  = 'completed'
-        active_tasks[task_id]['message'] = f'Docking for {target} completed successfully.'
+        if active_tasks.get(task_id, {}).get('status') == 'cancelled':
+            active_tasks[task_id]['message'] = f'Docking for {target} stopped by user. Partial results saved.'
+            if 'progress' in active_tasks[task_id]:
+                active_tasks[task_id]['progress']['phase'] = 'Stopped (Partial Results Saved)'
+        else:
+            active_tasks[task_id]['status']  = 'completed'
+            active_tasks[task_id]['message'] = f'Docking for {target} completed successfully.'
 
+    except TaskCancelledException:
+        active_tasks[task_id]['status'] = 'cancelled'
+        active_tasks[task_id]['message'] = f'Docking for {target} stopped by user. Partial results saved.'
+        if 'progress' in active_tasks[task_id]:
+            active_tasks[task_id]['progress']['phase'] = 'Stopped (Partial Results Saved)'
     except Exception as e:
         print(f"FATAL ERROR in docking_worker: {str(e)}", file=sys.__stderr__)
         active_tasks[task_id]['status']  = 'error'
@@ -1940,6 +2429,10 @@ def run_docking_task():
     if not target or not pdb_code:
         return jsonify({'status': 'error', 'message': 'target and pdb_code are required'}), 400
 
+    # ── Optional user-supplied paths ────────────────────────────────────────
+    custom_base_mols      = data.get('base_selected_mols')        # may be None
+    prepared_receptor_path = data.get('prepared_receptor_path')   # required if prepare_complex=False
+
     dock_kwargs = {
         'conformer_search_type': data.get('conformer_search_type', 'flex'),
         'density':               data.get('density', 0.5),
@@ -1953,37 +2446,62 @@ def run_docking_task():
         'prepare_complex':       data.get('prepare_complex', True),
         'charge_type':           data.get('charge_type', 'gas'),
         'mol_filename':          data.get('mol_filename'),
+        'base_selected_mols':    custom_base_mols,  # forwarded to docking_worker
     }
 
     # Pre-flight validation (Fail-fast)
     prepare_complex = dock_kwargs['prepare_complex']
     target_clean = target.replace(' ', '')
-    
-    # 1. Check if Prepared folder exists when prepare_complex is False
-    if not prepare_complex:
-        prepared_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB', target_clean, 'Prepared')
-        if not os.path.isdir(prepared_path):
-            return jsonify({'status': 'error', 'message': f'Receptor not prepared for {target}. Please run Redocking or prepare the complex first.'}), 400
 
-    # 2. Check if molecules.csv exists in the ADMET folder
+    # 1. Check if Prepared folder exists when prepare_complex is False.
+    #    The user must provide the path via the frontend picker.
+    if not prepare_complex:
+        if not prepared_receptor_path:
+            return jsonify({'status': 'error', 'message': 'prepared_receptor_path is required when prepare_complex is false.'}), 400
+        prepared_path = os.path.realpath(os.path.abspath(prepared_receptor_path))
+        if not os.path.isdir(prepared_path):
+            return jsonify({'status': 'error', 'message': f'Prepared receptor directory not found: {prepared_receptor_path}'}), 400
+        pdbqts = [f for f in os.listdir(prepared_path) if f.endswith('.pdbqt')]
+        prep_sub = os.path.join(prepared_path, 'Prepared')
+        if os.path.isdir(prep_sub):
+            pdbqts.extend([f for f in os.listdir(prep_sub) if f.endswith('.pdbqt')])
+        if not pdbqts:
+            return jsonify({'status': 'error', 'message': f'Invalid Prepared Receptor folder: No prepared .pdbqt files found inside "{prepared_receptor_path}". Please select a valid Prepared folder.'}), 400
+
+    # 2. Check if molecules CSV exists in the selected mols folder
+    effective_base_mols = _resolve_base_mols_path(custom_base_mols, library)
     mol_filename = dock_kwargs.get('mol_filename')
     if library == 'zinc':
         mol_filename = mol_filename or 'molecules'
-        molecules_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC', mol_filename + '.csv')
+        molecules_path = os.path.join(effective_base_mols, mol_filename + '.csv')
     else:
-        mol_filename = mol_filename or (f"{target}_FULL" if os.path.exists(os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET', f"{target}_FULL.csv")) else f"{target}_MOLS")
-        molecules_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET', mol_filename + '.csv')
+        if mol_filename and os.path.isfile(os.path.join(effective_base_mols, mol_filename + '.csv')):
+            molecules_path = os.path.join(effective_base_mols, mol_filename + '.csv')
+        elif _find_matching_admet_csv(effective_base_mols, target, "FULL"):
+            molecules_path = _find_matching_admet_csv(effective_base_mols, target, "FULL")
+            mol_filename = os.path.basename(molecules_path)[:-4]
+        elif _find_matching_admet_csv(effective_base_mols, target, "MOLS"):
+            molecules_path = _find_matching_admet_csv(effective_base_mols, target, "MOLS")
+            mol_filename = os.path.basename(molecules_path)[:-4]
+        else:
+            csv_files = [f for f in os.listdir(effective_base_mols) if f.endswith('.csv')] if os.path.isdir(effective_base_mols) else []
+            if csv_files:
+                mol_filename = csv_files[0][:-4]
+                molecules_path = os.path.join(effective_base_mols, csv_files[0])
+            else:
+                mol_filename = f"{target}_MOLS"
+                molecules_path = os.path.join(effective_base_mols, mol_filename + '.csv')
 
-        
     if not os.path.isfile(molecules_path):
-        return jsonify({'status': 'error', 'message': f'ADMET filter has not been run for this target/library. Missing: {molecules_path}'}), 400
+        return jsonify({'status': 'error', 'message': f'Invalid molecules folder: No molecule CSV files found inside "{effective_base_mols}". Please select a folder containing molecule CSV files or run ADMET filter first.'}), 400
 
     task_id = str(uuid.uuid4())
     thread  = threading.Thread(
         target=docking_worker,
-        args=(task_id, target, pdb_code, library, {**dock_kwargs, 'mol_filename': mol_filename}),
+        args=(task_id, target, pdb_code, library, {**dock_kwargs, 'mol_filename': mol_filename, 'base_selected_mols': effective_base_mols}),
         daemon=True
     )
+    thread.task_id = task_id
     thread.start()
 
     return jsonify({'status': 'success', 'task_id': task_id})
@@ -1995,6 +2513,18 @@ def get_docking_status(task_id):
     status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
     logs   = docking_task_logs.get(task_id, '')
     return jsonify({**status, 'logs': logs})
+
+
+@app.route('/api/docking/cancel/<task_id>', methods=['POST'])
+def cancel_docking_task(task_id):
+    """Cancels a running docking task and generates partial results."""
+    if task_id in active_tasks:
+        if active_tasks[task_id].get('status') == 'running':
+            active_tasks[task_id]['status'] = 'cancelled'
+            active_tasks[task_id]['message'] = 'Stopping docking and saving partial results...'
+            ActiveSubprocesses.kill_by_task_id(task_id)
+            return jsonify({'success': True, 'message': 'Cancellation requested'})
+    return jsonify({'success': False, 'message': 'Task not running or not found'}), 404
 
 
 @app.route('/api/docking/results', methods=['GET'])
@@ -2023,7 +2553,8 @@ def get_docking_csv(target):
 
     try:
         df = pd.read_csv(csv_path)
-        return jsonify({'status': 'success', 'headers': df.columns.tolist(), 'rows': df.values.tolist()})
+        rows = [[None if pd.isna(x) else x for x in row] for row in df.values.tolist()]
+        return jsonify({'status': 'success', 'headers': df.columns.tolist(), 'rows': rows})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

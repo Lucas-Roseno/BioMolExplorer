@@ -4,6 +4,7 @@ set -e
 echo "=== BioMolExplorer Development Server (Hot Reload) ==="
 
 # Ativar Conda Environment
+export PATH="$HOME/anaconda3/bin:$PATH"
 CONDA_BASE=$(conda info --base 2>/dev/null)
 if [ -z "$CONDA_BASE" ]; then
     echo "Erro: Conda não encontrado no PATH."
@@ -13,9 +14,65 @@ fi
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate BioMolExplorer
 
+# Função de limpeza para encerrar TODOS os serviços e processos do BioMolExplorer ao pressionar CTRL+C
+cleanup() {
+    echo ""
+    echo "🛑 Encerrando todos os serviços e processos do BioMolExplorer..."
+    
+    # Encerra processos filhos iniciados por este script bash
+    kill -TERM $(jobs -p) 2>/dev/null || true
+
+    # Encerra processos específicos por PID
+    if [ -n "$PYTHON_PID" ]; then
+        kill -TERM "$PYTHON_PID" 2>/dev/null || true
+        kill -TERM -"$PYTHON_PID" 2>/dev/null || true
+    fi
+    if [ -n "$API_PID" ]; then
+        kill -TERM "$API_PID" 2>/dev/null || true
+        kill -TERM -"$API_PID" 2>/dev/null || true
+    fi
+
+    # Garante o encerramento de qualquer processo órfão ou subprocesso científico ativo
+    pkill -TERM -f "apps/python-service/app.py" 2>/dev/null || true
+    pkill -TERM -f "apps/api/src/server.ts" 2>/dev/null || true
+    pkill -TERM -f "chimera --nogui" 2>/dev/null || true
+    pkill -TERM -f "vina --" 2>/dev/null || true
+    pkill -TERM -f "antechamber" 2>/dev/null || true
+    pkill -TERM -f "sqm -O" 2>/dev/null || true
+
+    sleep 0.5
+
+    # Força encerramento (SIGKILL) caso algum processo ainda esteja rodando
+    rm -f apps/web/.next/dev/lock 2>/dev/null || true
+    pkill -9 -f "apps/python-service/app.py" 2>/dev/null || true
+    pkill -9 -f "next dev" 2>/dev/null || true
+    pkill -9 -f "next-server" 2>/dev/null || true
+    pkill -9 -f "chimera --nogui" 2>/dev/null || true
+    pkill -9 -f "vina --" 2>/dev/null || true
+
+    echo "✅ Todos os serviços foram encerrados com sucesso!"
+    exit 0
+}
+
+# Configura o trap para capturar CTRL+C (SIGINT), SIGTERM e encerramento do script
+trap cleanup SIGINT SIGTERM EXIT
+
+echo "🧹 Encerrando processos anteriores..."
+pkill -9 -f "apps/python-service/app.py" 2>/dev/null || true
+pkill -9 -f "apps/api/src/server.ts" 2>/dev/null || true
+pkill -9 -f "next dev" 2>/dev/null || true
+pkill -9 -f "next-server" 2>/dev/null || true
+pkill -9 -f "chimera --nogui" 2>/dev/null || true
+pkill -9 -f "vina --" 2>/dev/null || true
+sleep 1
+
+echo "🧹 Limpando cache de build do Next.js..."
+rm -rf apps/web/.next 2>/dev/null || true
+
 echo "Iniciando os 3 serviços em modo DEV..."
 
 # Função para verificar se a porta está disponível no host (checa IPv4 e IPv6 via kernel ou lsof/netstat)
+
 is_port_available() {
     local port=$1
     if command -v ss >/dev/null 2>&1; then
@@ -52,11 +109,25 @@ echo "   - API (Maestro):  http://localhost:$API_PORT"
 echo "   - Python (Flask): http://127.0.0.1:$PYTHON_PORT"
 echo ""
 
+# Resolve o interpretador Python do ambiente conda BioMolExplorer (ou fallback para python3/python)
+if [ -x "$HOME/anaconda3/envs/BioMolExplorer/bin/python" ]; then
+    PYTHON_BIN="$HOME/anaconda3/envs/BioMolExplorer/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+else
+    PYTHON_BIN="python"
+fi
+
 # 1. Inicia o Python Flask em background (já tem hot-reload via debug=True)
-PORT=$PYTHON_PORT FLASK_PORT=$PYTHON_PORT python apps/python-service/app.py &
+PORT=$PYTHON_PORT FLASK_PORT=$PYTHON_PORT "$PYTHON_BIN" apps/python-service/app.py &
+PYTHON_PID=$!
+
+# Adicionar Node v22 ao PATH para Next.js 15+ e Node 20+
+export PATH="$HOME/.nvm/versions/node/v22.23.0/bin:$PATH"
 
 # 2. Inicia a API Node.js com NODEMON para hot-reload
 PORT=$API_PORT PYTHON_URL="http://127.0.0.1:$PYTHON_PORT" npx nodemon --watch apps/api/src -e ts,js --exec "ts-node" apps/api/src/server.ts &
+API_PID=$!
 
 # Aguarda os serviços de backend estarem prontos
 echo "Aguardando serviços de backend..."

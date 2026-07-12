@@ -29,20 +29,24 @@ async function proxyRequest(request: Request) {
             headers: responseHeaders,
         });
     } catch (error: any) {
-        console.error(`Proxy error for ${targetUrl}:`, error.message);
-        
-        // Tratar Timeout específico
-        if (error.name === 'TimeoutError' || error.message.includes('timeout') || error.message.includes('aborted')) {
-            return new Response(JSON.stringify({ 
-                success: false, 
-                message: 'A operação excedeu o tempo limite de 30 minutos na tela. O processamento da base ChEMBL pode ser muito pesado e continuará rodando em segundo plano no terminal.' 
+        console.error(`[BioMolExplorer] Proxy error for ${targetUrl}:`, error.message);
+
+        // Timeout — the operation may still be running in the background
+        if (error.name === 'TimeoutError' || error.message?.includes('timeout') || error.message?.includes('aborted')) {
+            return new Response(JSON.stringify({
+                success: false,
+                message: 'The operation is taking longer than expected. It may still be running in the background — please wait a moment and check back.'
             }), {
                 status: 504,
                 headers: { 'Content-Type': 'application/json' },
             });
         }
 
-        return new Response(JSON.stringify({ success: false, message: 'Backend unavailable' }), {
+        // Cannot reach the Python backend at all
+        return new Response(JSON.stringify({
+            success: false,
+            message: 'The server is currently unavailable. Please make sure the application is running and try again.'
+        }), {
             status: 502,
             headers: { 'Content-Type': 'application/json' },
         });

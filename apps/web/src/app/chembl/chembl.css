@@ -409,10 +409,15 @@ select:focus {
 .target-header-left {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: auto;
+    font-weight: bold;
 }
 
 .target-header-right {
     display: flex;
     align-items: center;
+    gap: 8px;
     margin-left: auto;
 }

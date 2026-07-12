@@ -3,15 +3,22 @@ import { API_BASE_URL } from '../config';
 
 export function useFiles<T>(endpoint: string) {
     const [datasets, setDatasets] = useState<T>({} as T);
+    const [loadError, setLoadError] = useState<boolean>(false);
 
     const fetchFiles = useCallback(async () => {
         try {
             const res = await fetch(`${API_BASE_URL}${endpoint}`, { cache: 'no-store' });
             if (res.ok) {
-                setDatasets(await res.json());
+                const data = await res.json();
+                setDatasets(data);
+                setLoadError(false);
+            } else {
+                // Server responded but with an error — keep current data, set error flag
+                setLoadError(true);
             }
         } catch {
-            // Falhas silenciosas ou lógicas customizadas
+            // Network failure — keep current data, set error flag
+            setLoadError(true);
         }
     }, [endpoint]);
 
@@ -19,5 +26,5 @@ export function useFiles<T>(endpoint: string) {
         fetchFiles();
     }, [fetchFiles]);
 
-    return { datasets, fetchFiles };
+    return { datasets, fetchFiles, loadError };
 }

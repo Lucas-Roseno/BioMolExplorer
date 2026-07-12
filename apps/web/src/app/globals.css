@@ -733,8 +733,17 @@ legend {
 .target-header-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: flex-start;
+    gap: 10px;
     font-weight: bold;
+    width: auto;
+}
+
+.target-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
 }
 
 .accordion-icon {
@@ -814,4 +823,454 @@ legend {
 
 .delete-target-btn:hover i {
     color: #922b21;
+}
+
+/* =======================================================================
+   HOME PAGE USER GUIDE & INTERACTIVE WORKFLOW PIPELINE STYLES
+   ======================================================================= */
+
+.home-guide-container {
+    width: 100%;
+    max-width: 1240px;
+    margin: 2rem auto 3rem;
+    padding: 0 1.5rem;
+    box-sizing: border-box;
+}
+
+.guide-hero {
+    background: linear-gradient(135deg, #47366d 0%, #614a93 50%, #705d9d 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 3rem 2.5rem;
+    box-shadow: 0 12px 30px rgba(71, 54, 109, 0.25);
+    margin-bottom: 2.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.guide-hero::after {
+    content: '';
+    position: absolute;
+    top: -50px;
+    right: -50px;
+    width: 280px;
+    height: 280px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.guide-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 6px 14px;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+    backdrop-filter: blur(8px);
+}
+
+.guide-hero h2 {
+    font-size: 2.6rem;
+    font-weight: 800;
+    margin: 0 0 1rem;
+    line-height: 1.2;
+    color: white;
+}
+
+.guide-hero p {
+    font-size: 1.15rem;
+    color: rgba(255, 255, 255, 0.9);
+    max-width: 820px;
+    line-height: 1.6;
+    margin: 0 0 1.8rem;
+}
+
+.hero-feature-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.hero-tag {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Section Headings */
+.guide-section-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.guide-section-header h3 {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin: 0 0 0.5rem;
+    font-weight: 800;
+}
+
+.guide-section-header p {
+    font-size: 1.05rem;
+    color: #666;
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+/* Interactive Workflow Pipeline */
+.workflow-pipeline-section {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 2.5rem;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+    border: 1px solid #eaeaea;
+    margin-bottom: 3rem;
+}
+
+.workflow-steps-ribbon {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 2rem;
+}
+
+.workflow-step-tab {
+    background: #f7f8fb;
+    border: 2px solid #e2e6f0;
+    border-radius: 12px;
+    padding: 1.2rem 1rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.workflow-step-tab:hover {
+    border-color: #9686de;
+    background: #f0edfa;
+    transform: translateY(-2px);
+}
+
+.workflow-step-tab.active {
+    background: linear-gradient(135deg, #47366d 0%, #614a93 100%);
+    border-color: #47366d;
+    color: #ffffff;
+    box-shadow: 0 8px 20px rgba(71, 54, 109, 0.25);
+}
+
+.workflow-step-num {
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+    color: #705d9d;
+}
+
+.workflow-step-tab.active .workflow-step-num {
+    color: #d1c8f5;
+}
+
+.workflow-step-title {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: #333;
+}
+
+.workflow-step-tab.active .workflow-step-title {
+    color: #ffffff;
+}
+
+.workflow-step-detail-card {
+    background: #f8f9fc;
+    border: 1px solid #e1e5f2;
+    border-radius: 14px;
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2rem;
+    align-items: center;
+}
+
+.workflow-step-detail-content h4 {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin: 0 0 0.8rem;
+    font-weight: 700;
+}
+
+.workflow-step-detail-content p {
+    font-size: 1.05rem;
+    color: #555;
+    line-height: 1.6;
+    margin: 0 0 1.2rem;
+}
+
+.workflow-step-highlights {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.step-highlight-badge {
+    background: #ffffff;
+    border: 1px solid #dcdfe8;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #47366d;
+}
+
+.workflow-step-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0.95rem 1.8rem;
+    background: var(--primary-color);
+    color: white;
+    font-weight: 700;
+    border-radius: 10px;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(71, 54, 109, 0.25);
+}
+
+.workflow-step-cta:hover {
+    background: var(--primary-hover-color);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(71, 54, 109, 0.35);
+}
+
+/* Module Cards Grid */
+.module-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.8rem;
+    margin-bottom: 3rem;
+}
+
+.module-guide-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e6e8f0;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.module-guide-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(71, 54, 109, 0.12);
+    border-color: #c7bee8;
+}
+
+.module-card-header {
+    background: linear-gradient(135deg, #f7f5fe 0%, #edeafc 100%);
+    padding: 1.5rem;
+    border-bottom: 1px solid #e3deFA;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.module-card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.module-icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: #47366d;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    box-shadow: 0 4px 10px rgba(71, 54, 109, 0.25);
+}
+
+.module-title-wrap h4 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #333;
+}
+
+.module-title-wrap span {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+}
+
+.module-card-body {
+    padding: 1.6rem 1.6rem 1.2rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+}
+
+.module-purpose {
+    font-size: 1rem;
+    color: #444;
+    line-height: 1.55;
+    margin: 0;
+}
+
+.module-section-box {
+    background: #fbfbfd;
+    border: 1px solid #ecedf3;
+    border-radius: 10px;
+    padding: 1.1rem;
+}
+
+.module-section-box h5 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #6a6a8c;
+    margin: 0 0 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.input-badge-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.param-badge {
+    background: #f0edfa;
+    color: #47366d;
+    border: 1px solid #dbd4f5;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.83rem;
+    font-weight: 600;
+}
+
+.output-badge {
+    background: #e9f7ef;
+    color: #1e8449;
+    border: 1px solid #cbecdc;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.83rem;
+    font-weight: 600;
+}
+
+.module-card-footer {
+    padding: 1.2rem 1.6rem;
+    background: #fafafc;
+    border-top: 1px solid #f0f0f5;
+}
+
+.module-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.85rem 1.3rem;
+    background: #47366d;
+    color: #ffffff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.95rem;
+    transition: all 0.25s ease;
+}
+
+.module-nav-btn:hover {
+    background: #594488;
+    color: #ffffff;
+    transform: translateX(3px);
+}
+
+/* Best Practices Box */
+.guide-best-practices {
+    background: linear-gradient(135deg, #2b2344 0%, #3e3061 100%);
+    color: #ffffff;
+    border-radius: 16px;
+    padding: 2.5rem;
+    margin-bottom: 3rem;
+    box-shadow: 0 10px 25px rgba(43, 35, 68, 0.25);
+}
+
+.best-practices-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-top: 1.8rem;
+}
+
+.best-practice-card {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 1.4rem;
+}
+
+.best-practice-card h5 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 0.6rem;
+    color: #ded6fa;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.best-practice-card p {
+    font-size: 0.93rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.85);
+    margin: 0;
+}
+
+@media (max-width: 1024px) {
+    .workflow-steps-ribbon {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .module-cards-grid {
+        grid-template-columns: 1fr;
+    }
+    .best-practices-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 680px) {
+    .workflow-steps-ribbon {
+        grid-template-columns: 1fr;
+    }
+    .workflow-step-detail-card {
+        grid-template-columns: 1fr;
+    }
 }

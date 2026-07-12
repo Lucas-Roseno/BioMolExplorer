@@ -6,7 +6,7 @@ type LoadingOverlayProps = {
     children?: React.ReactNode;
 };
 
-export default function LoadingOverlay({ isLoading, message = "Processing, please wait...", children }: LoadingOverlayProps) {
+export default function LoadingOverlay({ isLoading, message = "Processing, this process may take a long time...", children }: LoadingOverlayProps) {
     if (!isLoading) return null;
 
     return (
@@ -17,20 +17,21 @@ export default function LoadingOverlay({ isLoading, message = "Processing, pleas
             padding: '40px',
             zIndex: 9999
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <div className="loader"></div>
-                <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>{message}</p>
-            </div>
+            {!children && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div className="loader"></div>
+                    <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>{message}</p>
+                </div>
+            )}
             {children && (
                 <div style={{ 
                     width: '100%', 
-                    maxWidth: '1000px', 
-                    maxHeight: '70vh', 
-                    overflow: 'auto',
-                    borderRadius: '10px',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                    maxWidth: '650px', 
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
                     backgroundColor: '#1e1e1e',
-                    border: '1px solid #444'
+                    border: '1px solid #444',
+                    overflow: 'hidden'
                 }}>
                     {children}
                 </div>

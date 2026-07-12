@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import Link from "next/link";
+import ErrorBoundary from "../components/ErrorBoundary";
+import { ToastProvider } from "../components/ToastProvider";
 
 export const metadata: Metadata = {
   title: "BioMolExplorer",
@@ -20,43 +22,47 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
       </head>
       <body>
-        <header className="main-header">
-          <div className="header-content">
-            <Link href="/" className="header-link-home">
-              <img src="/img/icon.png" alt="Logo" className="header-logo" />
-            </Link>
-            <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
-              <h1>BioMolExplorer</h1>
-            </Link>
-          </div>
-          <nav className="main-nav">
-            <ul>
-              <li><Link href="/">Home</Link></li>
-              <li><Link href="/pdb">PDB</Link></li>
-              <li><Link href="/chembl">ChEMBL</Link></li>
-              <li><Link href="/zinc">ZINC</Link></li>
-              <li><Link href="/analysis">Analysis</Link></li>
-            </ul>
-          </nav>
-        </header>
+        <ErrorBoundary>
+          <ToastProvider>
+            <header className="main-header">
+              <div className="header-content">
+                <Link href="/" className="header-link-home">
+                  <img src="/img/icon.png" alt="Logo" className="header-logo" />
+                </Link>
+                <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+                  <h1>BioMolExplorer</h1>
+                </Link>
+              </div>
+              <nav className="main-nav">
+                <ul>
+                  <li><Link href="/">Home</Link></li>
+                  <li><Link href="/pdb">PDB</Link></li>
+                  <li><Link href="/chembl">ChEMBL</Link></li>
+                  <li><Link href="/zinc">ZINC</Link></li>
+                  <li><Link href="/analysis">Analysis</Link></li>
+                </ul>
+              </nav>
+            </header>
 
-        {children}
+            {children}
 
-        <footer className="site-footer">
-          <div className="footer-inner">
-            <div className="footer-left">
-              <Link href="/references" style={{ color: 'inherit', textDecoration: 'none', fontWeight: 'bold' }}>
-                BioMolExplorer
-              </Link> · Version 2.0
-            </div>
-            <nav className="footer-links">
-              <Link href="/about">About</Link>
-              <Link href="/references">References</Link>
-              <Link href="/contact">Contact</Link>
-            </nav>
-            <div className="footer-right">Copyright © 2024 BioMolExplorer. All Rights Reserved.</div>
-          </div>
-        </footer>
+            <footer className="site-footer">
+              <div className="footer-inner">
+                <div className="footer-left">
+                  <Link href="/references" style={{ color: 'inherit', textDecoration: 'none', fontWeight: 'bold' }}>
+                    BioMolExplorer
+                  </Link> · Version 2.0
+                </div>
+                <nav className="footer-links">
+                  <Link href="/about">About</Link>
+                  <Link href="/references">References</Link>
+                  <Link href="/contact">Contact</Link>
+                </nav>
+                <div className="footer-right">Copyright © 2024 BioMolExplorer. All Rights Reserved.</div>
+              </div>
+            </footer>
+          </ToastProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

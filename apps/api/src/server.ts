@@ -15,8 +15,19 @@ const upload = multer({ dest: 'uploads/' });
 const PYTHON_URL = process.env.PYTHON_URL || 'http://127.0.0.1:5000';
 
 // ==========================================
-// SEARCH ROUTES
+// SEARCH & TASK STATUS ROUTES
 // ==========================================
+app.get('/api/jobs/status/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const response = await fetch(`${PYTHON_URL}/api/tasks/status/${encodeURIComponent(jobId)}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ status: 'error', message: e.message || 'Node Gateway Error' });
+  }
+});
+
 app.post('/api/pdb/search', async (req, res) => {
   try {
     const s = req.body;
@@ -240,15 +251,44 @@ app.post('/api/analysis/molecule-image', async (req, res) => {
   }
 });
 
+// Helper resilient to Python Flask startup race condition
+async function fetchPythonJson(endpoint: string, retries = 5, delayMs = 600): Promise<any> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${PYTHON_URL}${endpoint}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err: any) {
+      if (attempt === retries) {
+        console.error(`[API] Could not fetch ${endpoint} from Python after ${retries} attempts:`, err.message);
+      }
+    }
+    if (attempt < retries) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  return {};
+}
+
 // ==========================================
 // FILE ROUTES (Adapted to your Flask service)
 // ==========================================
 // Listagem
 app.get('/api/files/list/PDB', async (req, res) => {
-  try { res.json(await (await fetch(`${PYTHON_URL}/pdb_files`)).json()); } catch (e) { res.status(500).json({}); }
+  try { res.json(await fetchPythonJson('/pdb_files')); } catch (e) { res.json({}); }
 });
 app.get('/api/files/list/ChEMBL', async (req, res) => {
-  try { res.json(await (await fetch(`${PYTHON_URL}/chembl_files`)).json()); } catch (e) { res.status(500).json({}); }
+  try { res.json(await fetchPythonJson('/chembl_files')); } catch (e) { res.json({}); }
+});
+app.get('/api/chembl_files', async (req, res) => {
+  try { res.json(await fetchPythonJson('/chembl_files')); } catch (e) { res.json({}); }
+});
+app.get('/api/zinc_files', async (req, res) => {
+  try { res.json(await fetchPythonJson('/zinc_files')); } catch (e) { res.json({}); }
+});
+app.get('/api/pdb_files', async (req, res) => {
+  try { res.json(await fetchPythonJson('/pdb_files')); } catch (e) { res.json({}); }
 });
 app.get('/api/files/csv/PDB/:target/:file', async (req, res) => {
   try {
@@ -450,6 +490,16 @@ app.get('/api/docking/status/:task_id', async (req, res) => {
   }
 });
 
+app.post('/api/docking/cancel/:task_id', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/docking/cancel/${req.params.task_id}`, { method: 'POST' });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
 app.get('/api/docking/results', async (req, res) => {
   try {
     const response = await fetch(`${PYTHON_URL}/api/docking/results`);
@@ -491,6 +541,46 @@ app.get('/api/docking/download/:target', async (req, res) => {
 });
 
 // ==========================================
+// FILESYSTEM BROWSER ROUTE (FORWARDING TO PYTHON)
+// ==========================================
+
+app.get('/api/filesystem/browse', async (req, res) => {
+  try {
+    const pathParam = req.query.path ? `?path=${encodeURIComponent(req.query.path.toString())}` : '';
+    const response = await fetch(`${PYTHON_URL}/api/filesystem/browse${pathParam}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ status: 'error', message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.get('/api/filesystem/native-picker', async (req, res) => {
+  try {
+    const initialDir = req.query.initial_dir ? `?initial_dir=${encodeURIComponent(req.query.initial_dir.toString())}` : '';
+    const response = await fetch(`${PYTHON_URL}/api/filesystem/native-picker${initialDir}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ status: 'error', message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/filesystem/validate-folder', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/filesystem/validate-folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ status: 'error', message: e.message || 'Node Gateway Error' });
+  }
+});
+
+// ==========================================
 // ==========================================
 // REDOCKING ROUTES (FORWARDING TO PYTHON)
 // ==========================================
@@ -522,6 +612,16 @@ app.post('/api/redocking/run', async (req, res) => {
 app.get('/api/redocking/status/:task_id', async (req, res) => {
   try {
     const response = await fetch(`${PYTHON_URL}/api/redocking/status/${req.params.task_id}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/redocking/cancel/:task_id', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/redocking/cancel/${req.params.task_id}`, { method: 'POST' });
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (e: any) {
@@ -589,6 +689,16 @@ app.post('/api/admet/run', async (req, res) => {
 app.get('/api/admet/status/:task_id', async (req, res) => {
   try {
     const response = await fetch(`${PYTHON_URL}/api/admet/status/${req.params.task_id}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (e: any) {
+    res.status(500).json({ success: false, message: e.message || 'Node Gateway Error' });
+  }
+});
+
+app.post('/api/admet/cancel/:task_id', async (req, res) => {
+  try {
+    const response = await fetch(`${PYTHON_URL}/api/admet/cancel/${req.params.task_id}`, { method: 'POST' });
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (e: any) {

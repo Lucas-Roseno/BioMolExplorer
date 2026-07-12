@@ -141,7 +141,7 @@ class ADMETWrapper:
     # Pipeline
     # ------------------------------------------------------------------
 
-    def run_pipeline(self) -> dict:
+    def run_pipeline(self, progress_callback=None, cancel_check=None) -> dict:
         """
         Runs the full ADMET pipeline for the three DrugBank groups
         (MOLS, SIMS, FULL).
@@ -159,12 +159,28 @@ class ADMETWrapper:
             "total_excluded":  0,
         }
 
+        # Calculate total across all groups for overall progress
+        total_all_groups = 0
+        group_dfs = []
         for suffix, csv_path in group_files:
-            df_input       = self._load_group(csv_path)
+            df_in = self._load_group(csv_path)
+            group_dfs.append((suffix, df_in))
+            total_all_groups += len(df_in)
+
+        done_all_groups = 0
+
+        for suffix, df_input in group_dfs:
             rows           = []
             excluded_count = 0
 
             for _, row in df_input.iterrows():
+                if cancel_check and cancel_check():
+                    break
+
+                done_all_groups += 1
+                if progress_callback:
+                    progress_callback(f"Analyzing {suffix}", done_all_groups, total_all_groups)
+
                 smiles = row["canonical_smiles"]
                 name   = row["molecule_chembl_id"]
 
@@ -222,6 +238,9 @@ class ADMETWrapper:
 
             if self.verbose:
                 self._print_summary(group_summary)
+
+            if cancel_check and cancel_check():
+                break
 
         return summary
 

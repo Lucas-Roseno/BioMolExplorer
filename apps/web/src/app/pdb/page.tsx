@@ -1,13 +1,15 @@
 'use client';
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import './pdb.css';
 import { API_BASE_URL } from '../../config';
 import LoadingOverlay from '../../components/LoadingOverlay';
-
+import { useToast } from '../../components/ToastProvider';
+import InfoTooltip from '../../components/InfoTooltip';
 import { useFiles } from '../../hooks/useFiles';
 
 export default function PdbPage() {
+  const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const { datasets, fetchFiles } = useFiles<Record<string, string[]>>('/api/files/list/PDB');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
@@ -20,25 +22,40 @@ export default function PdbPage() {
   const isFormValid = targetName.trim() !== '' && pdbEc.trim() !== '';
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
 
-  // Polls the file list until a new target appears (max 30s)
-  const pollUntilFilesAppear = async (targetName: string) => {
-    const start = Date.now();
-    const timeout = 30000;
-    const interval = 2000;
-    while (Date.now() - start < timeout) {
-      await new Promise(r => setTimeout(r, interval));
+  // Polls the job status until completed or error
+  const pollUntilJobComplete = async (taskId: string, targetNameStr: string) => {
+    let isDone = false;
+    let attempts = 0;
+    const maxAttempts = 720; // 30 minutes max (720 × 2.5s)
+    while (!isDone && attempts < maxAttempts) {
+      attempts++;
+      await new Promise(r => setTimeout(r, 2500));
       try {
-        const res = await fetch(`${API_BASE_URL}/api/files/list/PDB`);
-        const data: Record<string, string[]> = await res.json();
-        if (data[targetName] && data[targetName].length > 0) {
-          setDownloadStatus(`✅ ${data[targetName].length} file(s) downloaded for ${targetName}.`);
+        const statusRes = await fetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(taskId)}`);
+        if (!statusRes.ok) continue; // Transient network issue — keep polling
+
+        const statusData = await statusRes.json();
+        if (statusData.status === 'completed') {
+          isDone = true;
+          setDownloadStatus(null);
+          showToast('success', 'Download completed!', `PDB structures for "${targetNameStr}" are now available.`);
           await fetchFiles();
-          return;
+          break;
+        } else if (statusData.status === 'error') {
+          isDone = true;
+          setDownloadStatus(null);
+          showToast('error', 'Download failed', 'No structures could be found for the given parameters. Try adjusting the resolution or removing the ligand filter.');
+          break;
         }
-      } catch {}
+      } catch {
+        // Network hiccup — continue polling silently
+      }
     }
-    setDownloadStatus('⚠️ Download finished but files may still be processing.');
-    await fetchFiles();
+
+    if (!isDone) {
+      setDownloadStatus(null);
+      showToast('warning', 'Taking longer than expected', 'The download is still running in the background. You can check back later — the files will appear once ready.');
+    }
   };
 
   const handleSearch = async (e: FormEvent<HTMLFormElement>) => {
@@ -53,18 +70,17 @@ export default function PdbPage() {
       const res = await fetch(`${API_BASE_URL}/api/pdb/search`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
-      
+
       const data = await res.json();
       if (!res.ok) {
         setDownloadStatus(null);
-        alert(`Error downloading PDB: ${data.message || 'Unknown error'}`);
-      } else {
-        // Start polling instead of calling fetchFiles() immediately
-        pollUntilFilesAppear(payload.target as string);
+        showToast('error', 'Search failed', 'Could not connect to the PDB database. Please check your internet connection and try again.');
+      } else if (data.data?.task_id) {
+        await pollUntilJobComplete(data.data.task_id, payload.target as string);
       }
-    } catch (error: any) {
+    } catch {
       setDownloadStatus(null);
-      alert(`Connection error: ${error.message}`);
+      showToast('error', 'Connection error', 'Could not reach the server. Make sure the application is running and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -74,53 +90,79 @@ export default function PdbPage() {
 
   // Deletes all data corresponding to a target
   const handleDelete = async (target: string) => {
-    if (!confirm(`Delete all data for ${target}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/PDB/${target}`, { method: 'DELETE' });
-    fetchFiles();
+    if (!confirm(`Delete all data for "${target}"? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/delete/PDB/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('error', 'Could not delete', 'An error occurred while trying to remove this target. Please try again.');
+        return;
+      }
+      showToast('success', 'Target deleted', `All data for "${target}" has been removed.`);
+      fetchFiles();
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the target.');
+    }
   };
 
   // Triggers downloading the complete target folder as a ZIP file
   const handleDownloadTarget = (target: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/PDB/zip/${target}`, '_blank');
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/PDB/zip/${encodeURIComponent(target)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
 
   const handleDeleteFile = async (target: string, file: string) => {
-    if (!confirm(`Delete file ${file}?`)) return;
+    if (!confirm(`Delete file "${file}"?`)) return;
     try {
       const response = await fetch(`${API_BASE_URL}/api/files/delete/PDB/file/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok || data.status === 'error') {
-        alert(data.message || 'Failed to delete file.');
+        showToast('error', 'Could not delete file', 'The file could not be removed. Please try again.');
         return;
       }
 
-      setTimeout(() => {
-        fetchFiles();
-      }, 500);
-    } catch (err: any) {
-      alert(err?.message || 'Failed to delete file.');
+      showToast('success', 'File deleted', `"${file}" has been removed.`);
+      setTimeout(() => { fetchFiles(); }, 500);
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the file.');
     }
   };
 
   const handleDownload = (target: string, file: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/PDB/${target}/${file}`, '_blank');
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/PDB/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
 
   // Fetches the specific PDB content as text and displays the 3D Viewer Modal
   const open3DViewer = async (target: string, file: string) => {
     setViewer({ isOpen: true, file });
-    const res = await fetch(`${API_BASE_URL}/api/files/pdb_content/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
-    const pdbData = await res.text();
-    setTimeout(() => {
-      const element = document.getElementById('viewer-3d-canvas');
-      if (element && (window as any).$3Dmol) {
-        element.innerHTML = '';
-        let v = (window as any).$3Dmol.createViewer(element, { backgroundColor: 'white' });
-        v.addModel(pdbData, "pdb");
-        v.setStyle({}, { cartoon: { color: 'spectrum' } });
-        v.zoomTo(); v.render();
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/pdb_content/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+      if (!res.ok) {
+        showToast('error', 'Could not load structure', 'The 3D structure file could not be retrieved. Try again or download the file manually.');
+        setViewer({ isOpen: false, file: '' });
+        return;
       }
-    }, 200);
+      const pdbData = await res.text();
+      setTimeout(() => {
+        const element = document.getElementById('viewer-3d-canvas');
+        if (element && (window as any).$3Dmol) {
+          element.innerHTML = '';
+          let v = (window as any).$3Dmol.createViewer(element, { backgroundColor: 'white' });
+          v.addModel(pdbData, "pdb");
+          v.setStyle({}, { cartoon: { color: 'spectrum' } });
+          v.zoomTo(); v.render();
+        }
+      }, 200);
+    } catch {
+      showToast('error', 'Could not load structure', 'Unable to retrieve the PDB file. Please check your connection and try again.');
+      setViewer({ isOpen: false, file: '' });
+    }
   };
 
   return (
@@ -131,28 +173,28 @@ export default function PdbPage() {
           <div className="form-container">
             <form id="pdb-form" onSubmit={handleSearch}>
               <div className="form-group">
-                <label>Target Name</label>
-                <input 
-                  type="text" 
-                  name="target" 
-                  placeholder="e.g., Acetylcholinesterase" 
-                  required 
+                <label>Target Name <InfoTooltip content="Enter a descriptive name for your biological target (e.g., Acetylcholinesterase) to organize downloaded PDB structures." /></label>
+                <input
+                  type="text"
+                  name="target"
+                  placeholder="e.g., Acetylcholinesterase"
+                  required
                   value={targetName}
                   onChange={(e) => setTargetName(e.target.value)}
                 />
               </div>
               <div className="form-group">
-                <label>PDB EC Number</label>
-                <input 
-                  type="text" 
-                  name="pdb_ec" 
-                  placeholder="e.g., 3.1.1.7" 
-                  required 
+                <label>PDB EC Number <InfoTooltip content="Enzyme Commission (EC) classification number identifying the enzyme class (e.g., 3.1.1.7 for Acetylcholinesterase)." /></label>
+                <input
+                  type="text"
+                  name="pdb_ec"
+                  placeholder="e.g., 3.1.1.7"
+                  required
                   value={pdbEc}
                   onChange={(e) => setPdbEc(e.target.value)}
                 />
               </div>
-              <div className="form-group"><label>Polymer Entity Type</label>
+              <div className="form-group"><label>Polymer Entity Type <InfoTooltip content="Select the macromolecular type to filter structures (Protein, DNA, RNA, or hybrids)." /></label>
                 <select name="polymer_entity_type">
                   <option value="PROTEIN">Protein</option>
                   <option value="DNA">DNA</option>
@@ -162,7 +204,7 @@ export default function PdbPage() {
                   <option value="OTHER">Other</option>
                 </select>
               </div>
-              <div className="form-group"><label>Experimental Method</label>
+              <div className="form-group"><label>Experimental Method <InfoTooltip content="Filter structures by structure determination technique such as X-Ray Diffraction or Solution NMR." /></label>
                 <select name="experimental_method">
                   <option value="X_RAY_DIFFRACTION">X-Ray Diffraction</option>
                   <option value="ELECTRON_MICROSCOPY">Electron Microscopy</option>
@@ -174,8 +216,8 @@ export default function PdbPage() {
                   <option value="EPR">EPR</option>
                   <option value="OTHER">Other</option>
                 </select></div>
-              <div className="form-group"><label>Max Resolution (Å)</label><input type="number" name="max_resolution" step="0.1" defaultValue="1.8" required /></div>
-              <div className="form-group"><label><input type="checkbox" name="must_have_ligand" defaultChecked /> Must Have Ligand</label></div>
+              <div className="form-group"><label>Max Resolution (Å) <InfoTooltip content="Maximum acceptable structural resolution in Angstroms (lower values indicate higher atomic precision)." /></label><input type="number" name="max_resolution" step="0.1" defaultValue="1.8" required /></div>
+              <div className="form-group"><label><input type="checkbox" name="must_have_ligand" defaultChecked /> Must Have Ligand <InfoTooltip content="Check to download only structures that contain co-crystallized small-molecule ligands." /></label></div>
               <button type="submit" disabled={!isFormValid || isLoading}>
                 {isLoading ? 'Downloading...' : 'Download'}
               </button>
@@ -194,21 +236,19 @@ export default function PdbPage() {
                   {/* Classic Accordion Header */}
                   <button className={`collapsible-header ${openTargets[target] ? 'active' : ''}`} type="button" onClick={() => toggleAccordion(target)}>
                     <div className="target-header-left">
-                      <div className="target-title">
-                        <i className={`fas fa-chevron-${openTargets[target] ? 'up' : 'down'} accordion-icon`}></i>
-                        <span>{target} ({files.length})</span>
-                      </div>
-                      <div className="target-actions">
-                        <Link href={`/pdb/${encodeURIComponent(target)}`} onClick={(e) => e.stopPropagation()} className="csv-target-btn" title="View CSV Table">
-                          <i className="fas fa-table" aria-hidden="true"></i>
-                        </Link>
-                        <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target">
-                          <i className="fas fa-download"></i>
-                        </span>
-                        <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Delete Target">
-                          <i className="fas fa-trash-alt"></i>
-                        </span>
-                      </div>
+                      <i className={`fas fa-chevron-${openTargets[target] ? 'up' : 'down'} accordion-icon`}></i>
+                      <span>{target} ({files.length})</span>
+                    </div>
+                    <div className="target-header-right target-actions">
+                      <Link href={`/pdb/${encodeURIComponent(target)}`} onClick={(e) => e.stopPropagation()} className="csv-target-btn" title="View CSV Table">
+                        <i className="fas fa-table" aria-hidden="true"></i>
+                      </Link>
+                      <span className="download-target-btn" onClick={(e) => { e.stopPropagation(); handleDownloadTarget(target); }} title="Download Target">
+                        <i className="fas fa-download"></i>
+                      </span>
+                      <span className="delete-target-btn" onClick={(e) => { e.stopPropagation(); handleDelete(target); }} title="Delete Target">
+                        <i className="fas fa-trash-alt"></i>
+                      </span>
                     </div>
                   </button>
 

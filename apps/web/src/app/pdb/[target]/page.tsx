@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import '../pdb.css';
 import { API_BASE_URL } from '../../../config';
+import { useToast } from '../../../components/ToastProvider';
 
 type CsvData = {
   headers: string[];
@@ -12,6 +13,7 @@ type CsvData = {
 };
 
 export default function PdbCsvPage() {
+  const { showToast } = useToast();
   const params = useParams();
   const target = typeof params?.target === 'string' ? params.target : '';
   const [csvData, setCsvData] = useState<CsvData | null>(null);
@@ -38,8 +40,8 @@ export default function PdbCsvPage() {
       } else {
         setCsvData({ headers: data.headers || [], rows: data.rows || [] });
       }
-    } catch (err: any) {
-      setError(err?.message || 'Failed to fetch CSV data.');
+    } catch {
+      setError('Could not load the CSV data. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -58,12 +60,12 @@ export default function PdbCsvPage() {
       });
       const data = await response.json();
       if (!response.ok || data.status === 'error') {
-        alert(data.message || 'Failed to delete CSV row.');
+        showToast('error', 'Could not delete entry', 'The entry could not be removed from the table. Please try again.');
       } else {
         await fetchCsv();
       }
-    } catch (err: any) {
-      alert(err?.message || 'Failed to delete row.');
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the entry.');
     } finally {
       setDeletingRow(null);
     }
@@ -87,8 +89,8 @@ export default function PdbCsvPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      alert(err?.message || 'Failed to download CSV file.');
+    } catch {
+      showToast('error', 'Download failed', 'The CSV file could not be downloaded. Please try again.');
     }
   };
 
@@ -135,7 +137,25 @@ export default function PdbCsvPage() {
             Use the blue icon to open the selected PDB entry on the official RCSB PDB website.
           </div>
           {loading && <div className="empty-list-message">Loading CSV data...</div>}
-          {!loading && error && <div className="empty-list-message">{error}</div>}
+          {!loading && error && (
+            <div style={{
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffc107',
+              borderRadius: '8px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              color: '#856404',
+              margin: '16px 0'
+            }}>
+              <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.2rem' }} />
+              <div>
+                <strong style={{ display: 'block', marginBottom: '4px' }}>Could not load CSV data</strong>
+                <span style={{ fontSize: '0.9rem' }}>The data table could not be loaded. Please make sure you have downloaded PDB data for this target.</span>
+              </div>
+            </div>
+          )}
           {!loading && !error && csvData?.rows.length === 0 && (
             <div className="empty-list-message">No rows found in pdb_codes.csv.</div>
           )}

@@ -1,14 +1,16 @@
 'use client';
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import './chembl.css';
 import { API_BASE_URL } from '../../config';
 import LoadingOverlay from '../../components/LoadingOverlay';
-
+import { useToast } from '../../components/ToastProvider';
+import InfoTooltip from '../../components/InfoTooltip';
 import { useFiles } from '../../hooks/useFiles';
 
 type ChemblData = { molecules?: string[]; similars?: string[] };
 
 export default function ChemblPage() {
+  const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const { datasets, fetchFiles } = useFiles<Record<string, ChemblData>>('/api/files/list/ChEMBL');
   const [openTargets, setOpenTargets] = useState<Record<string, boolean>>({});
@@ -34,27 +36,49 @@ export default function ChemblPage() {
       if (!response.ok || !data.success) {
         const errorMsg = data.message || '';
         if (errorMsg.includes('spore') || errorMsg.includes('500') || errorMsg.includes('ebi.ac.uk')) {
-          alert(
-            "⚠️ ChEMBL Server Error (EBI)\n\n" +
-            "The official ChEMBL API servers (EMBL-EBI) are currently experiencing technical difficulties or a temporary outage (HTTP 500).\n\n" +
-            "Please try again in a few minutes. If you already have molecules downloaded on other targets, you can still perform Redocking and ADMET analysis on them."
+          showToast(
+            'warning',
+            'ChEMBL servers temporarily unavailable',
+            'The official ChEMBL API (EMBL-EBI) is experiencing a temporary issue. Please try again in a few minutes.'
           );
         } else if (errorMsg.includes('not found in ChEMBL with the provided filters')) {
-          alert(
-            "⚠️ No Results Found\n\n" +
-            "No molecules were found in ChEMBL for the specified target using your current filters.\n\n" +
-            "This usually happens when your search parameters are too restrictive. Try relaxing your filters, such as:\n" +
-            "- Increasing the Max Value (nM)\n" +
-            "- Checking different Standard Types (e.g., IC50, Ki, Inhibition)\n" +
-            "- Increasing the Max Weight\n" +
-            "- Decreasing the Similarity (%)"
+          showToast(
+            'warning',
+            'No compounds found',
+            'No molecules matched your search. Try increasing the Max Value (nM), selecting different activity types, or reducing the similarity threshold.'
           );
         } else {
-          alert(errorMsg || 'Error processing ChEMBL search.');
+          showToast('error', 'Search failed', 'An error occurred while searching ChEMBL. Please review your parameters and try again.');
+        }
+      } else if (data.data?.task_id) {
+        const taskId = data.data.task_id;
+        let isDone = false;
+        let attempts = 0;
+        const maxAttempts = 720; // 30 minutes
+        while (!isDone && attempts < maxAttempts) {
+          attempts++;
+          await new Promise(r => setTimeout(r, 2500));
+          try {
+            const statusRes = await fetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(taskId)}`);
+            if (!statusRes.ok) continue;
+            const statusData = await statusRes.json();
+            if (statusData.status === 'completed') {
+              isDone = true;
+              showToast('success', 'Download completed!', 'ChEMBL compounds have been saved successfully.');
+            } else if (statusData.status === 'error') {
+              isDone = true;
+              showToast('error', 'Processing failed', 'An error occurred while processing the ChEMBL data. Please try again.');
+            }
+          } catch {
+            // Transient network error during polling — keep trying
+          }
+        }
+        if (!isDone) {
+          showToast('warning', 'Still processing', 'The download is taking longer than expected. The data will appear once the process completes.');
         }
       }
-    } catch (error) {
-      alert('Failed to communicate with the server. Please check your connection.');
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server. Make sure the application is running and try again.');
     } finally {
       setIsLoading(false);
       fetchFiles();
@@ -65,34 +89,73 @@ export default function ChemblPage() {
   const toggleSubdir = (t: string, s: string) => setOpenSubdirs(p => ({ ...p, [`${t}-${s}`]: !p[`${t}-${s}`] }));
 
   const handleDeleteTarget = async (target: string) => {
-    if (!confirm(`Delete all data for ${target}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/target/${target}`, { method: 'DELETE' });
-    fetchFiles();
+    if (!confirm(`Delete all data for "${target}"? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/target/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('error', 'Could not delete', 'An error occurred while removing this target. Please try again.');
+        return;
+      }
+      showToast('success', 'Target deleted', `All data for "${target}" has been removed.`);
+      fetchFiles();
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the target.');
+    }
   };
 
   const handleDownloadTarget = (target: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/ChEMBL/zip/${target}`, '_blank');
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/ChEMBL/zip/${encodeURIComponent(target)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
 
   const handleDeleteSubdir = async (subdir: string, target: string) => {
-    if (!confirm(`Delete folder ${subdir} from ${target}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/category/${subdir}/${target}`, { method: 'DELETE' });
-    fetchFiles();
+    if (!confirm(`Delete folder "${subdir}" from "${target}"?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/category/${subdir}/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('error', 'Could not delete folder', 'An error occurred while removing this folder. Please try again.');
+        return;
+      }
+      showToast('success', 'Folder deleted', `"${subdir}" has been removed from "${target}".`);
+      fetchFiles();
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the folder.');
+    }
   };
 
   const handleDownloadSubdir = (subdir: string, target: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/ChEMBL/category/zip/${subdir}/${target}`, '_blank');
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/ChEMBL/category/zip/${subdir}/${encodeURIComponent(target)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
 
   const handleDeleteFile = async (subdir: string, target: string, file: string) => {
-    if (!confirm(`Delete file ${file}?`)) return;
-    await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/file/${subdir}/${target}/${file}`, { method: 'DELETE' });
-    fetchFiles();
+    if (!confirm(`Delete file "${file}"?`)) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/file/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('error', 'Could not delete file', 'An error occurred while removing this file. Please try again.');
+        return;
+      }
+      showToast('success', 'File deleted', `"${file}" has been removed.`);
+      fetchFiles();
+    } catch {
+      showToast('error', 'Connection error', 'Could not reach the server to delete the file.');
+    }
   };
 
   // Initiates download of a single file.
   const handleDownloadFile = (subdir: string, target: string, file: string) => {
-    window.open(`${API_BASE_URL}/api/files/download/ChEMBL/${subdir}/${target}/${file}`, '_blank');
+    try {
+      window.open(`${API_BASE_URL}/api/files/download/ChEMBL/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, '_blank');
+    } catch {
+      showToast('error', 'Download failed', 'Could not start the download. Please try again.');
+    }
   };
 
   // Fetches the 2D SVG rendering from backend and initializes the 3D viewer modal
@@ -100,6 +163,10 @@ export default function ChemblPage() {
     setIsLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/files/molecule/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+      if (!res.ok) {
+        showToast('error', 'Could not load molecule', 'The molecule visualization could not be loaded. Please try again.');
+        return;
+      }
       const data = await res.json();
       if (data.status === 'success') {
         setViewer({ isOpen: true, file, imgBase64: data.image_base64, molBlock: data.mol_block, mode: 'both' });
@@ -115,12 +182,13 @@ export default function ChemblPage() {
           }
         }, 200);
       } else {
-        alert("Error generating visualization: " + data.message);
+        showToast('error', 'Could not render molecule', 'The 2D/3D structure could not be generated for this compound.');
       }
-    } catch (e) {
-      alert("Connection error while generating molecule.");
+    } catch {
+      showToast('error', 'Connection error', 'Unable to load the molecule viewer. Please check your connection.');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -131,10 +199,10 @@ export default function ChemblPage() {
           <div className="form-container">
             <form id="chembl-form" onSubmit={handleSearch}>
               <div className="fieldset-row">
-                <fieldset><legend>Target Search</legend><div className="form-group"><label>Target Name</label><input type="text" name="target_name" placeholder="e.g., Acetylcholinesterase" required /></div></fieldset>
-                <fieldset><legend>Target Parameters</legend><div className="form-group"><label>Organism</label><input type="text" name="organism" defaultValue="Homo sapiens" /></div></fieldset>
+                <fieldset><legend>Target Search</legend><div className="form-group"><label>Target Name <InfoTooltip content="Target protein or molecular entity name to search in the ChEMBL database." /></label><input type="text" name="target_name" placeholder="e.g., Acetylcholinesterase" required /></div></fieldset>
+                <fieldset><legend>Target Parameters</legend><div className="form-group"><label>Organism <InfoTooltip content="Biological species of the target (e.g., Homo sapiens for human targets)." /></label><input type="text" name="organism" defaultValue="Homo sapiens" /></div></fieldset>
               </div>
-              <fieldset><legend>Bioactivity</legend><div className="form-group"><label>Standard Type</label>
+              <fieldset><legend>Bioactivity</legend><div className="form-group"><label>Standard Type <InfoTooltip content="Select bioactivity metric types to filter compounds (e.g., Ki or IC50 measurements)." /></label>
 
                 <div className="checkbox-group">
                   <label><input type="checkbox" name="standard_type__in" value="IC50" />IC50</label>
@@ -152,11 +220,11 @@ export default function ChemblPage() {
                   <label><input type="checkbox" name="standard_type__in" value="Ratio IC50" />Ratio IC50</label>
                 </div>
 
-              </div><div className="form-group"><label>Max Value (nM)</label><input type="number" name="max_value_ref" defaultValue="100" /></div>
+              </div><div className="form-group"><label>Max Value (nM) <InfoTooltip content="Maximum bioactivity cutoff in nanomolar (nM); lower values select more potent compounds." /></label><input type="number" name="max_value_ref" defaultValue="100" /></div>
               </fieldset>
               <div className="fieldset-row">
-                <fieldset><legend>Molecules</legend><div className="form-group"><label>Natural Product</label><input type="checkbox" name="natural_product_molecules" /></div></fieldset>
-                <fieldset><legend>Similar Mols</legend><div className="form-group"><label>Similarity (%)</label><input type="number" name="similarity" defaultValue="80" /><label>Max Weight</label><input type="number" name="molecule_weight" defaultValue="500" /></div></fieldset>
+                <fieldset><legend>Molecules</legend><div className="form-group"><label>Natural Product <InfoTooltip content="Filter to include or prioritize natural product molecules." /></label><input type="checkbox" name="natural_product_molecules" /></div></fieldset>
+                <fieldset><legend>Similar Mols</legend><div className="form-group"><label>Similarity (%) <InfoTooltip content="Tanimoto similarity percentage threshold for finding structurally similar compounds." /></label><input type="number" name="similarity" defaultValue="80" /><label>Max Weight <InfoTooltip content="Maximum molecular weight cutoff (in g/mol or Da) for compound filtering." /></label><input type="number" name="molecule_weight" defaultValue="500" /></div></fieldset>
               </div>
               <button type="submit">Download</button>
             </form>

@@ -6,6 +6,9 @@ import dynamic from 'next/dynamic';
 import Link from "next/link";
 import { API_BASE_URL } from "../../config";
 import LoadingOverlay from "../../components/LoadingOverlay";
+import FolderPickerModal from "../../components/FolderPickerModal";
+import { useToast } from "../../components/ToastProvider";
+import InfoTooltip from "../../components/InfoTooltip";
 
 // Import dynamically to avoid SSR error ("window is not defined")
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
@@ -109,7 +112,7 @@ function SimilarityTab() {
   useEffect(() => {
     async function fetchTargets() {
       try {
-        const res = await fetch(`${API_BASE_URL}/chembl_files`);
+        const res = await fetch(`${API_BASE_URL}/api/chembl_files`);
         if (res.ok) {
           const data = await res.json();
           const targetNames = Object.keys(data);
@@ -268,6 +271,10 @@ function SimilarityTab() {
 
   return (
     <div style={{ marginTop: '20px' }}>
+      <LoadingOverlay
+        isLoading={isProcessing}
+        message={`Processing similarity network graphs for ${selectedTarget}... Calculating Tanimoto similarities and generating plots. This may take several minutes.`}
+      />
         {targets.length === 0 ? (
           <div style={{ 
             backgroundColor: '#fff3cd', 
@@ -294,13 +301,13 @@ function SimilarityTab() {
           <>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '20px', flexWrap: 'wrap' }}>
               <div>
-                <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Select Target:</label>
+                <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Select Target: <InfoTooltip content="Choose a target folder containing downloaded molecules to analyze structural similarity." /></label>
                 <select value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)} style={{ padding: '8px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '1rem' }}>
                   {targets.map(t => ( <option key={t} value={t}>{t}</option> ))}
                 </select>
               </div>
               <div>
-                <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Dataset Type:</label>
+                <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Dataset Type: <InfoTooltip content="Select the molecular dataset source (e.g., ChEMBL or ZINC) for similarity calculation." /></label>
                 <select value={datasetType} onChange={(e) => setDatasetType(e.target.value as 'MOLS' | 'SIMS')} style={{ padding: '8px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '1rem' }}>
                   <option value="MOLS">Molecular Data (MOLS)</option>
                   <option value="SIMS">Similar Molecules (SIMS)</option>
@@ -327,7 +334,25 @@ function SimilarityTab() {
             </div>
 
             {loading && <p style={{ textAlign: 'center', margin: '40px 0', fontSize: '1.2rem', color: 'var(--primary-color)' }}>Loading similarity graph...</p>}
-            {errorMsg && <div className="error" style={{ maxWidth: "100%" }}>{errorMsg}</div>}
+            {errorMsg && (
+              <div style={{
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffc107',
+                borderRadius: '8px',
+                padding: '16px 20px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                color: '#856404'
+              }}>
+                <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.2rem', flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '4px' }}>Could not load graph data</strong>
+                  <span style={{ fontSize: '0.9rem' }}>The similarity network could not be loaded. Please check your connection and try again, or process the graphs if they are missing.</span>
+                </div>
+              </div>
+            )}
 
             {needsProcessing && !loading && (
               <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f8f9fa', borderRadius: '10px', border: '1px dashed #ccc', marginBottom: '30px' }}>
@@ -452,9 +477,11 @@ interface RedockingTabProps {
   executionLogs: string;
   setExecutionLogs: (logs: string) => void;
   isTaskRunning: boolean;
+  onStatusUpdate?: (status: any) => void;
 }
 
-function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: RedockingTabProps) {
+function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning, onStatusUpdate }: RedockingTabProps) {
+  const { showToast } = useToast();
   const [pdbTargets, setPdbTargets] = useState<string[]>([]);
   const [availableLigands, setAvailableLigands] = useState<any[]>([]);
   const [selectedLigand, setSelectedLigand] = useState<any>(null);
@@ -466,7 +493,53 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
   const [selectedTarget, setSelectedTarget] = useState("");
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<any>(null);
-  
+
+  // Prepared receptor path (required when prepareComplex is false)
+  const [preparedReceptorPath, setPreparedReceptorPath] = useState('');
+  const [isPrepPickerOpen, setIsPrepPickerOpen] = useState(false);
+  const [prepValidation, setPrepValidation] = useState<{ valid: boolean; message: string; warning?: boolean } | null>(null);
+
+  const validateFolder = async (path: string, type: 'prepared_receptor' | 'molecules', setter: (res: any) => void) => {
+    if (!path) {
+      setter(null);
+      return;
+    }
+    try {
+      const res = await fetch('/api/filesystem/validate-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, folder_type: type })
+      });
+      const data = await res.json();
+      setter(data);
+    } catch (err) {
+      setter({ valid: false, message: 'Could not validate folder path.' });
+    }
+  };
+
+  const renderValidationBadge = (validation: { valid: boolean; message: string; warning?: boolean } | null) => {
+    if (!validation) return null;
+    const isSuccess = validation.valid && !validation.warning;
+    const isWarning = validation.warning;
+    return (
+      <div style={{
+        marginTop: '8px',
+        padding: '8px 12px',
+        borderRadius: '6px',
+        fontSize: '0.8rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        backgroundColor: isSuccess ? '#e8f5e9' : isWarning ? '#fff8e1' : '#ffebee',
+        color: isSuccess ? '#2e7d32' : isWarning ? '#f57f17' : '#c62828',
+        border: `1px solid ${isSuccess ? '#c8e6c9' : isWarning ? '#ffecb3' : '#ffcdd2'}`
+      }}>
+        <i className={isSuccess ? "fas fa-check-circle" : "fas fa-exclamation-triangle"} />
+        <span>{validation.message}</span>
+      </div>
+    );
+  };
+
   // Results states
   const [availableResults, setAvailableResults] = useState<string[]>([]);
   const [activeResultTarget, setActiveResultTarget] = useState<string | null>(null);
@@ -534,17 +607,21 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
           if (res.ok) {
             const data = await res.json();
             setTaskStatus(data);
+            if (onStatusUpdate) onStatusUpdate(data);
             setExecutionLogs(data.logs || "");
             
-            if (data.status === 'completed' || data.status === 'error') {
+            if (data.status === 'completed' || data.status === 'error' || data.status === 'cancelled' || data.status === 'not_found') {
               setRunningTaskId(null);
               onTaskEnd();
+              if (data.status === 'not_found') {
+                showToast('warning', 'Task Stopped or Interrupted', 'The background server restarted or the task is no longer active.');
+              }
               // Refresh available results
               const resultsRes = await fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`);
               if (resultsRes.ok) {
                 const results = await resultsRes.json();
                 setAvailableResults(results);
-                if (data.status === 'completed') setActiveResultTarget(selectedTarget);
+                if (data.status === 'completed' || data.status === 'cancelled') setActiveResultTarget(selectedTarget);
               }
             }
           }
@@ -561,10 +638,18 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
     try {
       setExecutionLogs("");
       setTaskStatus({ status: 'starting', message: 'Initializing task...' });
+      const body: Record<string, any> = {
+        target: selectedTarget,
+        charge_type: chargeType,
+        prepare_complex: prepareComplex,
+      };
+      if (!prepareComplex && preparedReceptorPath) {
+        body.prepared_receptor_path = preparedReceptorPath;
+      }
       const res = await fetch(`${API_BASE_URL}/api/redocking/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: selectedTarget, charge_type: chargeType, prepare_complex: prepareComplex })
+        body: JSON.stringify(body)
       });
       
       if (res.ok) {
@@ -623,7 +708,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
         
         <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ flex: '1', minWidth: '200px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Target Folder:</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Target Folder: <InfoTooltip content="Choose the PDB target directory containing structure files for redocking validation." /></label>
             <select 
               value={selectedTarget} 
               onChange={(e) => setSelectedTarget(e.target.value)} 
@@ -635,7 +720,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
           </div>
 
           <div style={{ flex: '1', minWidth: '150px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type:</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type: <InfoTooltip content="Select the partial charge calculation method (AM1-BCC recommended for accurate electrostatics)." /></label>
             <select 
               value={chargeType} 
               onChange={(e) => setChargeType(e.target.value)}
@@ -656,12 +741,62 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
               disabled={isTaskRunning}
               style={{ width: '18px', height: '18px', marginRight: '10px' }}
             />
-            <label htmlFor="prepComp" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex</label>
+            <label htmlFor="prepComp" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex <InfoTooltip content="Check to automatically generate prepared PDBQT files with added hydrogens and charges." /></label>
           </div>
+
+          {/* Prepared receptor path — only required when prepareComplex is false */}
+          {!prepareComplex && (
+            <div style={{ flex: '0 0 100%', marginTop: '8px' }}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '6px', color: '#c0392b' }}>
+                <i className="fas fa-exclamation-circle" style={{ marginRight: '6px' }} />
+                Prepared Receptor Path (required): <InfoTooltip content="Select or provide the path to a custom prepared receptor PDBQT file if automatic preparation is disabled." />
+              </label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  readOnly
+                  value={preparedReceptorPath}
+                  placeholder="Click Browse to select..."
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: '6px',
+                    border: `1px solid ${preparedReceptorPath ? '#ccc' : '#e74c3c'}`,
+                    backgroundColor: '#fafafa', fontSize: '0.85rem', fontFamily: 'monospace',
+                    color: preparedReceptorPath ? '#333' : '#aaa',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsPrepPickerOpen(true)}
+                  disabled={isTaskRunning}
+                  style={{
+                    padding: '8px 14px', backgroundColor: 'var(--primary-color)', color: '#fff',
+                    border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold',
+                    whiteSpace: 'nowrap', fontSize: '0.85rem',
+                  }}
+                >
+                  <i className="fas fa-folder-open" style={{ marginRight: '6px' }} />Browse...
+                </button>
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#888' }}>
+                Select the folder that contains the already-prepared receptor files (e.g. <code>datasets/PDB/{'{target}'}/Prepared</code>).
+              </p>
+              {renderValidationBadge(prepValidation)}
+            </div>
+          )}
+
+          {/* FolderPickerModal for prepared receptor */}
+          <FolderPickerModal
+            isOpen={isPrepPickerOpen}
+            onClose={() => setIsPrepPickerOpen(false)}
+            onSelect={(path) => {
+              setPreparedReceptorPath(path);
+              validateFolder(path, 'prepared_receptor', setPrepValidation);
+            }}
+          />
 
           <button 
             onClick={runRedocking} 
-            disabled={isTaskRunning || !selectedTarget}
+            disabled={isTaskRunning || !selectedTarget || (!prepareComplex && !preparedReceptorPath)}
             style={{ 
               padding: '12px 30px', 
               backgroundColor: 'var(--primary-color)', 
@@ -670,7 +805,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
               borderRadius: '8px', 
               fontWeight: 'bold',
               cursor: 'pointer',
-              opacity: (isTaskRunning || !selectedTarget) ? 0.6 : 1,
+              opacity: (isTaskRunning || !selectedTarget || (!prepareComplex && !preparedReceptorPath)) ? 0.6 : 1,
               boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
             }}
           >
@@ -802,6 +937,7 @@ interface AdmetTabProps {
   executionLogs: string;
   setExecutionLogs: (logs: string) => void;
   isTaskRunning: boolean;
+  onStatusUpdate?: (status: any) => void;
 }
 
 // Group type returned by the API
@@ -812,7 +948,8 @@ interface AdmetGroup {
   summary: { total: number; bbb_plus: number; bbb_minus: number; hia_plus: number; pgp_plus: number };
 }
 
-function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: AdmetTabProps) {
+function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning, onStatusUpdate }: AdmetTabProps) {
+  const { showToast } = useToast();
   const [availableTargets, setAvailableTargets] = useState<string[]>([]);
   const [selectedTarget, setSelectedTarget] = useState("");
 
@@ -875,12 +1012,16 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
           if (res.ok) {
             const data = await res.json();
             setTaskStatus(data);
+            if (onStatusUpdate) onStatusUpdate(data);
             setExecutionLogs(data.logs || "");
-            if (data.status === 'completed' || data.status === 'error') {
+            if (data.status === 'completed' || data.status === 'error' || data.status === 'cancelled' || data.status === 'not_found') {
               setRunningTaskId(null);
               setIsRunning(false);
               onTaskEnd();
-              if (data.status === 'completed') loadResultsForTarget(selectedTarget);
+              if (data.status === 'not_found') {
+                showToast('warning', 'Task Stopped or Interrupted', 'The background server restarted or the task is no longer active.');
+              }
+              if (data.status === 'completed' || data.status === 'cancelled') loadResultsForTarget(selectedTarget);
             }
           }
         } catch (err) {
@@ -1068,7 +1209,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
         <h3 style={{ color: 'var(--primary-color)', marginBottom: '20px' }}>ADMET Analysis Parameters</h3>
         <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ flex: '1', minWidth: '220px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>ChEMBL Target:</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>ChEMBL Target: <InfoTooltip content="Select the ChEMBL target directory containing compound structures for ADMET property prediction." /></label>
             <select
               value={selectedTarget}
               onChange={(e) => { setSelectedTarget(e.target.value); setGroups([]); setPlots([]); setIsTableExpanded(false); setIsEggsExpanded(false); }}
@@ -1561,15 +1702,27 @@ interface DockingTabProps {
   executionLogs: string;
   setExecutionLogs: (logs: string) => void;
   isTaskRunning: boolean;
+  onStatusUpdate?: (status: any) => void;
+  onNavigateTab?: (tab: "similarity" | "docking" | "redocking" | "admet") => void;
 }
 
-function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning }: DockingTabProps) {
+function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isTaskRunning, onStatusUpdate, onNavigateTab }: DockingTabProps) {
+  const { showToast } = useToast();
   const [pdbTargets, setPdbTargets] = useState<string[]>([]);
   const [chemblTargets, setChemblTargets] = useState<string[]>([]);
   const [zincTargets, setZincTargets] = useState<string[]>([]);
   const [targetsWithRedocking, setTargetsWithRedocking] = useState<string[]>([]);
   const [targetsWithAdmet, setTargetsWithAdmet] = useState<string[]>([]);
   const [selectedTarget, setSelectedTarget] = useState("");
+
+  // Helper for flexible target matching (ignores case, spaces, and hyphens)
+  const hasTargetMatch = (list: string[], target: string) => {
+    if (!target || !list) return false;
+    const norm = (s: string) => s.toLowerCase().replace(/[\s-_]/g, '');
+    const targetNorm = norm(target);
+    return list.some(item => norm(item) === targetNorm);
+  };
+
   const [availableLigands, setAvailableLigands] = useState<any[]>([]);
   const [selectedLigand, setSelectedLigand] = useState<any>(null); // Should hold the array [Residue, Name, Number, Chain]
   const [library, setLibrary] = useState("chembl");
@@ -1591,6 +1744,57 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
   const [radius, setRadius] = useState(1.4);
   const [exhaustiveness, setExhaustiveness] = useState(20);
 
+  // Folder pickers
+  const DEFAULT_MOLS_PATH = 'datasets/ChEMBL/DrugBank/ADMET';
+  const [baseSelectedMols, setBaseSelectedMols] = useState(DEFAULT_MOLS_PATH);
+  const [isMolsPickerOpen, setIsMolsPickerOpen] = useState(false);
+  const [preparedReceptorPath, setPreparedReceptorPath] = useState('');
+  const [isDockPrepPickerOpen, setIsDockPrepPickerOpen] = useState(false);
+  const [molsValidation, setMolsValidation] = useState<{ valid: boolean; message: string; warning?: boolean } | null>(null);
+  const [prepValidation, setPrepValidation] = useState<{ valid: boolean; message: string; warning?: boolean } | null>(null);
+
+  const validateFolder = async (path: string, type: 'prepared_receptor' | 'molecules', setter: (res: any) => void) => {
+    if (!path) {
+      setter(null);
+      return;
+    }
+    try {
+      const res = await fetch('/api/filesystem/validate-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, folder_type: type })
+      });
+      const data = await res.json();
+      setter(data);
+    } catch (err) {
+      setter({ valid: false, message: 'Could not validate folder path.' });
+    }
+  };
+
+  const renderValidationBadge = (validation: { valid: boolean; message: string; warning?: boolean } | null) => {
+    if (!validation) return null;
+    const isSuccess = validation.valid && !validation.warning;
+    const isWarning = validation.warning;
+    return (
+      <div style={{
+        marginTop: '8px',
+        padding: '8px 12px',
+        borderRadius: '6px',
+        fontSize: '0.8rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        backgroundColor: isSuccess ? '#e8f5e9' : isWarning ? '#fff8e1' : '#ffebee',
+        color: isSuccess ? '#2e7d32' : isWarning ? '#f57f17' : '#c62828',
+        border: `1px solid ${isSuccess ? '#c8e6c9' : isWarning ? '#ffecb3' : '#ffcdd2'}`
+      }}>
+        <i className={isSuccess ? "fas fa-check-circle" : "fas fa-exclamation-triangle"} />
+        <span>{validation.message}</span>
+      </div>
+    );
+  };
+
+
   useEffect(() => {
     // fetch targets from /api/redocking/targets and others
     const fetchTargets = async () => {
@@ -1598,8 +1802,8 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         const [targetsRes, resultsRes, chemblRes, zincRes, redockRes, admetRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
           fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/chembl_files?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/zinc_files?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/api/chembl_files?t=${Date.now()}`),
+          fetch(`${API_BASE_URL}/api/zinc_files?t=${Date.now()}`),
           fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`),
           fetch(`${API_BASE_URL}/api/admet/results?t=${Date.now()}`)
         ]);
@@ -1618,7 +1822,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         if (resultsRes.ok) {
           const results = await resultsRes.json();
           setAvailableResults(results);
-          if (results.length > 0 && !activeResultTarget) {
+          if (results.length > 0 && (!activeResultTarget || !results.includes(activeResultTarget))) {
             setActiveResultTarget(results[0]);
           }
         }
@@ -1647,7 +1851,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
 
   useEffect(() => {
     if (selectedTarget) {
-      if (targetsWithRedocking.includes(selectedTarget)) {
+      if (hasTargetMatch(targetsWithRedocking, selectedTarget)) {
         // Fetch ligands from redocking results
         const fetchLigands = async () => {
           try {
@@ -1729,16 +1933,31 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           if (res.ok) {
             const data = await res.json();
             setTaskStatus(data);
+            if (onStatusUpdate) onStatusUpdate(data);
             setExecutionLogs(data.logs || "");
             
-            if (data.status === 'completed' || data.status === 'error') {
+            if (data.status === 'completed' || data.status === 'error' || data.status === 'cancelled' || data.status === 'not_found') {
               setRunningTaskId(null);
               onTaskEnd();
+              if (data.status === 'not_found') {
+                showToast('warning', 'Task Stopped or Interrupted', 'The background server restarted or the task is no longer active.');
+              }
               const resultsRes = await fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`);
               if (resultsRes.ok) {
                 const results = await resultsRes.json();
                 setAvailableResults(results);
-                if (data.status === 'completed') setActiveResultTarget(selectedTarget);
+                if (data.status === 'completed' || data.status === 'cancelled') {
+                  // Only activate the just-finished target if it actually has results.
+                  // If partial save generated a CSV, it will be in the list; otherwise
+                  // fall back to the first available result so the table stays consistent.
+                  if (results.includes(selectedTarget)) {
+                    setActiveResultTarget(selectedTarget);
+                  } else if (results.length > 0) {
+                    setActiveResultTarget(results[0]);
+                  } else {
+                    setActiveResultTarget(null);
+                  }
+                }
               }
             }
           }
@@ -1755,18 +1974,23 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
     try {
       setExecutionLogs("");
       setTaskStatus({ status: 'starting', message: 'Initializing task...' });
+      const body: Record<string, any> = {
+        target: selectedTarget,
+        pdb_code: selectedLigand,
+        library,
+        charge_type: chargeType,
+        prepare_complex: prepareComplex,
+        radius,
+        exhaustiveness,
+        base_selected_mols: baseSelectedMols || undefined,
+      };
+      if (!prepareComplex && preparedReceptorPath) {
+        body.prepared_receptor_path = preparedReceptorPath;
+      }
       const res = await fetch(`${API_BASE_URL}/api/docking/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          target: selectedTarget, 
-          pdb_code: selectedLigand,
-          library,
-          charge_type: chargeType, 
-          prepare_complex: prepareComplex,
-          radius,
-          exhaustiveness
-        })
+        body: JSON.stringify(body)
       });
       
       if (res.ok) {
@@ -1781,6 +2005,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
       setTaskStatus({ status: 'error', message: "Failed to start docking task." });
     }
   };
+
 
   const downloadCsv = () => {
     if (activeResultTarget) {
@@ -1814,7 +2039,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         </div>
       )}
 
-      {!targetsWithRedocking.includes(selectedTarget) && selectedTarget && (
+      {!hasTargetMatch(targetsWithRedocking, selectedTarget) && selectedTarget && (
         <div style={{ 
           backgroundColor: '#fff3cd', 
           padding: '20px', 
@@ -1829,12 +2054,32 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
           <div>
             <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! Redocking Required.</strong>
-            <span>You must run the redocking simulation first for target <b>{selectedTarget}</b> on the Redocking tab.</span>
+            <span>
+              You must run the redocking simulation first for target <b>{selectedTarget}</b> on the{' '}
+              <button
+                type="button"
+                onClick={() => onNavigateTab?.('redocking')}
+                style={{
+                  fontWeight: 'bold',
+                  textDecoration: 'underline',
+                  color: '#856404',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  fontSize: 'inherit',
+                  fontFamily: 'inherit'
+                }}
+              >
+                Redocking tab
+              </button>
+              .
+            </span>
           </div>
         </div>
       )}
 
-      {!targetsWithAdmet.includes(selectedTarget) && selectedTarget && (
+      {!hasTargetMatch(targetsWithAdmet, selectedTarget) && selectedTarget && (
         <div style={{ 
           backgroundColor: '#fff3cd', 
           padding: '20px', 
@@ -1849,12 +2094,32 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.5rem' }}></i>
           <div>
             <strong style={{ display: 'block', fontSize: '1.1rem', marginBottom: '5px' }}>Attention! ADMET Filter Required.</strong>
-            <span>You must run the ADMET analysis first for target <b>{selectedTarget}</b> to filter ligands. Do this on the ADMET Filter tab before you can perform a docking simulation.</span>
+            <span>
+              You must run the ADMET analysis first for target <b>{selectedTarget}</b> to filter ligands. Do this on the{' '}
+              <button
+                type="button"
+                onClick={() => onNavigateTab?.('admet')}
+                style={{
+                  fontWeight: 'bold',
+                  textDecoration: 'underline',
+                  color: '#856404',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  fontSize: 'inherit',
+                  fontFamily: 'inherit'
+                }}
+              >
+                ADMET Filter tab
+              </button>{' '}
+              before you can perform a docking simulation.
+            </span>
           </div>
         </div>
       )}
 
-      {selectedTarget && library === 'chembl' && !chemblTargets.includes(selectedTarget) && (
+      {selectedTarget && library === 'chembl' && !hasTargetMatch(chemblTargets, selectedTarget) && (
         <div style={{ 
           backgroundColor: '#fff3cd', 
           padding: '20px', 
@@ -1878,7 +2143,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         </div>
       )}
 
-      {selectedTarget && library === 'zinc' && !zincTargets.includes(selectedTarget) && (
+      {selectedTarget && library === 'zinc' && !hasTargetMatch(zincTargets, selectedTarget) && (
         <div style={{ 
           backgroundColor: '#fff3cd', 
           padding: '20px', 
@@ -1913,7 +2178,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Target:</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Target: <InfoTooltip content="Select the target protein structure folder for molecular docking screen." /></label>
             <select 
               value={selectedTarget} 
               onChange={(e) => setSelectedTarget(e.target.value)} 
@@ -1925,7 +2190,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           </div>
 
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Binding Site (Ligand):</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Binding Site (Ligand): <InfoTooltip content="Choose a reference co-crystallized ligand to define the docking grid box around its active site." /></label>
             <select 
               value={selectedLigand ? JSON.stringify(selectedLigand) : ""} 
               onChange={(e) => setSelectedLigand(JSON.parse(e.target.value))} 
@@ -1940,7 +2205,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
           </div>
 
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Library:</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Select Library: <InfoTooltip content="Choose the compound library (ChEMBL or ZINC) to dock against the receptor." /></label>
             <select 
               value={library} 
               onChange={(e) => setLibrary(e.target.value)} 
@@ -1955,7 +2220,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px', padding: '15px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type:</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px' }}>Charge Type: <InfoTooltip content="Select the partial charge calculation model for ligand and receptor preparation." /></label>
             <select 
               value={chargeType} 
               onChange={(e) => setChargeType(e.target.value)}
@@ -1976,13 +2241,118 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
               disabled={isTaskRunning}
               style={{ width: '18px', height: '18px', marginRight: '10px' }}
             />
-            <label htmlFor="prepCompDock" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex (Missing Hydrogens, Charges)</label>
+            <label htmlFor="prepCompDock" style={{ fontWeight: 'bold', cursor: 'pointer' }}>Prepare Complex (Missing Hydrogens, Charges) <InfoTooltip content="Check to automatically prepare receptor and ligand structures with charges and hydrogens." /></label>
           </div>
         </div>
 
+        {/* Molecules folder picker */}
+        <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f4ff', borderRadius: '8px', border: '1px solid #d0d9ff' }}>
+          <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#333' }}>
+            <i className="fas fa-folder" style={{ color: '#5c6bc0', marginRight: '8px' }} />
+            Molecules Folder (base_selected_mols): <InfoTooltip content="Select the folder containing filtered or selected compound CSV files for docking." />
+          </label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="text"
+              readOnly
+              value={baseSelectedMols}
+              placeholder="Click Browse to select..."
+              style={{
+                flex: 1, padding: '8px 10px', borderRadius: '6px',
+                border: '1px solid #b0bfff', backgroundColor: '#fff',
+                fontSize: '0.85rem', fontFamily: 'monospace', color: '#333',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setIsMolsPickerOpen(true)}
+              disabled={isTaskRunning}
+              style={{
+                padding: '8px 14px', backgroundColor: '#5c6bc0', color: '#fff',
+                border: 'none', borderRadius: '6px', cursor: 'pointer',
+                fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.85rem',
+              }}
+            >
+              <i className="fas fa-folder-open" style={{ marginRight: '6px' }} />Browse...
+            </button>
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#666' }}>
+            Folder containing the filtered molecule CSV files (output of the ADMET step).
+          </p>
+          {renderValidationBadge(molsValidation)}
+        </div>
+
+        {/* Prepared receptor path — only required when prepareComplex is false */}
+        {!prepareComplex && (
+          <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff5f5', borderRadius: '8px', border: '1px solid #fcc' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#c0392b' }}>
+              <i className="fas fa-exclamation-circle" style={{ marginRight: '6px' }} />
+              Prepared Receptor Path (required when Prepare Complex is off): <InfoTooltip content="Select the path to a pre-computed receptor PDBQT file." />
+            </label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="text"
+                readOnly
+                value={preparedReceptorPath}
+                placeholder="Click Browse to select..."
+                style={{
+                  flex: 1, padding: '8px 10px', borderRadius: '6px',
+                  border: `1px solid ${preparedReceptorPath ? '#ccc' : '#e74c3c'}`,
+                  backgroundColor: '#fafafa', fontSize: '0.85rem', fontFamily: 'monospace',
+                  color: preparedReceptorPath ? '#333' : '#aaa',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setIsDockPrepPickerOpen(true)}
+                disabled={isTaskRunning}
+                style={{
+                  padding: '8px 14px', backgroundColor: '#c0392b', color: '#fff',
+                  border: 'none', borderRadius: '6px', cursor: 'pointer',
+                  fontWeight: 'bold', whiteSpace: 'nowrap', fontSize: '0.85rem',
+                }}
+              >
+                <i className="fas fa-folder-open" style={{ marginRight: '6px' }} />Browse...
+              </button>
+            </div>
+            <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#888' }}>
+              Select the folder containing the already-prepared receptor files (e.g. <code>datasets/PDB/{'<target>'}/Prepared</code>).
+            </p>
+            {renderValidationBadge(prepValidation)}
+          </div>
+        )}
+
+        {/* Folder picker modals */}
+        <FolderPickerModal
+          isOpen={isMolsPickerOpen}
+          onClose={() => setIsMolsPickerOpen(false)}
+          onSelect={(path) => {
+            setBaseSelectedMols(path);
+            validateFolder(path, 'molecules', setMolsValidation);
+          }}
+        />
+        <FolderPickerModal
+          isOpen={isDockPrepPickerOpen}
+          onClose={() => setIsDockPrepPickerOpen(false)}
+          onSelect={(path) => {
+            setPreparedReceptorPath(path);
+            validateFolder(path, 'prepared_receptor', setPrepValidation);
+          }}
+        />
+
+        {/* Run button — also blocked if prepare_complex=false and no receptor path */}
         <button 
           onClick={runDocking} 
-          disabled={isTaskRunning || !selectedTarget || !selectedLigand || !targetsWithRedocking.includes(selectedTarget) || !targetsWithAdmet.includes(selectedTarget) || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))}
+          disabled={
+            isTaskRunning ||
+            !selectedTarget ||
+            !selectedLigand ||
+            !hasTargetMatch(targetsWithRedocking, selectedTarget) ||
+            !hasTargetMatch(targetsWithAdmet, selectedTarget) ||
+            (library === 'chembl' && !hasTargetMatch(chemblTargets, selectedTarget)) ||
+            (library === 'zinc' && !hasTargetMatch(zincTargets, selectedTarget)) ||
+            (!prepareComplex && !preparedReceptorPath)
+          }
           style={{ 
             padding: '12px 30px', 
             backgroundColor: 'var(--primary-color)', 
@@ -1991,13 +2361,23 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
             borderRadius: '8px', 
             fontWeight: 'bold',
             cursor: 'pointer',
-            opacity: (isTaskRunning || !selectedTarget || !selectedLigand || !targetsWithRedocking.includes(selectedTarget) || !targetsWithAdmet.includes(selectedTarget) || (library === 'chembl' && !chemblTargets.includes(selectedTarget)) || (library === 'zinc' && !zincTargets.includes(selectedTarget))) ? 0.6 : 1,
+            opacity: (
+              isTaskRunning ||
+              !selectedTarget ||
+              !selectedLigand ||
+              !hasTargetMatch(targetsWithRedocking, selectedTarget) ||
+              !hasTargetMatch(targetsWithAdmet, selectedTarget) ||
+              (library === 'chembl' && !hasTargetMatch(chemblTargets, selectedTarget)) ||
+              (library === 'zinc' && !hasTargetMatch(zincTargets, selectedTarget)) ||
+              (!prepareComplex && !preparedReceptorPath)
+            ) ? 0.6 : 1,
             boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
           }}
         >
           {isTaskRunning ? 'Running...' : 'Run Virtual Screening (Consensus)'}
         </button>
       </div>
+
 
       {taskStatus?.status === 'error' && (
         <div className="error" style={{ marginBottom: '30px' }}>
@@ -2114,8 +2494,6 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
               ) : (
                 <p style={{ color: '#6b7280', textAlign: 'center', padding: '20px' }}>No result data available for this target.</p>
               )}
-
-              {/* Correlation Plot section removed */}
             </div>
           )}
         </div>
@@ -2129,12 +2507,19 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
 // ==========================================
 
 export default function AnalysisPage() {
+  const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<"similarity" | "docking" | "redocking" | "admet">("similarity");
   const [isTaskRunning, setIsTaskRunning] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [executionLogs, setExecutionLogs] = useState("");
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [currentTaskStatus, setCurrentTaskStatus] = useState<any>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const handleTaskStart = (id: string) => {
+    setCurrentTaskId(id);
+    setCurrentTaskStatus(null);
+    setCancelling(false);
     setIsTaskRunning(true);
     setLoadingMessage(
       activeTab === 'admet'
@@ -2147,7 +2532,42 @@ export default function AnalysisPage() {
 
   const handleTaskEnd = () => {
     setIsTaskRunning(false);
+    setCurrentTaskId(null);
+    setCancelling(false);
   };
+
+  const handleCancelTask = async () => {
+    if (!currentTaskId || cancelling) return;
+    const phase = currentTaskStatus?.progress?.phase || currentTaskStatus?.message || loadingMessage || '';
+    const isFirstPhase = phase.includes('Step 1/2') || phase.includes('Preparation') || phase.includes('Preparing');
+    if (isFirstPhase) {
+      const confirmStop = window.confirm(
+        'Warning: The simulation is still in Phase 1 (Ligand Preparation). No docking scores or partial results have been generated yet.\n\nAre you sure you want to stop?'
+      );
+      if (!confirmStop) return;
+    }
+    setCancelling(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/${activeTab}/cancel/${currentTaskId}`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        if (isFirstPhase) {
+          showToast('info', 'Stopped During Preparation', 'Simulation was stopped during Phase 1. No partial docking scores were generated yet.');
+        } else {
+          showToast('info', 'Stopping Task...', 'Stop request sent. Saving partial docking results...');
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        showToast('error', 'Could not stop the task', errData.message || 'The task may have already finished.');
+        setCancelling(false);
+      }
+    } catch {
+      showToast('error', 'Could not stop the task', 'The stop request could not be sent. The task may still be running — please wait for it to finish.');
+      setCancelling(false);
+    }
+  };
+
 
   return (
     <>
@@ -2163,8 +2583,8 @@ export default function AnalysisPage() {
         {/* TAB NAVIGATION */}
         <div style={{ 
           display: 'flex', 
-          borderBottom: '2px solid #ddd', 
-          marginBottom: '20px',
+          borderBottom: '2px solid var(--border-color)', 
+          marginBottom: '30px',
           gap: '10px'
         }}>
           <button 
@@ -2181,8 +2601,8 @@ export default function AnalysisPage() {
               transition: 'all 0.3s'
             }}
           >
-            <i className="fas fa-network-wired" style={{ marginRight: '8px' }}></i>
-            Molecular Similarity
+            <i className="fas fa-project-diagram" style={{ marginRight: '8px' }}></i>
+            Similarity Network Analysis
           </button>
           <button
             onClick={() => setActiveTab("docking")}
@@ -2245,6 +2665,11 @@ export default function AnalysisPage() {
             executionLogs={executionLogs}
             setExecutionLogs={setExecutionLogs}
             isTaskRunning={isTaskRunning}
+            onStatusUpdate={(status) => setCurrentTaskStatus(status)}
+            onNavigateTab={(tab) => {
+              setActiveTab(tab);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         )}
         {activeTab === "redocking" && (
@@ -2254,6 +2679,7 @@ export default function AnalysisPage() {
             executionLogs={executionLogs}
             setExecutionLogs={setExecutionLogs}
             isTaskRunning={isTaskRunning}
+            onStatusUpdate={(status) => setCurrentTaskStatus(status)}
           />
         )}
         {activeTab === "admet" && (
@@ -2263,14 +2689,143 @@ export default function AnalysisPage() {
             executionLogs={executionLogs}
             setExecutionLogs={setExecutionLogs}
             isTaskRunning={isTaskRunning}
+            onStatusUpdate={(status) => setCurrentTaskStatus(status)}
           />
         )}
       </main>
 
-      {/* Subtle loading indicator instead of a full lock */}
+      {/* Single clean progress box modal */}
       {isTaskRunning && (
         <LoadingOverlay isLoading={isTaskRunning} message={loadingMessage}>
-          <Terminal logs={executionLogs} />
+          <div style={{
+            padding: '32px',
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            textAlign: 'center'
+          }}>
+            {/* Current Phase / Status Message */}
+            <div style={{
+              fontSize: '1.2rem',
+              fontWeight: 600,
+              color: '#e2e8f0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px'
+            }}>
+              <i className="fas fa-spinner fa-spin" style={{ color: 'var(--primary-color)', fontSize: '1.3rem' }}></i>
+              <span>{currentTaskStatus?.progress?.phase || currentTaskStatus?.message || loadingMessage}</span>
+            </div>
+
+            {/* Progress Bar & Molecule Count */}
+            {currentTaskStatus?.progress?.molecules_total > 0 ? (
+              (() => {
+                const isPostProcessing = currentTaskStatus.progress.phase?.includes('RMSD') ||
+                                         currentTaskStatus.progress.phase?.includes('Post-Processing') ||
+                                         currentTaskStatus.progress.phase?.includes('Step 2/2') ||
+                                         currentTaskStatus.progress.molecules_done >= currentTaskStatus.progress.molecules_total;
+                const percent = Math.round((currentTaskStatus.progress.molecules_done / currentTaskStatus.progress.molecules_total) * 100);
+
+                return isPostProcessing ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      textAlign: 'left'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#48bb78', fontSize: '0.9rem', fontWeight: 600 }}>
+                        <i className="fas fa-check-circle"></i>
+                        <span>Step 1/2: Molecular Docking Complete ({currentTaskStatus.progress.molecules_total} / {currentTaskStatus.progress.molecules_total} molecules)</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ecc94b', fontSize: '0.9rem', fontWeight: 600 }}>
+                        <i className="fas fa-spinner fa-spin"></i>
+                        <span>Step 2/2: Calculating RMSD & Finalizing Structural Analysis...</span>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      width: '100%',
+                      backgroundColor: '#2d3748',
+                      borderRadius: '9999px',
+                      height: '16px',
+                      overflow: 'hidden',
+                      border: '1px solid #4a5568'
+                    }}>
+                      <div style={{
+                        width: '95%',
+                        backgroundColor: '#ecc94b',
+                        height: '100%',
+                        transition: 'width 0.4s ease'
+                      }}></div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#cbd5e0' }}>
+                      <span>Status: <strong style={{ color: '#ecc94b' }}>Post-Processing & RMSD Alignment in Progress...</strong></span>
+                      <span style={{ fontWeight: 'bold' }}>Step 2/2</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{
+                      width: '100%',
+                      backgroundColor: '#2d3748',
+                      borderRadius: '9999px',
+                      height: '16px',
+                      overflow: 'hidden',
+                      border: '1px solid #4a5568'
+                    }}>
+                      <div style={{
+                        width: `${Math.min(95, Math.max(5, percent))}%`,
+                        backgroundColor: 'var(--primary-color)',
+                        height: '100%',
+                        transition: 'width 0.4s ease'
+                      }}></div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', color: '#cbd5e0' }}>
+                      <span>Step 1/2 — Docked: <strong style={{ color: '#fff' }}>{currentTaskStatus.progress.molecules_done}</strong> / {currentTaskStatus.progress.molecules_total} molecules</span>
+                      <span style={{ fontWeight: 'bold' }}>{percent}%</span>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <div style={{ fontSize: '0.95rem', color: '#a0aec0', fontStyle: 'italic' }}>
+                Preparing structures and initializing execution...
+              </div>
+            )}
+
+            {/* Stop & Save Partial Results Button */}
+            <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={handleCancelTask}
+                disabled={cancelling}
+                style={{
+                  padding: '12px 28px',
+                  backgroundColor: cancelling ? '#a0aec0' : '#e53e3e',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  cursor: cancelling ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  boxShadow: '0 4px 14px rgba(229, 62, 62, 0.4)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <i className="fas fa-stop-circle"></i>
+                {cancelling ? "Stopping & Saving Partial Results..." : "Stop & Save Partial Results"}
+              </button>
+            </div>
+          </div>
         </LoadingOverlay>
       )}
     </>

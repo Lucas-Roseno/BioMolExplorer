@@ -177,16 +177,19 @@ select:focus {
 
 .target-header-left {
     display: flex;
-    gap: 1rem;
+    gap: 10px;
     align-items: center;
-    width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+    width: auto;
+    font-weight: bold;
 }
 
+.target-header-right,
 .target-actions {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    margin-left: auto;
 }
 
 .target-title {

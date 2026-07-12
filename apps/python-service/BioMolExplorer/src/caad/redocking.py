@@ -73,6 +73,7 @@ from kernel.utilities import fileHandling, MolConverter, MolExplorer
 from kernel.loggers import LoggerManager
 from kernel.config import BIOMOL_ROOT
 from kernel.descriptors import Descriptors
+from kernel.process_manager import ActiveSubprocesses
 #----------------------------------------------------------------------------------------------
 
     
@@ -204,29 +205,13 @@ class Docking():
             else:
                 cwd = None
             
-            # Use capture_output to ensure we can relay the output to our captured sys.stdout
-            # This is necessary because sys.stdout might be a Tee object (no real fileno for subprocess)
-            result = subprocess.run(
-                command, 
+            returncode, out_str, err_str = ActiveSubprocesses.run_subprocess(
+                command,
                 cwd=cwd,
-                shell=shell, 
-                check=False, # We handle checking manually after relaying output
-                start_new_session=True,
-                capture_output=True,
-                text=True
+                shell=shell,
+                check=check,
+                relay_output=True
             )
-            
-            # Relay captured output to our current sys.stdout/stderr
-            # This allows Tee objects (from app.py) to capture the output for the frontend
-            if result.stdout:
-                sys.stdout.write(result.stdout)
-                sys.stdout.flush()
-            if result.stderr:
-                sys.stderr.write(result.stderr)
-                sys.stderr.flush()
-
-            if check and result.returncode != 0:
-                raise subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
 
             return True
 
@@ -668,7 +653,10 @@ class DockVina(Docking):
                         
             
             
-            self.perform_vina_evaluation()
+            try:
+                self.perform_vina_evaluation()
+            except Exception as e:
+                self.logger.warning(f'Vina evaluation stopped or interrupted: {e}')
             
             pdb_codes = np.delete(pdb_codes, idx_to_remove)
             for receptor, ligand, resnum, chain in pdb_codes:
@@ -676,16 +664,18 @@ class DockVina(Docking):
                 iligand  = self.ligandpath + f'{composite}' + '.lig.pdbqt'
                 vina_model = self.outputpath + f'{composite}' + '.lig.pdbqt'
                 if os.path.isfile(iligand) and os.path.isfile(vina_model):
-                    results.append((f'{receptor}', f'{ligand}', f'{resnum}', f'{chain}', desc.calcRMSD(iligand, vina_model)))
+                    try:
+                        results.append((f'{receptor}', f'{ligand}', f'{resnum}', f'{chain}', desc.calcRMSD(iligand, vina_model)))
+                    except Exception as rmsd_err:
+                        self.logger.warning(f'Could not calculate RMSD for {composite}: {rmsd_err}')
 
-            
             rmsd = DataFrame(results, columns=['PDB_CODE', 'LIGAND', 'RESNUM', 'CHAIN', 'RMSD'])
-            pdb_codes = DataFrame(self.__pdb_codes, columns=['PDB_CODE', 'LIGAND', 'RESNUM', 'CHAIN', 'RESOLUTION'])
-            pdb_codes['RESNUM'] = pdb_codes['RESNUM'].astype(str)
-            pdb_codes = pdb_codes.merge(rmsd, on=['PDB_CODE', 'LIGAND', 'RESNUM', 'CHAIN'], how='left')
+            pdb_codes_df = DataFrame(self.__pdb_codes, columns=['PDB_CODE', 'LIGAND', 'RESNUM', 'CHAIN', 'RESOLUTION'])
+            pdb_codes_df['RESNUM'] = pdb_codes_df['RESNUM'].astype(str)
+            pdb_codes_df = pdb_codes_df.merge(rmsd, on=['PDB_CODE', 'LIGAND', 'RESNUM', 'CHAIN'], how='left')
             
             f1   = fileHandling(output_path=self.complexpath)
-            f1.dataframe_to_csv('pdb_codes', pdb_codes)
+            f1.dataframe_to_csv('pdb_codes', pdb_codes_df)
                     
                
         except Exception as e:

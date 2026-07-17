@@ -1,0 +1,9 @@
+{
+    "_comment": "Mapeamento: nome popular/alternativo -> pref_name oficial no ChEMBL (Homo sapiens).",
+    "Butyrylcholinesterase": "Cholinesterase",
+    "BChE":                  "Cholinesterase",
+    "BCHE":                  "Cholinesterase",
+    "Pseudocholinesterase":  "Cholinesterase",
+    "AChE":                  "Acetylcholinesterase",
+    "ACHE":                  "Acetylcholinesterase"
+}

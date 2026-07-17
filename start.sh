@@ -3,11 +3,26 @@ set -e
 
 echo "=== BioMolExplorer Development Server (Hot Reload) ==="
 
-# Ativar Conda Environment
-export PATH="$HOME/anaconda3/bin:$PATH"
-CONDA_BASE=$(conda info --base 2>/dev/null)
+# Procurar Conda em locais comuns e no PATH
+for CONDA_DIR in "$HOME/progs/anaconda3" "$HOME/anaconda3" "$HOME/miniconda3" "/opt/anaconda3" "/usr/local/anaconda3"; do
+    if [ -x "$CONDA_DIR/bin/conda" ]; then
+        export PATH="$CONDA_DIR/bin:$PATH"
+        break
+    fi
+done
+
+# Adicionar Dock6 e Chimera ao PATH e configurar DOCK6_PATH se disponíveis
+for D6_DIR in "$HOME/progs/dock6" "$HOME/dock6" "/opt/dock6" "/usr/local/dock6"; do
+    if [ -d "$D6_DIR" ]; then
+        export PATH="$D6_DIR/bin:$PATH"
+        export DOCK6_PATH="$D6_DIR"
+        break
+    fi
+done
+
+CONDA_BASE=$(conda info --base 2>/dev/null || true)
 if [ -z "$CONDA_BASE" ]; then
-    echo "Erro: Conda não encontrado no PATH."
+    echo "Erro: Conda não encontrado no PATH nem nos diretórios padrão."
     exit 1
 fi
 
@@ -110,8 +125,8 @@ echo "   - Python (Flask): http://127.0.0.1:$PYTHON_PORT"
 echo ""
 
 # Resolve o interpretador Python do ambiente conda BioMolExplorer (ou fallback para python3/python)
-if [ -x "$HOME/anaconda3/envs/BioMolExplorer/bin/python" ]; then
-    PYTHON_BIN="$HOME/anaconda3/envs/BioMolExplorer/bin/python"
+if [ -x "$CONDA_BASE/envs/BioMolExplorer/bin/python" ]; then
+    PYTHON_BIN="$CONDA_BASE/envs/BioMolExplorer/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="python3"
 else
@@ -122,8 +137,16 @@ fi
 PORT=$PYTHON_PORT FLASK_PORT=$PYTHON_PORT "$PYTHON_BIN" apps/python-service/app.py &
 PYTHON_PID=$!
 
-# Adicionar Node v22 ao PATH para Next.js 15+ e Node 20+
-export PATH="$HOME/.nvm/versions/node/v22.23.0/bin:$PATH"
+# Configurar Node.js dinamicamente (NVM ou sistema)
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    source "$HOME/.nvm/nvm.sh"
+    nvm use 22 2>/dev/null || nvm use default 2>/dev/null || true
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+    echo "Erro: Node.js não encontrado no PATH ou NVM."
+    exit 1
+fi
 
 # 2. Inicia a API Node.js com NODEMON para hot-reload
 PORT=$API_PORT PYTHON_URL="http://127.0.0.1:$PYTHON_PORT" npx nodemon --watch apps/api/src -e ts,js --exec "ts-node" apps/api/src/server.ts &

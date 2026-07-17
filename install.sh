@@ -23,9 +23,14 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 install_sys_deps() {
-    echo "Instalando dependências de sistema (Docker, Dock6 tools, etc)..."
-    sudo apt-get update
-    sudo apt-get install -y zlib1g-dev flex bison gfortran docker.io docker-compose wget curl
+    echo "Verificando dependências de sistema (Docker, Dock6 tools, etc)..."
+    if command -v dpkg &> /dev/null && dpkg -s zlib1g-dev flex bison gfortran docker.io wget curl &> /dev/null 2>&1; then
+        echo "Dependências de sistema já estão instaladas."
+    else
+        echo "Instalando dependências de sistema via apt-get (pode solicitar senha sudo)..."
+        sudo apt-get update || true
+        sudo apt-get install -y zlib1g-dev flex bison gfortran docker.io docker-compose wget curl || true
+    fi
 }
 
 install_npm_deps() {
@@ -39,7 +44,7 @@ install_npm_deps() {
 }
 
 install_anaconda() {
-    if ! command -v conda &> /dev/null; then
+    if ! command -v conda &> /dev/null && [ ! -x "$INSTALL_DIR/anaconda3/bin/conda" ] && [ ! -x "$HOME/anaconda3/bin/conda" ]; then
         echo "Conda não encontrado. Instalando Anaconda..."
         if [ ! -f "$ANACONDA_INSTALLER" ]; then
             echo "Baixando Anaconda..."
@@ -55,8 +60,14 @@ install_anaconda() {
         export PATH="$INSTALL_DIR/anaconda3/bin:$PATH"
         eval "$("$INSTALL_DIR/anaconda3/bin/conda" shell.bash hook)"
     else
-        echo "Anaconda/Conda já instalado."
-        eval "$(conda shell.bash hook)"
+        echo "Anaconda/Conda detectado."
+        for C_BIN in $(command -v conda 2>/dev/null) "$INSTALL_DIR/anaconda3/bin/conda" "$HOME/anaconda3/bin/conda" "$HOME/miniconda3/bin/conda"; do
+            if [ -x "$C_BIN" ]; then
+                export PATH="$(dirname "$C_BIN"):$PATH"
+                eval "$("$C_BIN" shell.bash hook)"
+                break
+            fi
+        done
     fi
 
     echo "Aceitando Termos de Serviço da Anaconda..."

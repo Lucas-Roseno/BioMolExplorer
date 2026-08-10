@@ -62,18 +62,14 @@ class LoggerManager:
 
     @classmethod
     def get_logger(cls, name, log_file=None, level=logging.ERROR):
-        path    = BIOMOL_ROOT
-        logpath = path + '/logs/'
-        
-        if not os.path.exists(logpath):
-            os.makedirs(logpath, exist_ok=True)
-
         if name not in cls._loggers:
             logger = logging.getLogger(name)
             logger.setLevel(level)
 
             if log_file:
-                file_handler = logging.FileHandler(log_file)
+                full_log_path = os.path.join(BIOMOL_ROOT, log_file)
+                os.makedirs(os.path.dirname(full_log_path), exist_ok=True)
+                file_handler = logging.FileHandler(full_log_path)
                 file_handler.setLevel(level)
                 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
                 file_handler.setFormatter(formatter)

@@ -167,22 +167,60 @@ install_miniconda() {
 
 # =============================================================================
 #  [3/5] Create Conda environment with scientific dependencies (first run only)
+#        Re-synced automatically whenever requirements.yml changes, so an
+#        already-existing environment never silently drifts (e.g. missing a
+#        package that was added to requirements.yml after the env was built).
 # =============================================================================
+
+# Fingerprint of requirements.yml, used to detect drift on already-created envs.
+_req_id() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" 2>/dev/null | cut -c1-16
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$f" 2>/dev/null | cut -c1-16
+  else
+    wc -c < "$f" 2>/dev/null | tr -d ' '   # fallback: size in bytes
+  fi
+}
+
 setup_conda_env() {
   source "$CONDA_DIR/etc/profile.d/conda.sh"
   # Accept Anaconda Terms of Service (required since 2024 in non-interactive mode)
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
   conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
+
+  local req_file="$APP_DIR/requirements.yml"
+  [ ! -f "$req_file" ] && fail "requirements.yml file not found: $req_file"
+  local CONDA_ENV_DIR="$CONDA_DIR/envs/$CONDA_ENV_NAME"
+  local req_id_file="$CONDA_ENV_DIR/.reqid"
+  local current_id; current_id=$(_req_id "$req_file") || current_id=""
+  local stored_id=""
+  [ -f "$req_id_file" ] && stored_id=$(cat "$req_id_file" 2>/dev/null)
+
   if conda env list | grep -q "^$CONDA_ENV_NAME "; then
-    ok "Conda environment '$CONDA_ENV_NAME' already exists."
+    # Env exists but requirements.yml changed since it was built (or it predates
+    # the .reqid marker, which also covers installs affected by earlier bugs):
+    # sync it instead of silently leaving it stale.
+    if [ -z "$current_id" ] || [ "$stored_id" = "$current_id" ]; then
+      ok "Conda environment '$CONDA_ENV_NAME' already exists and is up to date."
+      return
+    fi
+    step "Syncing Conda environment with updated requirements.yml..."
+    warn "This step may take a few minutes..."
+    conda env update -f "$req_file" --prune \
+      || fail "Failed to update Conda environment." "Check your internet connection and try again."
+    printf '%s\n' "$current_id" > "$req_id_file"
+    ok "Environment '$CONDA_ENV_NAME' synced!"
     return
   fi
+
   step "Creating Conda environment with scientific dependencies..."
   warn "This step may take 5 to 15 minutes on the first run..."
-  local req_file="$APP_DIR/apps/python-service/BioMolExplorer/requirements.yml"
-  [ ! -f "$req_file" ] && fail "requirements.yml file not found: $req_file"
   conda env create -f "$req_file" -y \
     || fail "Failed to create Conda environment." "Check your internet connection and try again."
+  printf '%s\n' "$current_id" > "$req_id_file"
   ok "Environment '$CONDA_ENV_NAME' created!"
 }
 

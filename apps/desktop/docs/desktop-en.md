@@ -38,7 +38,9 @@ desktop/
 
 The current mode is **Native**, without Docker. The launcher automatically installs Miniconda, Node.js and the scientific environment on the user's machine. The user only needs to install the `.deb` and open the application.
 
-> Miniconda, Node.js, RDKit, OpenBabel, Vina, PyMOL and Flask are installed automatically on the first run. No additional prerequisites are required.
+> Miniconda, Node.js, RDKit, OpenBabel, Vina, PyMOL and Flask are installed automatically on the first run.
+>
+> **Exception:** UCSF Chimera and DOCK6 are licensed third-party tools that cannot be bundled/redistributed, so the user must install them manually and make sure they're on `PATH` (see [userguide-linux-en.md](userguide-linux-en.md#requirements)). `init-native.sh` checks for Chimera, DOCK6 and DMS together on every launch (step `[2/6]`) and refuses to start the app if any is missing, showing exactly which one(s) need to be installed. DMS ships bundled with the source and normally passes this check automatically (precompiled binary, or auto-compiled on demand).
 
 ---
 

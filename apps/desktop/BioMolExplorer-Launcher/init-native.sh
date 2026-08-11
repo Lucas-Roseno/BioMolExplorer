@@ -15,6 +15,20 @@ for _nd in "$HOME/.local/bin" "$HOME/.biomolexplorer/miniconda/bin" \
 done
 unset -f _prepend_path 2>/dev/null; unset _nd
 
+# Also pick up any PATH customization the user added manually to their shell rc
+# files (this is how most people add DOCK6/Chimera to PATH after a manual
+# install, per our own install instructions). We can't just `source ~/.bashrc`
+# because on most distros it returns immediately for non-interactive shells
+# (the "case $- in *i*) ;; *) return;; esac" guard at its top), so instead we
+# pull out only the PATH-related lines and evaluate those.
+for _rc in "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_aliases"; do
+  [ -f "$_rc" ] || continue
+  while IFS= read -r _line; do
+    eval "$_line" 2>/dev/null || true
+  done < <(grep -E '^[[:space:]]*(export[[:space:]]+)?PATH=' "$_rc" 2>/dev/null)
+done
+unset _rc _line
+
 # Activate nvm if already installed
 export NVM_DIR="$HOME/.biomolexplorer/nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
@@ -68,7 +82,7 @@ _http_ok() {
 }
 
 # =============================================================================
-#  [1/5] Extract source code (first run) or update it (when the .deb is newer)
+#  [1/6] Extract source code (first run) or update it (when the .deb is newer)
 # =============================================================================
 
 # Fingerprint of the packaged source tarball. Changes on every rebuild, so a
@@ -140,7 +154,88 @@ extract_source() {
 }
 
 # =============================================================================
-#  [2/5] Install Miniconda (first run only)
+#  [2/6] Verify required external tools: Chimera, DOCK6, DMS
+#        These are checked all together (instead of stopping at the first
+#        missing one) so the user gets a single, complete list of what to
+#        install instead of discovering them one at a time across restarts.
+# =============================================================================
+check_external_tools() {
+  local missing=()
+
+  step "Checking UCSF Chimera..."
+  if command -v chimera >/dev/null 2>&1; then
+    ok "Chimera found: $(command -v chimera)"
+  else
+    warn "Chimera not found in PATH."
+    missing+=("Chimera")
+  fi
+
+  step "Checking DOCK6..."
+  # Mirrors the resolution order used by the backend (apps/python-service/app.py):
+  # PATH -> $DOCK6_PATH env var -> ~/progs/dock6/ fallback.
+  if command -v dock6 >/dev/null 2>&1 \
+    || { [ -n "$DOCK6_PATH" ] && [ -x "$DOCK6_PATH/bin/dock6" ]; } \
+    || [ -x "$HOME/progs/dock6/bin/dock6" ]; then
+    ok "DOCK6 found."
+  else
+    warn "DOCK6 not found."
+    missing+=("DOCK6")
+  fi
+
+  step "Checking DMS..."
+  # DMS ships bundled with BioMolExplorer's source and self-compiles on first
+  # use, so this passes automatically in the common case (precompiled binary
+  # already extracted, or build tools available to compile it on demand).
+  if command -v dms >/dev/null 2>&1 \
+    || [ -x "$APP_DIR/dms/dms" ] \
+    || { [ -d "$APP_DIR/dms" ] && command -v make >/dev/null 2>&1 \
+         && { command -v gcc >/dev/null 2>&1 || command -v cc >/dev/null 2>&1; }; }; then
+    ok "DMS found (bundled or ready to auto-compile)."
+  else
+    warn "DMS not found and cannot be auto-compiled (missing build tools)."
+    missing+=("DMS")
+  fi
+
+  [ ${#missing[@]} -eq 0 ] && { ok "All required external tools are present."; return; }
+
+  printf '\n'
+  warn "Missing required tool(s): ${missing[*]}"
+  for dep in "${missing[@]}"; do
+    case "$dep" in
+      Chimera)
+        printf '        - Chimera: download the .bin installer at https://www.rbvi.ucsf.edu/chimera/download.html,\n'
+        printf '          run it, and make sure the "chimera" command ends up on your PATH.\n'
+        ;;
+      DOCK6)
+        printf '        - DOCK6: request/download it at http://dock.compbio.ucsf.edu/, build it, then either add\n'
+        printf '          its bin/ folder to PATH, set the DOCK6_PATH environment variable to the install\n'
+        printf '          directory, or install it at ~/progs/dock6/.\n'
+        ;;
+      DMS)
+        printf '        - DMS: install build tools (e.g. "sudo apt install build-essential") so the bundled\n'
+        printf '          copy can compile automatically, or install "dms" manually and add it to PATH.\n'
+        ;;
+    esac
+  done
+  printf '\n'
+
+  # Build a compact one-line hint (main.js only reads the first [HINT] line
+  # for the error screen); the full instructions above stay in the logs.
+  local hint=""
+  for dep in "${missing[@]}"; do
+    case "$dep" in
+      Chimera) hint="${hint}${hint:+ | }Chimera: rbvi.ucsf.edu/chimera/download.html" ;;
+      DOCK6)   hint="${hint}${hint:+ | }DOCK6: dock.compbio.ucsf.edu" ;;
+      DMS)     hint="${hint}${hint:+ | }DMS: install build-essential (gcc/make)" ;;
+    esac
+  done
+
+  fail "Required external tool(s) not found: ${missing[*]}." \
+    "${hint} — see technical details below for full instructions."
+}
+
+# =============================================================================
+#  [3/6] Install Miniconda (first run only)
 # =============================================================================
 install_miniconda() {
   if [ -f "$CONDA_DIR/bin/conda" ]; then
@@ -166,7 +261,7 @@ install_miniconda() {
 }
 
 # =============================================================================
-#  [3/5] Create Conda environment with scientific dependencies (first run only)
+#  [4/6] Create Conda environment with scientific dependencies (first run only)
 #        Re-synced automatically whenever requirements.yml changes, so an
 #        already-existing environment never silently drifts (e.g. missing a
 #        package that was added to requirements.yml after the env was built).
@@ -225,7 +320,7 @@ setup_conda_env() {
 }
 
 # =============================================================================
-#  [3.5] Install Node.js via nvm if missing (no sudo)
+#  [4.5/6] Install Node.js via nvm if missing (no sudo)
 # =============================================================================
 install_node() {
   # Check if node >= 18 is already in PATH (system or nvm)
@@ -250,7 +345,7 @@ install_node() {
 }
 
 # =============================================================================
-#  [4/5] Install JavaScript dependencies (first run only)
+#  [5/6] Install JavaScript dependencies (first run only)
 # =============================================================================
 setup_npm() {
   if [ -d "$APP_DIR/node_modules" ] && [ "${NEEDS_NPM_INSTALL:-0}" != "1" ]; then
@@ -290,7 +385,7 @@ integrate_desktop() {
 }
 
 # =============================================================================
-#  [5/5] Start the 3 native services
+#  [6/6] Start the 3 native services
 # =============================================================================
 start_services() {
   local CONDA_ENV_DIR="$CONDA_DIR/envs/$CONDA_ENV_NAME"
@@ -365,26 +460,30 @@ start_services() {
 banner
 printf '  [INFO] Mode: Native (Conda + Node.js)\n\n'
 
-printf '  [1/5] Checking installation...\n'
+printf '  [1/6] Checking installation...\n'
 extract_source
 printf '\n'
 
-printf '  [2/5] Checking Miniconda...\n'
+printf '  [2/6] Checking required external tools (Chimera, DOCK6, DMS)...\n'
+check_external_tools
+printf '\n'
+
+printf '  [3/6] Checking Miniconda...\n'
 install_miniconda
 printf '\n'
 
-printf '  [3/5] Setting up scientific environment...\n'
+printf '  [4/6] Setting up scientific environment...\n'
 setup_conda_env
 printf '\n'
 
-printf '  [3.5/5] Checking Node.js...\n'
+printf '  [4.5/6] Checking Node.js...\n'
 install_node
 printf '\n'
 
-printf '  [4/5] Installing JavaScript dependencies...\n'
+printf '  [5/6] Installing JavaScript dependencies...\n'
 setup_npm
 printf '\n'
 
-printf '  [5/5] Starting services...\n'
+printf '  [6/6] Starting services...\n'
 integrate_desktop
 start_services

@@ -5,6 +5,9 @@
 - Ubuntu 20.04+ ou qualquer distribuição baseada em Debian (64-bit)
 - Conexão com a internet na primeira execução
 - Pelo menos **10 GB** de espaço livre em disco (para o Miniconda e o ambiente científico)
+- **UCSF Chimera** e **DOCK6** instalados previamente e disponíveis no `PATH` — são ferramentas de terceiros licenciadas e não podem ser empacotadas junto com o app. O aplicativo verifica os dois (além do DMS, que já vem empacotado) toda vez que é aberto e **não inicia** se algum estiver faltando:
+  - **Chimera**: baixe o instalador `.bin` em [rbvi.ucsf.edu/chimera](https://www.rbvi.ucsf.edu/chimera/download.html), execute-o e garanta que o comando `chimera` fique disponível no `PATH`.
+  - **DOCK6**: solicite/baixe em [dock.compbio.ucsf.edu](http://dock.compbio.ucsf.edu/), compile-o e depois adicione a pasta `bin/` ao `PATH`, defina a variável de ambiente `DOCK6_PATH` apontando para o diretório de instalação, ou instale-o em `~/progs/dock6/`.
 
 ---
 
@@ -51,10 +54,11 @@ Na **primeira abertura**, o aplicativo realiza automaticamente as seguintes etap
 
 | Etapa | Descrição | Tempo aproximado |
 |-------|-----------|-----------------|
-| 1 | Baixar e instalar o Miniconda em `~/.biomolexplorer/miniconda/` | 2–5 min |
-| 2 | Instalar o Node.js via NVM em `~/.biomolexplorer/nvm/` | 1–2 min |
-| 3 | Criar o ambiente Conda (RDKit, OpenBabel, Vina, PyMOL, Flask etc.) | 5–10 min |
-| 4 | Instalar as dependências JavaScript | 1–2 min |
+| 1 | Verificar Chimera, DOCK6 e DMS — **interrompe aqui com instruções se algum estiver faltando** | instantâneo |
+| 2 | Baixar e instalar o Miniconda em `~/.biomolexplorer/miniconda/` | 2–5 min |
+| 3 | Instalar o Node.js via NVM em `~/.biomolexplorer/nvm/` | 1–2 min |
+| 4 | Criar o ambiente Conda (RDKit, OpenBabel, Vina, PyMOL, Flask etc.) | 5–10 min |
+| 5 | Instalar as dependências JavaScript | 1–2 min |
 
 > **Tempo total da primeira execução: 5 a 15 minutos**, dependendo da sua conexão com a internet.
 
@@ -88,3 +92,6 @@ Verifique sua conexão com a internet e reabra o aplicativo. O processo de confi
 
 **"dpkg: error" durante a instalação**
 Execute `sudo apt-get install -f` para resolver dependências faltantes.
+
+**"Required external tool(s) not found: Chimera, DOCK6" ao abrir o app**
+O aplicativo verifica Chimera, DOCK6 e DMS antes de iniciar e recusa abrir se algum estiver faltando. Instale a(s) ferramenta(s) indicada(s) na tela de erro (veja os links em [Requisitos](#requisitos) acima) e reabra o BioMolExplorer.

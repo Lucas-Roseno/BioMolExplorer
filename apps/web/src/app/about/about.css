@@ -75,3 +75,20 @@
   }
   .team-photo{ width:110px; height:110px; }
 }
+
+.citation-section{
+  padding-top: 3rem;
+  padding-bottom: 4rem;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.citation-box{
+  padding: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: rgba(128, 128, 128, 0.05);
+  line-height: 1.6;
+  font-size: 0.95rem;
+  word-break: break-word;
+}

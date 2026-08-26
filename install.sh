@@ -11,7 +11,7 @@ CONDA_ENV_NAME="BioMolExplorer"
 # Local installers
 ANACONDA_INSTALLER="${SCRIPT_DIR}/apps/Anaconda.sh"
 CHIMERA_INSTALLER="${SCRIPT_DIR}/apps/chimera.bin"
-DOCK6_ARCHIVE="${SCRIPT_DIR}/apps/dock6-13.tar.gz"
+
 
 if [ ! -d "${SCRIPT_DIR}/apps" ]; then
     echo "Criando a pasta 'apps'..."
@@ -24,12 +24,12 @@ fi
 
 install_sys_deps() {
     echo "Verificando dependências de sistema (Docker, Dock6 tools, etc)..."
-    if command -v dpkg &> /dev/null && dpkg -s zlib1g-dev flex bison gfortran docker.io wget curl &> /dev/null 2>&1; then
+    if command -v dpkg &> /dev/null && dpkg -s git zlib1g-dev flex bison gfortran docker.io wget curl &> /dev/null 2>&1; then
         echo "Dependências de sistema já estão instaladas."
     else
         echo "Instalando dependências de sistema via apt-get (pode solicitar senha sudo)..."
         sudo apt-get update || true
-        sudo apt-get install -y zlib1g-dev flex bison gfortran docker.io docker-compose wget curl || true
+        sudo apt-get install -y git zlib1g-dev flex bison gfortran docker.io docker-compose wget curl || true
     fi
 }
 
@@ -99,19 +99,25 @@ install_chimera() {
 }
 
 install_dock6() {
-    if [ ! -d "$INSTALL_DIR/dock6" ]; then
-        if [ -f "$DOCK6_ARCHIVE" ]; then
-            echo "Instalando Dock6 a partir de $DOCK6_ARCHIVE..."
-            tar -xvzf "$DOCK6_ARCHIVE" -C "$INSTALL_DIR"
-            cd "$INSTALL_DIR/dock6/install"
-            ./configure gnu
-            make all
-            echo "Dock6 compilado e instalado em $INSTALL_DIR/dock6"
-        else
-            echo "[AVISO] Arquivo $DOCK6_ARCHIVE não encontrado. Pulei a instalação do Dock6. Baixe e coloque na pasta apps/ se desejar compilá-lo."
+    if ! command -v dock6 &> /dev/null && [ ! -x "$INSTALL_DIR/dock6/bin/dock6" ]; then
+        if [ ! -d "$INSTALL_DIR/dock6" ]; then
+            echo "Clonando o repositório do Dock6 via Git..."
+            git clone https://github.com/docking-org/dock6.git "$INSTALL_DIR/dock6"
         fi
+        echo "Compilando e instalando Dock6..."
+        cd "$INSTALL_DIR/dock6/install"
+        chmod +x configure
+        ./configure gnu
+        make all
+        echo "Dock6 compilado e instalado em $INSTALL_DIR/dock6"
+        
+        if ! grep -q "export PATH=\"\$PATH:\$HOME/progs/dock6/bin\"" ~/.bashrc; then
+            echo "Adicionando Dock6 ao PATH no ~/.bashrc..."
+            echo 'export PATH="$PATH:$HOME/progs/dock6/bin"' >> ~/.bashrc
+        fi
+        export PATH="$PATH:$HOME/progs/dock6/bin"
     else
-        echo "Dock6 já existe em $INSTALL_DIR/dock6"
+        echo "Dock6 já existe e está instalado."
     fi
 }
 

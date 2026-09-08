@@ -183,14 +183,13 @@ check_external_tools() {
   fi
 
   step "Checking DMS..."
-  # DMS ships bundled with BioMolExplorer's source and self-compiles on first
-  # use, so this passes automatically in the common case (precompiled binary
-  # already extracted, or build tools available to compile it on demand).
+  # Checks PATH -> bundled binary -> UCSF Chimera installation binary -> auto-compile build tools.
   if command -v dms >/dev/null 2>&1 \
     || [ -x "$APP_DIR/dms/dms" ] \
+    || [ -n "$(ls /opt/UCSF/Chimera*/bin/dms_spr 2>/dev/null)" ] \
     || { [ -d "$APP_DIR/dms" ] && command -v make >/dev/null 2>&1 \
          && { command -v gcc >/dev/null 2>&1 || command -v cc >/dev/null 2>&1; }; }; then
-    ok "DMS found (bundled or ready to auto-compile)."
+    ok "DMS found (bundled, installed or ready to auto-compile)."
   else
     warn "DMS not found and cannot be auto-compiled (missing build tools)."
     missing+=("DMS")
@@ -213,7 +212,7 @@ check_external_tools() {
         ;;
       DMS)
         printf '        - DMS: install build tools (e.g. "sudo apt install build-essential") so the bundled\n'
-        printf '          copy can compile automatically, or install "dms" manually and add it to PATH.\n'
+        printf '          copy can compile automatically, or link "dms_spr" from Chimera to /usr/local/bin/dms.\n'
         ;;
     esac
   done
@@ -226,7 +225,7 @@ check_external_tools() {
     case "$dep" in
       Chimera) hint="${hint}${hint:+ | }Chimera: rbvi.ucsf.edu/chimera/download.html" ;;
       DOCK6)   hint="${hint}${hint:+ | }DOCK6: dock.compbio.ucsf.edu" ;;
-      DMS)     hint="${hint}${hint:+ | }DMS: install build-essential (gcc/make)" ;;
+      DMS)     hint="${hint}${hint:+ | }DMS: install build-essential or link dms_spr" ;;
     esac
   done
 

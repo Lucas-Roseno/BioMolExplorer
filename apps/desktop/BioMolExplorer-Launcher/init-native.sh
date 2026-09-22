@@ -154,11 +154,44 @@ extract_source() {
 }
 
 # =============================================================================
-#  [2/6] Verify required external tools: Chimera, DOCK6, DMS
-#        These are checked all together (instead of stopping at the first
-#        missing one) so the user gets a single, complete list of what to
-#        install instead of discovering them one at a time across restarts.
+#  [2/6] Verify required external tools: Chimera, DOCK6, DMS.
+#
+#        All three are checked together (instead of stopping at the first missing
+#        one) so the user gets a single, complete list of what to install.
+#
+#        None of the three are installed by this script - they are licensed
+#        (Chimera, DOCK6) or user-built (DMS) third-party tools. Each is only
+#        *checked*; a missing/broken one aborts startup with install hints.
 # =============================================================================
+
+# True iff <bin> can actually produce a molecular surface: run it on a tiny PDB
+# from a scratch dir that has NO local `radii` file, so success proves its
+# compiled-in radii/dmsd paths resolve - exactly the condition the docking
+# pipeline needs (it invokes dms from the per-job surface/ directory). A `dms`
+# that merely exists but was built/installed wrong (e.g. missing
+# /usr/local/lib/dms/dmsd) would still pass a plain `command -v` check but fail
+# here.
+_dms_functional() {
+  local bin="$1" work rc=1
+  [ -x "$bin" ] || return 1
+  work="$(mktemp -d 2>/dev/null)" || return 1
+  cat > "$work/_probe.pdb" <<'PDB'
+ATOM      1  N   ALA A   1      11.104   6.134  -6.504  1.00  0.00           N
+ATOM      2  CA  ALA A   1      11.639   6.071  -5.147  1.00  0.00           C
+ATOM      3  C   ALA A   1      13.114   6.461  -5.140  1.00  0.00           C
+ATOM      4  O   ALA A   1      13.706   6.617  -6.207  1.00  0.00           O
+ATOM      5  CB  ALA A   1      10.847   7.036  -4.267  1.00  0.00           C
+TER
+END
+PDB
+  if ( cd "$work" && "$bin" _probe.pdb -a -o _probe.dms ) >/dev/null 2>&1 \
+     && [ -s "$work/_probe.dms" ]; then
+    rc=0
+  fi
+  rm -rf "$work"
+  return $rc
+}
+
 check_external_tools() {
   local missing=()
 
@@ -166,7 +199,7 @@ check_external_tools() {
   if command -v chimera >/dev/null 2>&1; then
     ok "Chimera found: $(command -v chimera)"
   else
-    warn "Chimera not found in PATH."
+    warn "Chimera not found. The 'chimera' command must be resolvable via PATH (wherever it's installed)."
     missing+=("Chimera")
   fi
 
@@ -178,20 +211,20 @@ check_external_tools() {
     || [ -x "$HOME/progs/dock6/bin/dock6" ]; then
     ok "DOCK6 found."
   else
-    warn "DOCK6 not found."
+    warn "DOCK6 not found. Expected 'dock6' on PATH, \$DOCK6_PATH/bin/dock6, or $HOME/progs/dock6/bin/dock6."
     missing+=("DOCK6")
   fi
 
-  step "Checking DMS..."
-  # Checks PATH -> bundled binary -> UCSF Chimera installation binary -> auto-compile build tools.
-  if command -v dms >/dev/null 2>&1 \
-    || [ -x "$APP_DIR/dms/dms" ] \
-    || [ -n "$(ls /opt/UCSF/Chimera*/bin/dms_spr 2>/dev/null)" ] \
-    || { [ -d "$APP_DIR/dms" ] && command -v make >/dev/null 2>&1 \
-         && { command -v gcc >/dev/null 2>&1 || command -v cc >/dev/null 2>&1; }; }; then
-    ok "DMS found (bundled, installed or ready to auto-compile)."
+  step "Checking DMS (molecular-surface generator)..."
+  # dms forks+execs a companion `dmsd` and reads a `radii` table via paths baked
+  # in at compile time, so a plain `command -v dms` isn't enough to trust it -
+  # _dms_functional actually generates a surface to confirm those paths resolve.
+  local dms_bin
+  dms_bin="$(command -v dms 2>/dev/null)"
+  if [ -n "$dms_bin" ] && _dms_functional "$dms_bin"; then
+    ok "DMS found: $dms_bin"
   else
-    warn "DMS not found and cannot be auto-compiled (missing build tools)."
+    warn "DMS not found (or not working). The 'dms' command must be resolvable via PATH (wherever it's installed)."
     missing+=("DMS")
   fi
 
@@ -211,8 +244,7 @@ check_external_tools() {
         printf '          directory, or install it at ~/progs/dock6/.\n'
         ;;
       DMS)
-        printf '        - DMS: install build tools (e.g. "sudo apt install build-essential") so the bundled\n'
-        printf '          copy can compile automatically, or link "dms_spr" from Chimera to /usr/local/bin/dms.\n'
+        printf '        - DMS: see https://www.cgl.ucsf.edu/chimera/docs/UsersGuide/dms.html for build/install instructions.\n'
         ;;
     esac
   done
@@ -225,7 +257,7 @@ check_external_tools() {
     case "$dep" in
       Chimera) hint="${hint}${hint:+ | }Chimera: rbvi.ucsf.edu/chimera/download.html" ;;
       DOCK6)   hint="${hint}${hint:+ | }DOCK6: dock.compbio.ucsf.edu" ;;
-      DMS)     hint="${hint}${hint:+ | }DMS: install build-essential or link dms_spr" ;;
+      DMS)     hint="${hint}${hint:+ | }DMS: www.cgl.ucsf.edu/chimera/docs/UsersGuide/dms.html" ;;
     esac
   done
 
@@ -463,7 +495,7 @@ printf '  [1/6] Checking installation...\n'
 extract_source
 printf '\n'
 
-printf '  [2/6] Checking required external tools (Chimera, DOCK6, DMS)...\n'
+printf '  [2/6] Checking external tools (Chimera, DOCK6) and preparing DMS...\n'
 check_external_tools
 printf '\n'
 

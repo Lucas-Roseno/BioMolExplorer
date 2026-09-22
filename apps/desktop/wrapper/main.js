@@ -5,6 +5,11 @@ const fs = require('fs');
 
 const VERSION_URL = 'https://raw.githubusercontent.com/Lucas-Roseno/BioMolExplorer/main/package.json';
 
+// Fake scheme used by the "Retry" button on the error screen. Never actually
+// navigated to — intercepted and re-run in-process by the will-navigate handler
+// set up in createWindow(), the same trick used there for opening external links.
+const RETRY_URL = 'bmx-action:retry';
+
 // Resolves the base path where init-native.sh and biomolexplorer-src.tar.gz are located.
 // Linux AppImage exposes APPIMAGE; macOS uses process.execPath; dev uses process.cwd().
 function resolveBasePath() {
@@ -84,6 +89,35 @@ function createWindow() {
     autoHideMenuBar: true,
   });
 
+  win.webContents.on('will-navigate', (event, url) => {
+    // "Retry" button on the error screen: re-run the launcher in place instead of
+    // actually navigating (there's nothing real to navigate to).
+    if (url === RETRY_URL) {
+      event.preventDefault();
+      startLauncher(win);
+      return;
+    }
+    // Links in our own data: pages (e.g. the error screen) should open in the user's
+    // default browser instead of navigating this window. Programmatic loadURL() calls
+    // from the main process (below) don't trigger this, only renderer-side link clicks.
+    if (/^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  startLauncher(win);
+}
+
+// Runs (or re-runs, on "Retry") the full init-native.sh sequence: shows the loading
+// screen, spawns the script, and either loads the app or falls back to the error
+// screen. Pulled out of createWindow() so the Retry button can call it again on the
+// same window without a full app restart.
+function startLauncher(win) {
   const basePath = resolveBasePath();
   const launcher = resolveLauncher(basePath);
   isNativeMode = launcher.isNative;
@@ -212,6 +246,45 @@ function createWindow() {
 function showErrorScreen(win, title, hint, logs) {
   const escape = (s) => String(s || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
+  // Turns bare domains/URLs in hint text (e.g. "rbvi.ucsf.edu/chimera/download.html")
+  // into clickable links; opened in the default browser via the will-navigate handler
+  // set up in createWindow(). TLD is restricted to a known allowlist (rather than any
+  // 2+ letter suffix) so filenames like "dms.zip" in install instructions aren't
+  // mistaken for a domain and linkified.
+  const linkify = (text) => escape(text).replace(
+    /\b((?:https?:\/\/)?(?:[a-z0-9-]+\.)+(?:com|org|net|edu|gov|io|dev)(?:\/[^\s()<]*)?)/gi,
+    (match) => {
+      const href = /^https?:\/\//i.test(match) ? match : `https://${match}`;
+      return `<a href="${href}" style="color:%235b4382;">${match}</a>`;
+    }
+  );
+
+  // "Required external tool(s) not found: Chimera DOCK6 DMS." (from init-native.sh's
+  // check_external_tools) reads better as one tool per line.
+  const toolsPrefix = 'Required external tool(s) not found:';
+  let titleHtml;
+  if (title.startsWith(toolsPrefix)) {
+    const tools = title.slice(toolsPrefix.length).replace(/\.\s*$/, '').trim().split(/\s+/).filter(Boolean);
+    titleHtml = [escape(toolsPrefix), ...tools.map((t) => `- ${escape(t)}`)].join('<br>');
+  } else {
+    titleHtml = escape(title);
+  }
+
+  // The matching hint is "Tool: instructions | Tool: instructions ... — see technical
+  // details ..." (1 to 3 "|"-joined tools, depending on how many are missing); split
+  // into one bullet per tool plus the trailing note on its own line. Tied to this exact
+  // suffix (unique to check_external_tools' fail() call) rather than to the presence of
+  // "|", so it also triggers correctly when only a single tool is missing.
+  let hintHtml;
+  const noteMatch = hint.match(/\s+—\s*(see technical details below for full instructions\.?)$/i);
+  if (noteMatch) {
+    const items = hint.slice(0, noteMatch.index).split('|').map((s) => s.trim()).filter(Boolean);
+    const note = noteMatch[1].trim().replace(/^./, (c) => c.toUpperCase());
+    hintHtml = [...items.map((i) => `- ${linkify(i)}`), '', escape(note)].join('<br>');
+  } else {
+    hintHtml = linkify(hint);
+  }
+
   win.loadURL(`data:text/html;charset=utf-8,
     <body style="margin:0; padding:0; background-color:%23F4F6F8; font-family:'Segoe UI', Roboto, sans-serif;">
       <div style="background-color:%235b4382; color:white; padding: 15px 30px; display:flex; align-items:center;">
@@ -221,11 +294,11 @@ function showErrorScreen(win, title, hint, logs) {
       </div>
       <div style="padding: 40px; max-width: 800px; margin: 0 auto;">
         <h2 style="color:%23c0392b; margin-top:0;">Startup Error</h2>
-        <p style="color:%23333; font-size:16px; line-height:1.5;">${escape(title)}</p>
+        <p style="color:%23333; font-size:16px; line-height:1.5;">${titleHtml}</p>
 
         <div style="background:%23fff5e6; border-left:4px solid %23f39c12; padding: 15px 20px; margin: 25px 0; border-radius: 4px;">
           <strong style="color:%23d35400;">What to do:</strong>
-          <p style="margin: 8px 0 0 0; color:%23333; line-height:1.5;">${escape(hint)}</p>
+          <p style="margin: 8px 0 0 0; color:%23333; line-height:1.5;">${hintHtml}</p>
         </div>
 
         <details style="margin-top: 30px;">
@@ -233,7 +306,10 @@ function showErrorScreen(win, title, hint, logs) {
           <pre style="background:%23272822; color:%23f8f8f2; padding:15px; border-radius:6px; font-size:12px; max-height:300px; overflow:auto; margin-top:10px;">${escape(logs) || '(no logs available)'}</pre>
         </details>
 
-        <p style="margin-top: 30px; color:%23999; font-size:13px;">After resolving the issue, close this window and reopen BioMolExplorer.</p>
+        <div style="margin-top: 30px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+          <a href="${RETRY_URL}" style="background:%235b4382; color:white; text-decoration:none; padding:10px 24px; border-radius:6px; font-size:14px; font-weight:500;">Retry</a>
+          <p style="margin:0; color:%23999; font-size:13px;">Fixed the issue above? Click Retry. Otherwise, close this window and reopen BioMolExplorer.</p>
+        </div>
       </div>
     </body>`);
 }

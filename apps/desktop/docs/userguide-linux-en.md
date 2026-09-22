@@ -5,9 +5,10 @@
 - Ubuntu 20.04+ or any Debian-based distribution (64-bit)
 - Internet connection on the first run
 - At least **10 GB** of free disk space (for Miniconda and the scientific environment)
-- **UCSF Chimera** and **DOCK6** installed beforehand and available on your `PATH` — they are licensed third-party tools and cannot be bundled with the app. The application checks for both (plus DMS, which is bundled) every time it starts and **will not launch** if either is missing:
+- **UCSF Chimera**, **DOCK6** and **DMS** installed beforehand and available on your `PATH` — they are third-party tools (licensed, in the case of Chimera and DOCK6) that cannot be bundled with the app. The application checks for all three every time it starts and **will not launch** if any is missing:
   - **Chimera**: download the `.bin` installer at [rbvi.ucsf.edu/chimera](https://www.rbvi.ucsf.edu/chimera/download.html), run it, and make sure the `chimera` command is on your `PATH`.
   - **DOCK6**: request/download it at [dock.compbio.ucsf.edu](http://dock.compbio.ucsf.edu/), build it, then either add its `bin/` folder to `PATH`, set the `DOCK6_PATH` environment variable to the install directory, or install it at `~/progs/dock6/`.
+  - **DMS**: follow the instructions at [cgl.ucsf.edu/chimera/docs/UsersGuide/dms.html](https://www.cgl.ucsf.edu/chimera/docs/UsersGuide/dms.html) and make sure the `dms` command is on your `PATH`. The app tests that the `dms` it finds actually generates a surface (just existing isn't enough).
 
 ---
 
@@ -93,5 +94,5 @@ Check your internet connection and relaunch the application. The setup process i
 **"dpkg: error" during installation**
 Run `sudo apt-get install -f` to resolve missing dependencies.
 
-**"Required external tool(s) not found: Chimera, DOCK6" on startup**
-The app checks for Chimera, DOCK6 and DMS before starting and refuses to launch if any is missing. Install the tool(s) named in the error screen (see [Requirements](#requirements) above for links), then reopen BioMolExplorer.
+**"Required external tool(s) not found: Chimera, DOCK6, DMS" on startup**
+The app checks for Chimera, DOCK6 and DMS before starting and refuses to launch if any is missing. Install the tool(s) named in the error screen (see [Requirements](#requirements) above for links). Then click **Retry** right there on the error screen — no need to close and reopen BioMolExplorer.

@@ -5,9 +5,10 @@
 - Ubuntu 20.04+ ou qualquer distribuição baseada em Debian (64-bit)
 - Conexão com a internet na primeira execução
 - Pelo menos **10 GB** de espaço livre em disco (para o Miniconda e o ambiente científico)
-- **UCSF Chimera** e **DOCK6** instalados previamente e disponíveis no `PATH` — são ferramentas de terceiros licenciadas e não podem ser empacotadas junto com o app. O aplicativo verifica os dois (além do DMS, que já vem empacotado) toda vez que é aberto e **não inicia** se algum estiver faltando:
+- **UCSF Chimera**, **DOCK6** e **DMS** instalados previamente e disponíveis no `PATH` — são ferramentas de terceiros (licenciadas, no caso do Chimera e do DOCK6) que não podem ser empacotadas junto com o app. O aplicativo verifica as três toda vez que é aberto e **não inicia** se alguma estiver faltando:
   - **Chimera**: baixe o instalador `.bin` em [rbvi.ucsf.edu/chimera](https://www.rbvi.ucsf.edu/chimera/download.html), execute-o e garanta que o comando `chimera` fique disponível no `PATH`.
   - **DOCK6**: solicite/baixe em [dock.compbio.ucsf.edu](http://dock.compbio.ucsf.edu/), compile-o e depois adicione a pasta `bin/` ao `PATH`, defina a variável de ambiente `DOCK6_PATH` apontando para o diretório de instalação, ou instale-o em `~/progs/dock6/`.
+  - **DMS**: siga as instruções em [cgl.ucsf.edu/chimera/docs/UsersGuide/dms.html](https://www.cgl.ucsf.edu/chimera/docs/UsersGuide/dms.html) e garanta que o comando `dms` fique disponível no `PATH`. O app testa se o `dms` encontrado realmente gera uma superfície (não basta o binário existir).
 
 ---
 
@@ -93,5 +94,5 @@ Verifique sua conexão com a internet e reabra o aplicativo. O processo de confi
 **"dpkg: error" durante a instalação**
 Execute `sudo apt-get install -f` para resolver dependências faltantes.
 
-**"Required external tool(s) not found: Chimera, DOCK6" ao abrir o app**
-O aplicativo verifica Chimera, DOCK6 e DMS antes de iniciar e recusa abrir se algum estiver faltando. Instale a(s) ferramenta(s) indicada(s) na tela de erro (veja os links em [Requisitos](#requisitos) acima) e reabra o BioMolExplorer.
+**"Required external tool(s) not found: Chimera, DOCK6, DMS" ao abrir o app**
+O aplicativo verifica Chimera, DOCK6 e DMS antes de iniciar e recusa abrir se algum estiver faltando. Instale a(s) ferramenta(s) indicada(s) na tela de erro (veja os links em [Requisitos](#requisitos) acima). Depois, clique em **Retry** na própria tela de erro — não é preciso fechar e reabrir o BioMolExplorer.

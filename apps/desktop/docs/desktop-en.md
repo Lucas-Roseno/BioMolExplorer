@@ -40,7 +40,7 @@ The current mode is **Native**, without Docker. The launcher automatically insta
 
 > Miniconda, Node.js, RDKit, OpenBabel, Vina, PyMOL and Flask are installed automatically on the first run.
 >
-> **Exception:** UCSF Chimera and DOCK6 are licensed third-party tools that cannot be bundled/redistributed, so the user must install them manually and make sure they're on `PATH` (see [userguide-linux-en.md](userguide-linux-en.md#requirements)). `init-native.sh` checks for Chimera, DOCK6 and DMS together on every launch (step `[2/6]`) and refuses to start the app if any is missing, showing exactly which one(s) need to be installed. DMS ships bundled with the source and normally passes this check automatically (precompiled binary, or auto-compiled on demand).
+> **Exception:** UCSF Chimera, DOCK6 and DMS are third-party tools that cannot be bundled/redistributed (the first two are licensed; DMS is deliberately not auto-installed by the app either), so the user must install them manually and make sure they're on `PATH` (see [userguide-linux-en.md](userguide-linux-en.md#requirements)). `init-native.sh` checks for Chimera, DOCK6 and DMS together on every launch (step `[2/6]`) and refuses to start the app if any is missing, showing exactly which one(s) need to be installed. For DMS, the check isn't just "does the command exist" — it runs a real functional test (generates a surface from a test PDB) to catch broken installs, such as a precompiled `dmsd` that's incompatible with the local glibc. None of the three are compiled/installed automatically by the app; the error screen has a **Retry** button to re-run the check without closing the app, once the user has installed whatever was missing.
 
 ---
 

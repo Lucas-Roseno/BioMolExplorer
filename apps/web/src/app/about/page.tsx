@@ -57,8 +57,8 @@ export default function AboutPage() {
               Centro Federal de Educação Tecnológica (CEFET-MG)
             </p>
             <p className="team-contact">
-              E-mail: <a href="mailto:lucas.araujo5938@gmail.com">lucas.araujo5938@gmail.com</a><br />
-              <a href="http://lattes.cnpq.br/" target="_blank" rel="noopener noreferrer">Lattes</a>
+              E-mail: <a href="mailto:lucas.araujo@aluno.cefetmg.br"> lucas.araujo@aluno.cefetmg.br </a><br />
+              <a href="http://lattes.cnpq.br/6864847850207492" target="_blank" rel="noopener noreferrer">Lattes</a>
             </p>
           </li>
 
@@ -75,6 +75,15 @@ export default function AboutPage() {
             </p>
           </li>
         </ul>
+      </section>
+
+      <section className="citation-section">
+        <h2 className="team-title">Recommended Citation</h2>
+        <div className="citation-box">
+          <p>
+            PIRES DA SILVA, M.; ALVES DE OLIVEIRA, T.; HABIB BECHELANE MAIA, E.; OLIVEIRA MENDES, G.; CRISTINA MOREIRA DAMÁZIO, L.; BRITO BARBOSA, D.; ANDRADE LEITE, F. H.; FALKOSKI, L.; FLORES DE SOUZA MARRA, I.; SIQUEIRA VALLE, M.; SILVA MATOS ANDRADE, L.; ČMELO, I.; FAYNE, D.; BATISTA DE CARVALHO, P.; MARQUES DA SILVA, A.; GUTTERRES TARANTO, A.; ARAÚJO, L. R. M.; DIAS, P. H. P. <strong>Molecular Data Exploration for Intelligent Drug Discovery: BioMolExplorer v2.0</strong>. Mendeley Data, 2025. Available at: &lt;<a href="https://doi.org/10.17632/5njg46dfj4.3" target="_blank" rel="noopener noreferrer">https://doi.org/10.17632/5njg46dfj4.3</a>&gt;.
+          </p>
+        </div>
       </section>
     </div>
   );

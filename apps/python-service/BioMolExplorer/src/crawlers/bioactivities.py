@@ -57,7 +57,7 @@ from typing import Optional
 from crawlers.settings import CrawlerSettings
 from kernel.utilities import fileHandling
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 
@@ -78,16 +78,20 @@ class Bioactivity(CrawlerSettings):
         
     def set_targetpath(self, path:str):
         self.__targetpath = path
-        if not os.path.exists(self.__path + self.__targetpath):
-            print('[ERROR]: The target path needs to be informed before!')
-            exit(1)
+        if not os.path.exists(self._get_full_targetpath()):
+            raise FileNotFoundError(f'Target path not found: {self._get_full_targetpath()}')
         
     
         
     def set_outputpath(self, path:str):
         self.__outputpath = path 
-        if not os.path.exists(self.__path + self.__outputpath):
-            os.makedirs(self.__path + self.__outputpath, exist_ok=True)
+        os.makedirs(self._get_full_outputpath(), exist_ok=True)
+
+    def _get_full_targetpath(self) -> str:
+        return resolve_biomol_path(self.__targetpath)
+
+    def _get_full_outputpath(self) -> str:
+        return resolve_biomol_path(self.__outputpath)
         
     
     
@@ -98,13 +102,14 @@ class Bioactivity(CrawlerSettings):
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(target_id)[0]
 
-            max_value_ref = filter_params.pop('max_value_ref') if 'max_value_ref' in filter_params else 10000
-            filter_params['target_chembl_id'] = target_id
+            request_filters = dict(filter_params)
+            max_value_ref = request_filters.pop('max_value_ref', 10000)
+            request_filters['target_chembl_id'] = target_id
             
             columns = ['activity_id', 'activity_properties', 'canonical_smiles', 'molecule_chembl_id', 'molecule_pref_name', 
                     'parent_molecule_chembl_id', 'pchembl_value', 'qudt_units', 'target_organism', 'target_pref_name', 'type', 'units', 'value']
             
-            bioact = files.csv_to_dataframe(target_id) if infile else self.__bioactivity.filter(**filter_params).only(columns)
+            bioact = files.csv_to_dataframe(target_id) if infile else self.__bioactivity.filter(**request_filters).only(columns)
             
             if len(bioact) > 0:
                 bioact = DataFrame.from_records(bioact)
@@ -119,6 +124,7 @@ class Bioactivity(CrawlerSettings):
         
         except Exception as e:
             self.logger.error(f'Error during to perform {target_id} in __search_bioactivity function', exc_info=True)
+            raise
             
         
     
@@ -131,7 +137,10 @@ class Bioactivity(CrawlerSettings):
         
         
         with futures.ThreadPoolExecutor(max_workers=10) as executor:
-            pool = {executor.submit(self.__search_bioactivity, target, filter_params) : target for target in target_ids}
+            pool = {
+                executor.submit(self.__search_bioactivity, target_id, dict(filter_params)): target_id
+                for target_id in target_ids
+            }
 
         [future.result() for future in pool]
              

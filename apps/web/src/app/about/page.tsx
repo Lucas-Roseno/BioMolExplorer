@@ -12,8 +12,8 @@ export default function AboutPage() {
             <h3 className="team-name">Alex Gutterres Taranto</h3>
             <p className="team-role">D.Sc. in Chemistry</p>
             <p className="team-affil">
-              Departamento de Biotecnologia (DBTEC)<br />
-              Universidade Federal de São João Del-Rei (UFSJ)
+              Department of Biotechnology (DBTEC)<br />
+              Federal University of São João del-Rei (UFSJ)
             </p>
             <p className="team-contact">
               E-mail: <a href="mailto:alex@alex.org">alex@alex.org</a><br />
@@ -26,8 +26,8 @@ export default function AboutPage() {
             <h3 className="team-name">Alisson Marques da Silva</h3>
             <p className="team-role">D.Sc. in Electrical Engineering</p>
             <p className="team-affil">
-              Departamento de Computação (DECOM-DV)<br />
-              Centro Federal de Educação Tecnológica (CEFET-MG)
+              Department of Computer Science (DECOM-DV)<br />
+              Federal Center for Technological Education of Minas Gerais (CEFET-MG)
             </p>
             <p className="team-contact">
               E-mail: <a href="mailto:alisson@cefetmg.br">alisson@cefetmg.br</a><br />
@@ -40,8 +40,8 @@ export default function AboutPage() {
             <h3 className="team-name">Michel Pires da Silva</h3>
             <p className="team-role">D.Sc. in Bioengineering</p>
             <p className="team-affil">
-              Departamento de Computação (DECOM-DV)<br />
-              Centro Federal de Educação Tecnológica (CEFET-MG)
+              Department of Computer Science (DECOM-DV)<br />
+              Federal Center for Technological Education of Minas Gerais (CEFET-MG)
             </p>
             <p className="team-contact">
               E-mail: <a href="mailto:michel@cefetmg.br">michel@cefetmg.br</a><br />
@@ -54,7 +54,7 @@ export default function AboutPage() {
             <h3 className="team-name">Lucas Roseno Medeiros Araujo</h3>
             <p className="team-role">Student in Computer Engineering</p>
             <p className="team-affil">
-              Centro Federal de Educação Tecnológica (CEFET-MG)
+              Federal Center for Technological Education of Minas Gerais (CEFET-MG)
             </p>
             <p className="team-contact">
               E-mail: <a href="mailto:lucas.araujo@aluno.cefetmg.br"> lucas.araujo@aluno.cefetmg.br </a><br />
@@ -67,7 +67,7 @@ export default function AboutPage() {
             <h3 className="team-name">Pedro Henrique Pires Dias</h3>
             <p className="team-role">Student in Computer Engineering</p>
             <p className="team-affil">
-              Centro Federal de Educação Tecnológica (CEFET-MG)
+              Federal Center for Technological Education of Minas Gerais (CEFET-MG)
             </p>
             <p className="team-contact">
               E-mail: <a href="mailto:pedro.dias@aluno.cefetmg.br">pedro.dias@aluno.cefetmg.br</a><br />

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -82,6 +82,12 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 768,
     autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
   });
 
   const basePath = resolveBasePath();
@@ -208,6 +214,14 @@ function createWindow() {
     showErrorScreen(win, title, hint, motorLogs);
   });
 }
+
+ipcMain.handle('biomol:select-workspace-parent', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Escolha onde salvar o workspace',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
 
 function showErrorScreen(win, title, hint, logs) {
   const escape = (s) => String(s || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));

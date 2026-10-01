@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { API_BASE_URL } from "../config";
+import { apiFetch } from '@/lib/apiFetch';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ export default function FolderPickerModal({
   const openNativePicker = async () => {
     setOpeningNative(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/filesystem/native-picker`);
+      const res = await apiFetch(`${API_BASE_URL}/api/filesystem/native-picker`);
       const data = await res.json();
       if (data.status === "ok" && data.path) {
         onSelect(data.path);
@@ -64,7 +65,7 @@ export default function FolderPickerModal({
       const url = path
         ? `${API_BASE_URL}/api/filesystem/browse?path=${encodeURIComponent(path)}`
         : `${API_BASE_URL}/api/filesystem/browse`;
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data: BrowseResponse = await res.json();
 
       if (data.status !== "ok") {

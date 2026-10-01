@@ -13,15 +13,32 @@
     --error-color: #dc3545;
 }
 
+html {
+    width: 100%;
+    height: 100%;
+}
+
 body {
     font-family: 'Quicksand', sans-serif;
     margin: 0;
-    background-color: var(--background-color);
+    padding: 0;
+    background-color: transparent;
     color: var(--text-color);
     display: flex;
     flex-direction: column;
-    align-items: center;
     min-height: 100vh;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Next.js mounts the app inside an unstyled <div> — ensure it is not
+   compressed by the body's align-items: center */
+body > div:first-child {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    align-self: stretch;
 }
 
 .page-title {
@@ -99,7 +116,7 @@ body {
     padding: 2.5rem;
     border-radius: 10px;
     box-shadow: 0 4px 15px var(--shadow-color);
-    margin-top: 2rem;
+    margin: 2rem auto;
     width: 100%;
     max-width: 1200px;
     box-sizing: border-box;
@@ -300,7 +317,7 @@ button[type="submit"]:hover {
     }
 }
 
-/* --- LOADING OVERLAY (PARA PDB E CHMBL) --- */
+/* --- LOADING OVERLAY (FOR PDB AND ChEMBL) --- */
 #loading-overlay {
     position: fixed;
     top: 0;
@@ -341,9 +358,9 @@ button[type="submit"]:hover {
     font-weight: bold;
 }
 
-/* ... (adicionar ao final do style.css) ... */
+/* ... (add to the end of style.css) ... */
 
-/* --- ESTILOS DO MODAL DE VISUALIZAÇÃO --- */
+/* --- VIEWER MODAL STYLES --- */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -352,7 +369,7 @@ button[type="submit"]:hover {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.6);
     display: none;
-    /* Começa escondido */
+    /* Hidden initially */
     justify-content: center;
     align-items: center;
     z-index: 2000;
@@ -365,7 +382,7 @@ button[type="submit"]:hover {
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
     width: 90%;
     max-width: 800px;
-    /* Largura máxima do modal */
+    /* Maximum modal width */
     max-height: 90vh;
     overflow-y: auto;
     position: relative;
@@ -388,7 +405,7 @@ button[type="submit"]:hover {
 .modal-body {
     display: flex;
     flex-wrap: wrap;
-    /* Permite quebrar a linha em telas menores */
+    /* Allow wrapping on smaller screens */
     gap: 20px;
     justify-content: center;
 }
@@ -413,7 +430,7 @@ button[type="submit"]:hover {
     border: 1px solid var(--border-color);
 }
 
-/* --- Estilo para nomes de arquivos clicáveis --- */
+/* --- Clickable filename styles --- */
 .clickable-filename {
     cursor: pointer;
     text-decoration: underline;
@@ -428,7 +445,7 @@ button[type="submit"]:hover {
 
 
 /* =======================================================================
-   ESTRUTURA DE BUSCA COMPARTILHADA (PDB, ChEMBL, ZINC)
+   SHARED SEARCH STRUCTURE (PDB, ChEMBL, ZINC)
    ======================================================================= */
 
 /* --- LAYOUT PRINCIPAL DIVIDIDO --- */
@@ -441,7 +458,7 @@ button[type="submit"]:hover {
     width: 100%;
 }
 
-/* Coluna da Esquerda (Formulário) */
+/* Left column (form) */
 .pdb-flex-layout .content-wrapper,
 .pdb-flex-layout>.form-container {
     flex: 1 1 45%;
@@ -450,7 +467,7 @@ button[type="submit"]:hover {
     flex-direction: column;
 }
 
-/* Coluna da Direita (Lista de Arquivos) */
+/* Right column (file list) */
 .pdb-flex-layout .pdb-list-container {
     flex: 1 1 45%;
     min-width: 320px;
@@ -486,7 +503,7 @@ button[type="submit"]:hover {
 }
 
 
-/* --- ESTILOS DOS FORMULÁRIOS --- */
+/* --- FORM STYLES --- */
 #pdb-form,
 #chembl-form,
 #zinc-form {
@@ -529,7 +546,7 @@ select:focus {
     margin-right: 0.5rem;
 }
 
-/* Botão de interrogação (?) */
+/* Question mark button (?) */
 .with-help {
     position: relative;
 }
@@ -583,7 +600,7 @@ select:focus {
     border-radius: 4px;
 }
 
-/* --- ESTILO DOS ITENS DA LISTA (ACORDEÃO E ARQUIVOS) --- */
+/* --- LIST ITEM STYLES (ACCORDION AND FILES) --- */
 .collapsible-header {
     background-color: #f1f1f1;
     color: #444;
@@ -634,7 +651,7 @@ select:focus {
     color: #c0392b;
 }
 
-/* --- SISTEMA DE NOTIFICAÇÕES (ALERTS) --- */
+/* --- NOTIFICATION SYSTEM (ALERTS) --- */
 #notification-container {
     position: fixed;
     top: 20px;
@@ -679,7 +696,7 @@ select:focus {
 }
 
 /* =======================================================================
-   RESTAURAÇÃO DO FIELDSET E LEGEND (Substituindo o Reset do Tailwind)
+   FIELDSET AND LEGEND RESTORATION (Replacing the Tailwind reset)
    ======================================================================= */
 
 fieldset {
@@ -697,7 +714,7 @@ legend {
     font-size: 1.1rem;
 }
 
-/* Coloca os fieldsets lado a lado em telas grandes */
+/* Place fieldsets side by side on large screens */
 .fieldset-row {
     display: flex;
     gap: 1.5rem;
@@ -711,7 +728,7 @@ legend {
     margin-bottom: 0;
 }
 
-/* Organiza os checkboxes do ChEMBL (Standard Type) */
+/* Arrange ChEMBL checkboxes (Standard Type) */
 .checkbox-group {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -728,7 +745,7 @@ legend {
 }
 
 /* =======================================================================
-   ESTILOS RESTAURADOS DO LEGADO (Listas, Ícones e Botões)
+   RESTORED LEGACY STYLES (Lists, Icons, and Buttons)
    ======================================================================= */
 .target-header-left {
     display: flex;
@@ -775,7 +792,7 @@ legend {
     align-items: center;
     gap: 8px;
     color: #ccc;
-    /* Cor da barrinha divisória | */
+    /* Divider bar color | */
 }
 
 .view-2d-btn,

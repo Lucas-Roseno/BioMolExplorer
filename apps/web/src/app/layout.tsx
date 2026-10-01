@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import ErrorBoundary from "../components/ErrorBoundary";
 import { ToastProvider } from "../components/ToastProvider";
+
+import AuthHeader from "../components/AuthHeader";
+import ConditionalLayoutElement from "../components/ConditionalLayoutElement";
+import { AuthProvider } from "../components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "BioMolExplorer",
@@ -23,45 +28,53 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ErrorBoundary>
+          <AuthProvider>
           <ToastProvider>
-            <header className="main-header">
-              <div className="header-content">
-                <Link href="/" className="header-link-home">
-                  <img src="/img/icon.png" alt="Logo" className="header-logo" />
-                </Link>
-                <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
-                  <h1>BioMolExplorer</h1>
-                </Link>
-              </div>
-              <nav className="main-nav">
-                <ul>
-                  <li><Link href="/">Home</Link></li>
-                  <li><Link href="/pdb">PDB</Link></li>
-                  <li><Link href="/chembl">ChEMBL</Link></li>
-                  <li><Link href="/zinc">ZINC</Link></li>
-                  <li><Link href="/analysis">Analysis</Link></li>
-                </ul>
-              </nav>
-            </header>
+            <ConditionalLayoutElement>
+              <header className="main-header">
+                <div className="header-content">
+                  <Link href="/" className="header-link-home">
+                    <img src="/img/icon.png" alt="Logo" className="header-logo" />
+                  </Link>
+                  <Link href="/" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center' }}>
+                    <h1>BioMolExplorer</h1>
+                  </Link>
+                  {/* Auth-aware session indicator (workspace + user + logout) */}
+                  <AuthHeader />
+                </div>
+                <nav className="main-nav">
+                  <ul>
+                    <li><Link href="/">Home</Link></li>
+                    <li><Link href="/pdb">PDB</Link></li>
+                    <li><Link href="/chembl">ChEMBL</Link></li>
+                    <li><Link href="/zinc">ZINC</Link></li>
+                    <li><Link href="/analysis">Analysis</Link></li>
+                  </ul>
+                </nav>
+              </header>
+            </ConditionalLayoutElement>
 
             {children}
 
-            <footer className="site-footer">
-              <div className="footer-inner">
-                <div className="footer-left">
-                  <Link href="/references" style={{ color: 'inherit', textDecoration: 'none', fontWeight: 'bold' }}>
-                    BioMolExplorer
-                  </Link> · Version 2.0
+            <ConditionalLayoutElement>
+              <footer className="site-footer">
+                <div className="footer-inner">
+                  <div className="footer-left">
+                    <Link href="/references" style={{ color: 'inherit', textDecoration: 'none', fontWeight: 'bold' }}>
+                      BioMolExplorer
+                    </Link> · Version 2.0
+                  </div>
+                  <nav className="footer-links">
+                    <Link href="/about">About</Link>
+                    <Link href="/references">References</Link>
+                    <Link href="/contact">Contact</Link>
+                  </nav>
+                  <div className="footer-right">Copyright © 2024 BioMolExplorer. All Rights Reserved.</div>
                 </div>
-                <nav className="footer-links">
-                  <Link href="/about">About</Link>
-                  <Link href="/references">References</Link>
-                  <Link href="/contact">Contact</Link>
-                </nav>
-                <div className="footer-right">Copyright © 2024 BioMolExplorer. All Rights Reserved.</div>
-              </div>
-            </footer>
+              </footer>
+            </ConditionalLayoutElement>
           </ToastProvider>
+          </AuthProvider>
         </ErrorBoundary>
       </body>
     </html>

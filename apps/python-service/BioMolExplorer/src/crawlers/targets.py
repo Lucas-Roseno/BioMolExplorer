@@ -55,7 +55,7 @@ from pathlib import Path
 from crawlers.settings import CrawlerSettings
 from kernel.utilities import fileHandling
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 
@@ -72,8 +72,10 @@ class Targets(CrawlerSettings):
     
     def set_outputpath(self, path:str):
         self.__outputpath = path 
-        if not os.path.exists(self.__path + self.__outputpath):
-            os.makedirs(self.__path + self.__outputpath, exist_ok=True)
+        os.makedirs(self._get_full_outputpath(), exist_ok=True)
+
+    def _get_full_outputpath(self) -> str:
+        return resolve_biomol_path(self.__outputpath)
       
      
        
@@ -85,9 +87,10 @@ class Targets(CrawlerSettings):
             infile  =  files.isFile(target_name)[0]
             columns = ['pref_name', 'target_chembl_id', 'target_components', 'target_type']
 
-            filter_params["pref_name__iexact"] =  target_name
-            
-            target = files.csv_to_dataframe(target_name) if infile else self.__target.filter(**filter_params).only(columns)
+            request_filters = dict(filter_params)
+            request_filters["pref_name__iexact"] = target_name
+
+            target = files.csv_to_dataframe(target_name) if infile else self.__target.filter(**request_filters).only(columns)
             
 
             if len(target) > 0:
@@ -101,6 +104,7 @@ class Targets(CrawlerSettings):
             
         except Exception as e:
             self.logger.error(f'Error during to perform {target_name} target in search function', exc_info=True)
+            raise
             
     
      

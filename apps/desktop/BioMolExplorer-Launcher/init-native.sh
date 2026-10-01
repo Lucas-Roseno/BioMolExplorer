@@ -277,7 +277,7 @@ start_services() {
   fuser -k -9 3000/tcp 3001/tcp 5000/tcp >/dev/null 2>&1 || true
 
   step "Starting Flask (port 5000)..."
-  (cd "$APP_DIR/apps/python-service" && "$PYTHON_BIN" app.py) > "$LOG_DIR/flask.log" 2>&1 &
+  (cd "$APP_DIR/apps/python-service" && BIOMOL_ALLOW_EXTERNAL_WORKSPACES=1 "$PYTHON_BIN" app.py) > "$LOG_DIR/flask.log" 2>&1 &
   local FLASK_PID=$!
 
   step "Starting Node.js API (port 3001)..."

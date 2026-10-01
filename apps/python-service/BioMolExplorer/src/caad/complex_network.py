@@ -73,7 +73,7 @@ from networkx import Graph
 from kernel.utilities import fileHandling
 from kernel.descriptors import Descriptors, similarityFunctions, fingerprints
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 from kernel.utilities import MolExplorer
 #----------------------------------------------------------------------------------------------
 
@@ -94,8 +94,8 @@ class GraphAnalysis():
         
     def set_outputpath(self, outputpath:str) -> None:
         self.__outputpath = outputpath  if outputpath != None else None
-        if self.__outputpath != None and not os.path.exists(self.__path + self.__outputpath):
-           os.makedirs(self.__path + self.__outputpath, exist_ok=True)
+        if self.__outputpath is not None:
+           os.makedirs(resolve_biomol_path(self.__outputpath), exist_ok=True)
     
     
     
@@ -281,17 +281,19 @@ class GraphAnalysis():
         
         try:
 
-            drugbank   = fileHandling(input_path=self.__inputpath, output_path=self.__inputpath + 'Molecules/')
-            similarity = fileHandling(input_path=self.__inputpath + 'Similarity/')
-            smiles2D   = fileHandling(output_path=self.__outputpath+'centroids/')
-            maxcomp    = fileHandling(input_path=self.__inputpath, output_path=self.__outputpath + 'data/maxcomp/')
+            input_dir = resolve_biomol_path(self.__inputpath)
+            output_dir = resolve_biomol_path(self.__outputpath)
+            similarity_dir = os.path.join(input_dir, 'Similarity', '')
+            drugbank   = fileHandling(input_path=input_dir, output_path=os.path.join(input_dir, 'Molecules', ''))
+            similarity = fileHandling(input_path=similarity_dir)
+            smiles2D   = fileHandling(output_path=os.path.join(output_dir, 'centroids', ''))
+            maxcomp    = fileHandling(input_path=input_dir, output_path=os.path.join(output_dir, 'data', 'maxcomp', ''))
 
             desc       = Descriptors()
 
 
             prefix = metric.value + '_' + fp.value + '_'
-            from kernel.config import BIOMOL_ROOT
-            data   = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__inputpath.lstrip('/') + 'Similarity/')) if f.endswith('.csv') and f.startswith(prefix)]
+            data = [f.rsplit('.')[0] for f in os.listdir(similarity_dir) if f.endswith('.csv') and f.startswith(prefix)]
             
             molecules = DataFrame(columns=['molecule_chembl_id', 'canonical_smiles']) 
             
@@ -310,7 +312,12 @@ class GraphAnalysis():
                     centroids[filename] = mcs
                     smiles2D.save_img_as_png(img, filename)
 
-                self.plot_statistical_degree_analysis(G[3], G[0], file_name=filename+'.png', output_path=self.__path + self.__outputpath + 'plots/')
+                self.plot_statistical_degree_analysis(
+                    G[3],
+                    G[0],
+                    file_name=filename + '.png',
+                    output_path=os.path.join(output_dir, 'plots', ''),
+                )
                 maxcomp.dataframe_to_csv(filename, G[2])
                 
                 molecules = concat([molecules, dataset[dataset['molecule_chembl_id'].isin(G[1]['molecule_chembl_id'].tolist())]])
@@ -326,6 +333,7 @@ class GraphAnalysis():
         
         except Exception as e:
             self.logger.error(f'during to perform the prepare_graph_analysis function', exc_info=True)
+            raise
         
 
         

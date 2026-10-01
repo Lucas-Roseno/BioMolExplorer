@@ -1,0 +1,234 @@
+<div id="biomol-palettes" aria-label="Comparação de três paletas para as telas 3D e de login do BioMolExplorer">
+  <style>
+    #biomol-palettes {
+      width: 100%;
+      color: light-dark(#2f2546, #f8f6fc);
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+
+    #biomol-palettes * { box-sizing: border-box; }
+
+    #biomol-palettes .palette-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    #biomol-palettes .palette {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid light-dark(rgba(71, 54, 109, 0.14), rgba(255, 255, 255, 0.13));
+      border-radius: 22px;
+      background: light-dark(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.06));
+    }
+
+    #biomol-palettes .palette[data-highlight="true"] {
+      box-shadow: 0 0 0 3px rgba(150, 134, 222, 0.34), 0 18px 48px rgba(71, 54, 109, 0.15);
+    }
+
+    #biomol-palettes .palette-head { padding: 18px 18px 14px; }
+    #biomol-palettes .palette-kicker {
+      margin: 0 0 5px;
+      color: light-dark(#705d9d, #b9afea);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+    #biomol-palettes h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+    #biomol-palettes .use { margin: 6px 0 0; color: light-dark(#6d647b, #c9c3d5); font-size: 13px; }
+
+    #biomol-palettes .screens { display: grid; gap: 1px; background: rgba(71, 54, 109, .13); }
+    #biomol-palettes .screen {
+      position: relative;
+      min-height: 170px;
+      overflow: hidden;
+      padding: 15px;
+    }
+    #biomol-palettes .screen-label {
+      position: relative;
+      z-index: 3;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      opacity: .75;
+    }
+
+    #biomol-palettes .molecule {
+      position: absolute;
+      inset: 0;
+      opacity: .95;
+    }
+    #biomol-palettes .bond {
+      position: absolute;
+      height: 5px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(185,175,234,.75), rgba(114,191,229,.8));
+      transform-origin: left center;
+      box-shadow: 0 0 12px rgba(150,134,222,.25);
+    }
+    #biomol-palettes .bond.a { width: 82px; left: 46%; top: 44%; transform: rotate(-20deg); }
+    #biomol-palettes .bond.b { width: 68px; left: 30%; top: 55%; transform: rotate(-62deg); }
+    #biomol-palettes .bond.c { width: 58px; left: 48%; top: 45%; transform: rotate(52deg); }
+    #biomol-palettes .atom {
+      position: absolute;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 25%, #f6f2ff 0 10%, #9686de 38%, #47366d 78%);
+      box-shadow: inset -5px -7px 10px rgba(40,24,68,.42), 0 0 22px rgba(150,134,222,.62);
+    }
+    #biomol-palettes .atom.a { left: 42%; top: 34%; }
+    #biomol-palettes .atom.b { left: 69%; top: 21%; background: radial-gradient(circle at 30% 25%, #eefaff 0 10%, #72bfe5 42%, #315c82 82%); }
+    #biomol-palettes .atom.c { left: 24%; top: 65%; width: 27px; height: 27px; }
+    #biomol-palettes .atom.d { left: 64%; top: 70%; width: 29px; height: 29px; background: radial-gradient(circle at 30% 25%, #ffeefa 0 10%, #dc83ad 42%, #713651 82%); }
+    #biomol-palettes .hero-copy { position: absolute; z-index: 2; left: 15px; bottom: 15px; max-width: 67%; }
+    #biomol-palettes .hero-copy strong { display: block; font-size: 18px; line-height: 1.02; letter-spacing: -.035em; }
+    #biomol-palettes .hero-copy span { display: block; margin-top: 6px; font-size: 10px; line-height: 1.4; opacity: .72; }
+
+    #biomol-palettes .login-screen { display: grid; place-items: center; }
+    #biomol-palettes .login-card {
+      position: relative;
+      z-index: 2;
+      width: min(90%, 205px);
+      padding: 14px;
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+    }
+    #biomol-palettes .login-brand { font-size: 11px; font-weight: 800; }
+    #biomol-palettes .login-title { margin: 12px 0 9px; font-size: 15px; font-weight: 800; line-height: 1.15; }
+    #biomol-palettes .input { height: 24px; margin-top: 6px; border-radius: 6px; }
+    #biomol-palettes .submit { height: 26px; margin-top: 8px; border-radius: 7px; }
+
+    #biomol-palettes .swatches { display: grid; grid-template-columns: repeat(6, 1fr); }
+    #biomol-palettes .swatch { height: 32px; }
+    #biomol-palettes .hexes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 12px 14px 15px;
+      color: light-dark(#5e536d, #d6d0df);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    #biomol-palettes .nebula-demo { color: #fbf9ff; background: radial-gradient(circle at 63% 34%, #594677 0, #34264f 48%, #21162f 100%); }
+    #biomol-palettes .nebula-login { color: #34274c; background: radial-gradient(circle at 28% 20%, #f8f5fc 0, #e8e1f4 58%, #cdbfe4 100%); }
+    #biomol-palettes .nebula-login .login-card { border: 1px solid rgba(71,54,109,.14); background: rgba(255,255,255,.78); box-shadow: 0 16px 35px rgba(71,54,109,.17); }
+    #biomol-palettes .nebula-login .input { border: 1px solid #d7cee7; background: rgba(255,255,255,.9); }
+    #biomol-palettes .nebula-login .submit { background: linear-gradient(135deg,#47366d,#9686de); }
+
+    #biomol-palettes .pearl-demo { color: #35294c; background: radial-gradient(circle at 63% 34%, #ffffff 0, #ede8f6 48%, #d3c8e8 100%); }
+    #biomol-palettes .pearl-demo .hero-copy span { opacity: .8; }
+    #biomol-palettes .pearl-login { color: #35294c; background: linear-gradient(145deg,#f8f6fc,#e5ddf1); }
+    #biomol-palettes .pearl-login .login-card { border: 1px solid #ded5ec; background: #fff; box-shadow: 0 15px 35px rgba(71,54,109,.12); }
+    #biomol-palettes .pearl-login .input { border: 1px solid #d8d0e5; background: #f8f6fc; }
+    #biomol-palettes .pearl-login .submit { background: #47366d; }
+
+    #biomol-palettes .twilight-demo { color: #fffafc; background: radial-gradient(circle at 63% 34%, #7d648b 0, #513c65 48%, #36263f 100%); }
+    #biomol-palettes .twilight-login { color: #fffafc; background: linear-gradient(145deg,#6d547d,#3c2a4b); }
+    #biomol-palettes .twilight-login .login-card { border: 1px solid rgba(255,244,250,.2); background: rgba(69,45,83,.58); box-shadow: 0 18px 40px rgba(45,25,52,.24); }
+    #biomol-palettes .twilight-login .input { border: 1px solid rgba(255,244,250,.2); background: rgba(255,255,255,.10); }
+    #biomol-palettes .twilight-login .submit { background: linear-gradient(135deg,#705d9d,#dc83ad); }
+
+    @media (max-width: 760px) {
+      #biomol-palettes .palette-grid { grid-template-columns: 1fr; }
+      #biomol-palettes .screens { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 480px) {
+      #biomol-palettes .screens { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <div class="palette-grid">
+    <section class="palette" data-id="nebula" data-highlight="true" aria-label="Paleta Ameixa Nebulosa, recomendada">
+      <div class="palette-head">
+        <p class="palette-kicker">Recomendada</p>
+        <h2>Ameixa Nebulosa</h2>
+        <p class="use">3D imersivo + login claro</p>
+      </div>
+      <div class="screens">
+        <div class="screen nebula-demo">
+          <span class="screen-label">3d-demo</span>
+          <div class="molecule" aria-hidden="true"><i class="bond a"></i><i class="bond b"></i><i class="bond c"></i><i class="atom a"></i><i class="atom b"></i><i class="atom c"></i><i class="atom d"></i></div>
+          <div class="hero-copy"><strong>Molecular clarity.</strong><span>Contraste alto, sem preto puro.</span></div>
+        </div>
+        <div class="screen login-screen nebula-login">
+          <span class="screen-label" style="position:absolute;top:15px;left:15px">login</span>
+          <div class="login-card"><div class="login-brand">◉ BioMolExplorer</div><div class="login-title">Continue the discovery process.</div><div class="input"></div><div class="input"></div><div class="submit"></div></div>
+        </div>
+      </div>
+      <div class="swatches" aria-label="Amostras de cor"><span class="swatch" style="background:#21162f"></span><span class="swatch" style="background:#47366d"></span><span class="swatch" style="background:#705d9d"></span><span class="swatch" style="background:#9686de"></span><span class="swatch" style="background:#e8e1f4"></span><span class="swatch" style="background:#ffffff"></span></div>
+      <div class="hexes"><span>#21162F</span><span>#47366D</span><span>#705D9D</span><span>#9686DE</span><span>#E8E1F4</span><span>#FFFFFF</span></div>
+    </section>
+
+    <section class="palette" data-id="pearl" data-highlight="false" aria-label="Paleta Pérola Molecular">
+      <div class="palette-head">
+        <p class="palette-kicker">Mais integrada</p>
+        <h2>Pérola Molecular</h2>
+        <p class="use">Ambas as telas claras</p>
+      </div>
+      <div class="screens">
+        <div class="screen pearl-demo">
+          <span class="screen-label">3d-demo</span>
+          <div class="molecule" aria-hidden="true"><i class="bond a"></i><i class="bond b"></i><i class="bond c"></i><i class="atom a"></i><i class="atom b"></i><i class="atom c"></i><i class="atom d"></i></div>
+          <div class="hero-copy"><strong>Molecular clarity.</strong><span>Continuidade máxima com o app.</span></div>
+        </div>
+        <div class="screen login-screen pearl-login">
+          <span class="screen-label" style="position:absolute;top:15px;left:15px">login</span>
+          <div class="login-card"><div class="login-brand">◉ BioMolExplorer</div><div class="login-title">Continue the discovery process.</div><div class="input"></div><div class="input"></div><div class="submit"></div></div>
+        </div>
+      </div>
+      <div class="swatches" aria-label="Amostras de cor"><span class="swatch" style="background:#f8f6fc"></span><span class="swatch" style="background:#e5ddf1"></span><span class="swatch" style="background:#ffffff"></span><span class="swatch" style="background:#47366d"></span><span class="swatch" style="background:#705d9d"></span><span class="swatch" style="background:#5ba5c9"></span></div>
+      <div class="hexes"><span>#F8F6FC</span><span>#E5DDF1</span><span>#FFFFFF</span><span>#47366D</span><span>#705D9D</span><span>#5BA5C9</span></div>
+    </section>
+
+    <section class="palette" data-id="twilight" data-highlight="false" aria-label="Paleta Crepúsculo Bioquímico">
+      <div class="palette-head">
+        <p class="palette-kicker">Mais expressiva</p>
+        <h2>Crepúsculo Bioquímico</h2>
+        <p class="use">Roxo médio + rosa molecular</p>
+      </div>
+      <div class="screens">
+        <div class="screen twilight-demo">
+          <span class="screen-label">3d-demo</span>
+          <div class="molecule" aria-hidden="true"><i class="bond a"></i><i class="bond b"></i><i class="bond c"></i><i class="atom a"></i><i class="atom b"></i><i class="atom c"></i><i class="atom d"></i></div>
+          <div class="hero-copy"><strong>Molecular clarity.</strong><span>Mais calor e personalidade.</span></div>
+        </div>
+        <div class="screen login-screen twilight-login">
+          <span class="screen-label" style="position:absolute;top:15px;left:15px">login</span>
+          <div class="login-card"><div class="login-brand">◉ BioMolExplorer</div><div class="login-title">Continue the discovery process.</div><div class="input"></div><div class="input"></div><div class="submit"></div></div>
+        </div>
+      </div>
+      <div class="swatches" aria-label="Amostras de cor"><span class="swatch" style="background:#36263f"></span><span class="swatch" style="background:#513c65"></span><span class="swatch" style="background:#7d648b"></span><span class="swatch" style="background:#dc83ad"></span><span class="swatch" style="background:#b9afea"></span><span class="swatch" style="background:#fffafc"></span></div>
+      <div class="hexes"><span>#36263F</span><span>#513C65</span><span>#7D648B</span><span>#DC83AD</span><span>#B9AFEA</span><span>#FFFAFC</span></div>
+    </section>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById('biomol-palettes');
+      const state = { destaque: 'nebula' };
+      function render() {
+        root.querySelectorAll('.palette').forEach((palette) => {
+          palette.dataset.highlight = String(palette.dataset.id === state.destaque);
+        });
+      }
+      render();
+      if (globalThis.Tweak) {
+        const tweak = new Tweak({ container: root, onChange: render });
+        tweak.addSelect(state, 'destaque', {
+          label: 'Destacar paleta',
+          reference: 'palette.selection',
+          options: [
+            { label: 'Ameixa Nebulosa', value: 'nebula' },
+            { label: 'Pérola Molecular', value: 'pearl' },
+            { label: 'Crepúsculo Bioquímico', value: 'twilight' }
+          ]
+        });
+      }
+    })();
+  </script>
+</div>

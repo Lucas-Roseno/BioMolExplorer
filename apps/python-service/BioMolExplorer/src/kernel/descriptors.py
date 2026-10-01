@@ -82,7 +82,7 @@ from rdkit.DataStructs.cDataStructs import SparseBitVect
 #----------------------------------------------------------------------------------------------
 from kernel.utilities import fileHandling, fileReading
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 
@@ -123,8 +123,7 @@ class Descriptors():
         
     def set_outputpath(self, outputpath:str) -> None:
         self.__outputpath = outputpath 
-        if not os.path.exists(self.__path + self.__outputpath):
-           os.makedirs(self.__path + self.__outputpath, exist_ok=True)
+        os.makedirs(resolve_biomol_path(self.__outputpath), exist_ok=True)
            
     
      
@@ -145,6 +144,7 @@ class Descriptors():
 
         except Exception as e:
             self.logger.error(f'Error processing smiles in get_fingerprints function', exc_info=True)
+            raise
 
     
 
@@ -258,8 +258,7 @@ class MolSimilarity():
         
     def set_outputpath(self, outputpath:str) -> None:
         self.__outputpath = outputpath 
-        if not os.path.exists(self.__path + self.__outputpath):
-           os.makedirs(self.__path + self.__outputpath, exist_ok=True)
+        os.makedirs(resolve_biomol_path(self.__outputpath), exist_ok=True)
         
     
     def clear_lsh(self):
@@ -380,8 +379,7 @@ class MolSimilarity():
         try:
             
             data = fileHandling(input_path=self.__inputpath, output_path=self.__outputpath)
-            from kernel.config import BIOMOL_ROOT
-            files = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__inputpath.lstrip('/')))
+            files = [f.rsplit('.')[0] for f in os.listdir(resolve_biomol_path(self.__inputpath))
                      if f.endswith('.csv') and f.startswith(fp) and (f.endswith('MOLS.csv') or f.endswith('SIMS.csv'))] if filename == None else [filename.rsplit('.')[0]]
             
             for filename in files:
@@ -409,3 +407,4 @@ class MolSimilarity():
 
         except Exception as e:
             self.logger.error(f'Error during to perform the perform_similarity function', exc_info=True)
+            raise

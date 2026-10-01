@@ -46,6 +46,7 @@ const excludes = [
   '*.AppImage',
   '*.exe',
   '*.dmg',
+  '*.db',
 ].map((p) => `--exclude="${p}"`).join(' ');
 
 const projectName = path.basename(PROJECT_ROOT);

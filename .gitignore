@@ -7,6 +7,9 @@ venv
 node_modules/
 **/resultados/
 apps/python-service/BioMolExplorer/resultados/
+# User uploads (must NOT be committed or packaged in .deb)
+uploads/
+**/uploads/
 # Desktop temporary files, dependencies and builds
 apps/desktop/teste-desktop/
 apps/desktop/wrapper/dist/
@@ -18,3 +21,6 @@ apps/desktop/BioMolExplorer-Launcher-linux
 /BioMolExplorer/
 # Backups temporários
 **/BioMolExplorer_bkp/
+# Auth DB and user data (lives in ~/.biomolexplorer — never in the repo)
+*.db
+auth.db

@@ -28,7 +28,6 @@ desktop/
 | Plataforma | Modo | Script | Status |
 |---|---|---|---|
 | Linux | Nativo (Conda + Node.js) | `init-native.sh` | ✅ Implementado e funcionando |
-| macOS | Nativo (Conda + Node.js) | `init-native.sh` | 🟡 Script pronto, não testado em Mac |
 
 > O build ativo e distribuído atualmente é o **`linux-native`**.
 

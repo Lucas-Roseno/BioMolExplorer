@@ -3,7 +3,8 @@ const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const VERSION_URL = 'https://raw.githubusercontent.com/Lucas-Roseno/BioMolExplorer/main/package.json';
+const RELEASES_API_URL = 'https://api.github.com/repos/Lucas-Roseno/BioMolExplorer/releases/latest';
+const RELEASES_PAGE_URL = 'https://github.com/Lucas-Roseno/BioMolExplorer/releases';
 
 // Fake scheme used by the "Retry" button on the error screen. Never actually
 // navigated to — intercepted and re-run in-process by the will-navigate handler
@@ -37,10 +38,14 @@ function resolveLauncher(basePath) {
 
 async function checkForUpdates(win, currentVersion) {
   try {
-    const res = await fetch(VERSION_URL, { headers: { 'User-Agent': 'BioMolExplorer' } });
+    const res = await fetch(RELEASES_API_URL, {
+      headers: { 'User-Agent': 'BioMolExplorer', Accept: 'application/vnd.github+json' },
+    });
+    // 404 means the repo has no published release yet — treat like any other
+    // "can't check right now" case rather than surfacing it to the user.
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const latest = data.version;
+    const latest = String(data.tag_name || '').replace(/^v/, '');
     if (!/^\d+\.\d+/.test(latest)) throw new Error(`Invalid version format: ${latest}`);
     const isOutdated = latest !== currentVersion;
 
@@ -65,7 +70,7 @@ async function checkForUpdates(win, currentVersion) {
         cancelId: 1,
       });
       if (response === 0) {
-        shell.openExternal('https://biomolexplorer.github.io/download/');
+        shell.openExternal(data.html_url || RELEASES_PAGE_URL);
       }
     }
   } catch {

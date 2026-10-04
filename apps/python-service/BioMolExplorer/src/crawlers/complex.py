@@ -57,7 +57,7 @@ from rcsbsearchapi.search import AttributeQuery
 
 #----------------------------------------------------------------------------------------------
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 
@@ -95,6 +95,7 @@ class PDBComplex():
 
 
 
+    
     def set_outputpath(self, output_path:str):
         self.__outputpath = output_path
         if self.__outputpath:
@@ -104,21 +105,7 @@ class PDBComplex():
 
     def _resolve_outputpath(self) -> str:
         """Returns the absolute output path regardless of how it was set."""
-        if not self.__outputpath:
-            return self.__path
-        
-        # If it already includes the root path, return it directly
-        if self.__outputpath.startswith(self.__path):
-            return self.__outputpath
-            
-        # Mimic utilities.fileHandling string concatenation for legacy paths starting with '/'
-        if self.__outputpath.startswith('/'):
-            # Check if it's a true absolute path that exists and is not just /datasets
-            if os.path.isabs(self.__outputpath) and os.path.exists(os.path.dirname(self.__outputpath)) and not self.__outputpath.startswith('/datasets'):
-                return self.__outputpath
-            return self.__path + self.__outputpath
-            
-        return os.path.join(self.__path, self.__outputpath)
+        return resolve_biomol_path(self.__outputpath)
             
 
 
@@ -255,4 +242,3 @@ class PDBComplex():
             raise e
 
     
-

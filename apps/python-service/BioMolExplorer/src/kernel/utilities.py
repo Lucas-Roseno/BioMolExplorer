@@ -72,7 +72,7 @@ rdDepictor.SetPreferCoordGen(True)
 
 #----------------------------------------------------------------------------------------------
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 class MyUtilities():
@@ -85,6 +85,12 @@ class MyUtilities():
         self.set_outputpath(output_path)
   
             
+    def _get_full_inputpath(self):
+        return resolve_biomol_path(self.inputpath)
+
+    def _get_full_outputpath(self):
+        return resolve_biomol_path(self.outputpath)
+
     def set_inputpath(self, input_path=None):
         if input_path is not None:
             if input_path.startswith(self.path):
@@ -103,8 +109,10 @@ class MyUtilities():
                 self.outputpath = output_path
         else:
             self.outputpath = None
-        if self.outputpath and not os.path.exists(self.path + self.outputpath):
-            os.makedirs(self.path + self.outputpath, exist_ok=True)
+        if self.outputpath:
+            full_out = self._get_full_outputpath()
+            if not os.path.exists(full_out):
+                os.makedirs(full_out, exist_ok=True)
         
 
 
@@ -120,12 +128,13 @@ class fileReading(MyUtilities):
     def __iter__(self):
         
         try:
-            self.__linhas = open(self.path + self.inputpath + self.__file, 'r').readlines()
+            self.__linhas = open(os.path.join(self._get_full_inputpath(), self.__file), 'r').readlines()
             self.__indice = 0
             return self
         
         except Exception as e:
             self.logger.error(f'Error during to perform the __iter__ function', exc_info=True)
+            raise
     
 
 
@@ -139,8 +148,11 @@ class fileReading(MyUtilities):
             self.__indice += 1
             return linha.strip()
         
+        except StopIteration:
+            raise
         except Exception as e:
             self.logger.error(f'Error during to perform the __next__ function', exc_info=True)
+            raise
 
     
     
@@ -148,13 +160,13 @@ class fileReading(MyUtilities):
         
         try:
 
-            with open(self.path + self.inputpath + self.__file, 'r') as file:
+            with open(os.path.join(self._get_full_inputpath(), self.__file), 'r') as file:
                 size = sum(1 for _ in file)
             return size
         
         except Exception as e:
             self.logger.error('Error during to perform the get_size function', exc_info=True)
-            return None
+            raise
         
     
     def get_chunk(self, chunk_number, chunk_size):
@@ -164,13 +176,13 @@ class fileReading(MyUtilities):
             start_index = chunk_number * chunk_size
             end_index = start_index + chunk_size
             end_index = min(end_index, self.__size)
-            with open(self.path + self.inputpath + self.__file, 'r') as file:
+            with open(os.path.join(self._get_full_inputpath(), self.__file), 'r') as file:
                 lines = file.readlines()[start_index:end_index]
             return [line.strip() for line in lines]
         
         except Exception as e:
             self.logger.error('Error during to perform the get_chunk function', exc_info=True)
-            return None
+            raise
     
 
 
@@ -187,19 +199,19 @@ class fileHandling(MyUtilities):
         
         
     def isFile(self, file) -> tuple:
-        pin  = os.path.isfile(self.path + self.inputpath + file + self.__extension) if self.inputpath else None
-        pout = os.path.isfile(self.path + self.outputpath + file + self.__extension) if self.outputpath else None
+        pin  = os.path.isfile(self._get_full_inputpath() + file + self.__extension) if self.inputpath else None
+        pout = os.path.isfile(self._get_full_outputpath() + file + self.__extension) if self.outputpath else None
         return (pin, pout)
      
 
     def save_input_data(self, filename:str, data:str):
-        path = self.path + self.outputpath
+        path = self._get_full_outputpath()
         with open(path + filename, 'w') as f:
             f.write(data)  
 
 
     def csv_to_dataframe(self, file:str, chunksize=0, delimiter=',')  -> DataFrame:
-        path = self.path + self.inputpath + file + self.__extension
+        path = self._get_full_inputpath() + file + self.__extension
         df   = DataFrame()
         
         try:
@@ -214,12 +226,13 @@ class fileHandling(MyUtilities):
         
         except Exception as e:
             self.logger.error(f'Error during to perform {file} file in csv_to_dataframe function', exc_info=True)
+            raise
                
 
 
     
     def dataframe_to_csv(self, file:str, df:DataFrame, mode='w')  -> None:
-        path = self.path + self.outputpath + file + self.__extension
+        path = self._get_full_outputpath() + file + self.__extension
         
         try:
 
@@ -230,6 +243,7 @@ class fileHandling(MyUtilities):
             
         except Exception as e:
             self.logger.error(f'Error during to perform {file} file in dataframe_to_csv function', exc_info=True)
+            raise
         
 
 
@@ -242,6 +256,7 @@ class fileHandling(MyUtilities):
         
         except Exception as e:
             self.logger.error(f'Error during to perform the dict_to_dataframe function', exc_info=True)
+            raise
         
     
     
@@ -254,6 +269,7 @@ class fileHandling(MyUtilities):
         
         except Exception as e:
             self.logger.error(f'Error during to perform the convert_str_to_dict function', exc_info=True)
+            raise
             
     
             
@@ -261,14 +277,15 @@ class fileHandling(MyUtilities):
         
         try:
 
-            if not os.path.exists(self.path + self.outputpath):
-                os.makedirs(self.path + self.outputpath, exist_ok=True)
+            if not os.path.exists(self._get_full_outputpath()):
+                os.makedirs(self._get_full_outputpath(), exist_ok=True)
                 
-            path = self.path + self.outputpath + file + '.png'
+            path = self._get_full_outputpath() + file + '.png'
             img.save(path)
             
         except Exception as e:
             self.logger.error(f'Error during to perform {file} file in save_img_as_png function', exc_info=True)
+            raise
     
     
         
@@ -279,7 +296,7 @@ class fileHandling(MyUtilities):
             df = DataFrame(columns=['molecule_chembl_id', 'canonical_smiles', 'molecule_properties'])
             explorer = MolExplorer()
 
-            molecules = [mol.rsplit('.')[0] for mol in os.listdir(os.path.join(self.path, self.inputpath.lstrip('/'))) if mol.endswith('.csv')]
+            molecules = [mol.rsplit('.')[0] for mol in os.listdir(self._get_full_inputpath()) if mol.endswith('.csv')]
             for mol in molecules:
                 tmp = self.csv_to_dataframe(mol)
                 tmp['canonical_smiles'] = self.convert_str_to_dict(tmp, 'molecule_structures', 'canonical_smiles')
@@ -292,6 +309,7 @@ class fileHandling(MyUtilities):
         
         except Exception as e:
             self.logger.error(f'Error during to perform the __get_datamols function', exc_info=True)
+            raise
     
     
     
@@ -325,6 +343,7 @@ class fileHandling(MyUtilities):
                 
         except Exception as e:
             self.logger.error(f'during to perform {target} target in prepare_datamols function', exc_info=True)
+            raise
     
     
             
@@ -396,7 +415,7 @@ class MolConverter(MyUtilities):
             mol = Chem.MolFromSmiles(smiles)
             img = Draw.MolToImage(mol, size=(300, 300))
             
-            path = self.path + self.outputpath + output_file_name.split('.')[0] + '.png'
+            path = self._get_full_outputpath() + output_file_name.split('.')[0] + '.png'
             img.save(path)
             img.close()
             

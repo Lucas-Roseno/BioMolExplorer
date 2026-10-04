@@ -7,6 +7,7 @@ import Link from "next/link";
 import { API_BASE_URL } from "../../config";
 import LoadingOverlay from "../../components/LoadingOverlay";
 import FolderPickerModal from "../../components/FolderPickerModal";
+import AuthenticatedImage from "../../components/AuthenticatedImage";
 import { useToast } from "../../components/ToastProvider";
 import InfoTooltip from "../../components/InfoTooltip";
 
@@ -14,6 +15,7 @@ import InfoTooltip from "../../components/InfoTooltip";
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
 
+import { apiFetch, downloadWithAuth } from '@/lib/apiFetch';
 import {
   LineChart, Line,
   BarChart, Bar,
@@ -78,6 +80,7 @@ function SimilarityTab() {
   const [targets, setTargets] = useState<string[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<string>('Acetylcholinesterase');
   const [datasetType, setDatasetType] = useState<'MOLS' | 'SIMS'>('MOLS');
+  const [graphView, setGraphView] = useState<'strongest' | 'full'>('strongest');
 
   // Modal State
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -112,14 +115,13 @@ function SimilarityTab() {
   useEffect(() => {
     async function fetchTargets() {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/chembl_files`);
-        if (res.ok) {
-          const data = await res.json();
-          const targetNames = Object.keys(data);
-          setTargets(targetNames);
-          if (targetNames.length > 0 && !targetNames.includes(selectedTarget)) {
-            setSelectedTarget(targetNames[0]);
-          }
+        const res = await apiFetch(`${API_BASE_URL}/api/analysis/targets`);
+        if (!res.ok) throw new Error(`Could not load similarity targets (${res.status}).`);
+        const data = await res.json();
+        const targetNames = Array.isArray(data.targets) ? data.targets : [];
+        setTargets(targetNames);
+        if (targetNames.length > 0 && !targetNames.includes(selectedTarget)) {
+          setSelectedTarget(targetNames[0]);
         }
       } catch (e) {
         console.error("Failed to load targets", e);
@@ -138,19 +140,17 @@ function SimilarityTab() {
         setLoading(true);
         setErrorMsg(null);
         setNeedsProcessing(false);
-        const graphRes = await fetch(`${API_BASE_URL}/api/analysis/graph-data?target=${encodeURIComponent(selectedTarget)}&datasetType=${datasetType}`);
+        const graphRes = await apiFetch(`${API_BASE_URL}/api/analysis/graph-data?target=${encodeURIComponent(selectedTarget)}&datasetType=${datasetType}&view=${graphView}`);
         
-        if (graphRes.status === 404) {
-             const json = await graphRes.json();
-             if (json.needs_processing) {
-                 setNeedsProcessing(true);
-                 setGraphData(null);
-                 setLoading(false);
-                 return;
-             }
+        if (!graphRes.ok) {
+          const payload = await graphRes.json().catch(() => ({}));
+          if (graphRes.status === 404 && payload.needs_processing) {
+            setNeedsProcessing(true);
+            setGraphData(null);
+            return;
+          }
+          throw new Error(payload.message || `Could not load graph data (${graphRes.status}).`);
         }
-        
-        if (!graphRes.ok) throw new Error("Failed to load graph data.");
         const graphJson = await graphRes.json();
 
         if (graphJson.success && graphJson.data) {
@@ -183,7 +183,7 @@ function SimilarityTab() {
           setGraphData(graphJson.data);
         }
 
-        const plotsRes = await fetch(`${API_BASE_URL}/api/analysis/plots`);
+        const plotsRes = await apiFetch(`${API_BASE_URL}/api/analysis/plots`);
         if (plotsRes.ok) {
           const plotsJson = await plotsRes.json();
           if (plotsJson.success && plotsJson.data) {
@@ -202,20 +202,28 @@ function SimilarityTab() {
       }
     }
     loadData();
-  }, [selectedTarget, datasetType, refreshTrigger]);
+  }, [selectedTarget, datasetType, graphView, refreshTrigger]);
 
   const handleProcessData = async () => {
     try {
       setIsProcessing(true);
       setErrorMsg(null);
-      const res = await fetch(`${API_BASE_URL}/api/analysis/process-graphs`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/analysis/process-graphs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: selectedTarget })
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to process graphs.");
-      
+      if (!res.ok || !data.success || !data.task_id) throw new Error(data.message || "Failed to start similarity processing.");
+
+      while (true) {
+        await new Promise(resolve => window.setTimeout(resolve, 1000));
+        const statusRes = await apiFetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(data.task_id)}`);
+        const status = await statusRes.json();
+        if (!statusRes.ok) throw new Error(status.message || 'Could not read similarity task status.');
+        if (status.status === 'completed') break;
+        if (status.status === 'error') throw new Error(status.message || 'Similarity processing failed.');
+      }
       setNeedsProcessing(false);
       setRefreshTrigger(prev => prev + 1);
     } catch (e: any) {
@@ -242,7 +250,7 @@ function SimilarityTab() {
       if (node.smiles) {
         setSvgLoading(true);
         try {
-          const res = await fetch(`${API_BASE_URL}/api/analysis/molecule-image`, {
+          const res = await apiFetch(`${API_BASE_URL}/api/analysis/molecule-image`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ smiles: node.smiles })
@@ -313,21 +321,36 @@ function SimilarityTab() {
                   <option value="SIMS">Similar Molecules (SIMS)</option>
                 </select>
               </div>
+              <div>
+                <label style={{ fontWeight: 'bold', marginRight: '10px' }}>Graph View: <InfoTooltip content="The strongest connected component is the densest connected molecular cluster. The complete graph includes every calculated similarity connection." /></label>
+                <select value={graphView} onChange={(e) => setGraphView(e.target.value as 'strongest' | 'full')} style={{ padding: '8px', borderRadius: '5px', border: '1px solid #ccc', fontSize: '1rem' }}>
+                  <option value="strongest">Strongest Connected Component</option>
+                  <option value="full">Complete Graph</option>
+                </select>
+              </div>
               {summaryImageUrl && (
                 <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
-                  <a href={`${API_BASE_URL}/api/analysis/plot/${summaryImageUrl}`} target="_blank" download style={{ padding: '8px 15px', backgroundColor: 'var(--primary-color)', color: '#fff', borderRadius: '5px', textDecoration: 'none', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                  <button
+                    type="button"
+                    onClick={() => void downloadWithAuth(
+                      `${API_BASE_URL}/api/analysis/plot/${encodeURIComponent(summaryImageUrl)}`,
+                      summaryImageUrl,
+                    )}
+                    style={{ padding: '8px 15px', backgroundColor: 'var(--primary-color)', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer' }}
+                  >
                     <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                       <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
                       <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
                     </svg>
                     Download Summary ({datasetType})
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
 
             <div style={{ textAlign: "center", marginBottom: "30px", color: "#666" }}>
               <p style={{ marginBottom: "10px" }}>Explore connections between molecules based on Tanimoto Similarity (Morgan Fingerprints).</p>
+              <p style={{ maxWidth: '900px', margin: '0 auto 14px', fontSize: '0.9rem', color: '#666' }}>The default view shows the strongest connected component, meaning the largest group of molecules connected by similarity links. Use Graph View to inspect the complete calculated network.</p>
               <button onClick={() => setIs3D(!is3D)} style={{ padding: '8px 16px', backgroundColor: is3D ? '#26828e' : 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>
                 {is3D ? 'Switch to 2D View' : 'Switch to 3D View'}
               </button>
@@ -349,7 +372,7 @@ function SimilarityTab() {
                 <i className="fas fa-exclamation-triangle" style={{ fontSize: '1.2rem', flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <strong style={{ display: 'block', marginBottom: '4px' }}>Could not load graph data</strong>
-                  <span style={{ fontSize: '0.9rem' }}>The similarity network could not be loaded. Please check your connection and try again, or process the graphs if they are missing.</span>
+                  <span style={{ fontSize: '0.9rem' }}>{errorMsg}</span>
                 </div>
               </div>
             )}
@@ -505,7 +528,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
       return;
     }
     try {
-      const res = await fetch('/api/filesystem/validate-folder', {
+      const res = await apiFetch('/api/filesystem/validate-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path, folder_type: type })
@@ -552,8 +575,8 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
     const fetchData = async () => {
       try {
         const [targetsRes, resultsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`)
+          apiFetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
+          apiFetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`)
         ]);
         
         if (targetsRes.ok) {
@@ -582,7 +605,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
       const fetchResultCsv = async () => {
         setLoadingResults(true);
         try {
-          const res = await fetch(`${API_BASE_URL}/api/redocking/csv/${activeResultTarget}`);
+          const res = await apiFetch(`${API_BASE_URL}/api/redocking/csv/${activeResultTarget}`);
           if (res.ok) {
             const data = await res.json();
             setResultsData({ headers: data.headers, rows: data.rows });
@@ -603,7 +626,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
     if (runningTaskId) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/redocking/status/${runningTaskId}`);
+          const res = await apiFetch(`${API_BASE_URL}/api/redocking/status/${runningTaskId}`);
           if (res.ok) {
             const data = await res.json();
             setTaskStatus(data);
@@ -617,7 +640,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
                 showToast('warning', 'Task Stopped or Interrupted', 'The background server restarted or the task is no longer active.');
               }
               // Refresh available results
-              const resultsRes = await fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`);
+              const resultsRes = await apiFetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`);
               if (resultsRes.ok) {
                 const results = await resultsRes.json();
                 setAvailableResults(results);
@@ -646,7 +669,7 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
       if (!prepareComplex && preparedReceptorPath) {
         body.prepared_receptor_path = preparedReceptorPath;
       }
-      const res = await fetch(`${API_BASE_URL}/api/redocking/run`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/redocking/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -665,9 +688,12 @@ function RedockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs,
     }
   };
 
-  const downloadCsv = () => {
+  const downloadCsv = async () => {
     if (activeResultTarget) {
-      window.open(`${API_BASE_URL}/api/redocking/download/${activeResultTarget}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/redocking/download/${encodeURIComponent(activeResultTarget)}`,
+        `redocking_results_${activeResultTarget}.csv`,
+      );
     }
   };
 
@@ -983,7 +1009,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
   useEffect(() => {
     const fetchTargets = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/admet/available-targets`);
+        const res = await apiFetch(`${API_BASE_URL}/api/admet/available-targets`);
         if (res.ok) {
           const targets: string[] = await res.json();
           setAvailableTargets(targets);
@@ -1008,7 +1034,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
     if (runningTaskId) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/admet/status/${runningTaskId}`);
+          const res = await apiFetch(`${API_BASE_URL}/api/admet/status/${runningTaskId}`);
           if (res.ok) {
             const data = await res.json();
             setTaskStatus(data);
@@ -1038,8 +1064,8 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
     setErrorMsg(null);
     try {
       const [csvRes, plotsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/admet/csv/${encodeURIComponent(target)}`),
-        fetch(`${API_BASE_URL}/api/admet/plots/${encodeURIComponent(target)}`)
+        apiFetch(`${API_BASE_URL}/api/admet/csv/${encodeURIComponent(target)}`),
+        apiFetch(`${API_BASE_URL}/api/admet/plots/${encodeURIComponent(target)}`)
       ]);
       if (csvRes.ok) {
         const d = await csvRes.json();
@@ -1071,7 +1097,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
     setExecutionLogs("");
     setIsRunning(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admet/run`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/admet/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target: selectedTarget })
@@ -1093,29 +1119,13 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
     }
   };
 
-  const downloadImage = (plotFile: string) => {
+  const downloadImage = async (plotFile: string) => {
     const url = `${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(plotFile)}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = plotFile;
-    
-    fetch(url)
-      .then(res => res.blob())
-      .then(blob => {
-        const objectUrl = window.URL.createObjectURL(blob);
-        a.href = objectUrl;
-        a.click();
-        window.URL.revokeObjectURL(objectUrl);
-      })
-      .catch(err => {
-        console.error("Failed to download image", err);
-        a.target = '_blank';
-        a.click();
-      });
+    await downloadWithAuth(url, plotFile);
   };
 
   const downloadAllImages = () => {
-    plots.forEach(plotFile => downloadImage(plotFile));
+    plots.forEach(plotFile => void downloadImage(plotFile));
   };
 
   const openMoleculeModal = async (id: string, smiles: string) => {
@@ -1124,7 +1134,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
     setMolecule3DBlock(null);
     setSvgLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/analysis/molecule-image`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/analysis/molecule-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ smiles })
@@ -1156,9 +1166,12 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
     }
   };
 
-  const downloadCsv = () => {
+  const downloadCsv = async () => {
     if (selectedTarget && currentGroup)
-      window.open(`${API_BASE_URL}/api/admet/download/${encodeURIComponent(selectedTarget)}/${currentGroup.group}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/admet/download/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(currentGroup.group)}`,
+        `admet_${selectedTarget}_${currentGroup.group}.csv`,
+      );
   };
 
   // ── Render ──────────────────────────────────────────────────────────
@@ -1488,7 +1501,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                       backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
                       flex: '1', minWidth: '320px'
                     }}>
-                      <img
+                      <AuthenticatedImage
                         src={`${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(plotFile)}`}
                         alt={`BOILED-Egg plot — ${plotFile}`}
                         title="Click to enlarge"
@@ -1500,16 +1513,14 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
                         <p style={{ fontSize: '0.8rem', color: '#999', margin: 0 }}>{plotFile}</p>
                         <div style={{ display: 'flex', gap: '5px' }}>
-                          <a
-                            href={`${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(plotFile)}`}
-                            download={plotFile}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => void downloadImage(plotFile)}
                             style={{ background: 'none', border: 'none', color: '#4b5563', cursor: 'pointer', padding: '4px', textDecoration: 'none' }}
                             title="Download Image"
                           >
                             <i className="fas fa-download"></i>
-                          </a>
+                          </button>
                           <button
                             onClick={() => setEnlargedImage(plotFile)}
                             style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', padding: '4px' }}
@@ -1594,7 +1605,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
             >
               &times;
             </button>
-            <img 
+            <AuthenticatedImage
               src={`${API_BASE_URL}/api/admet/plot/${encodeURIComponent(selectedTarget)}/${encodeURIComponent(enlargedImage)}`}
               alt="Enlarged Plot"
               style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 60px)', borderRadius: '12px', objectFit: 'contain', boxShadow: '0 10px 40px rgba(0,0,0,0.5)' }}
@@ -1602,7 +1613,7 @@ function AdmetTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, isT
             <div style={{ marginTop: '15px', display: 'flex', gap: '15px', alignItems: 'center' }}>
               <p style={{ color: 'white', margin: 0, fontSize: '1.1rem', fontWeight: '500' }}>{enlargedImage}</p>
               <button
-                onClick={() => downloadImage(enlargedImage)}
+                onClick={() => void downloadImage(enlargedImage)}
                 style={{
                   padding: '8px 16px', backgroundColor: '#6366f1', color: 'white',
                   border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -1759,7 +1770,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
       return;
     }
     try {
-      const res = await fetch('/api/filesystem/validate-folder', {
+      const res = await apiFetch('/api/filesystem/validate-folder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path, folder_type: type })
@@ -1800,12 +1811,12 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
     const fetchTargets = async () => {
       try {
         const [targetsRes, resultsRes, chemblRes, zincRes, redockRes, admetRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/api/chembl_files?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/api/zinc_files?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`),
-          fetch(`${API_BASE_URL}/api/admet/results?t=${Date.now()}`)
+          apiFetch(`${API_BASE_URL}/api/redocking/targets?t=${Date.now()}`),
+          apiFetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`),
+          apiFetch(`${API_BASE_URL}/api/chembl_files?t=${Date.now()}`),
+          apiFetch(`${API_BASE_URL}/api/zinc_files?t=${Date.now()}`),
+          apiFetch(`${API_BASE_URL}/api/redocking/results?t=${Date.now()}`),
+          apiFetch(`${API_BASE_URL}/api/admet/results?t=${Date.now()}`)
         ]);
         
         if (targetsRes.ok) {
@@ -1855,7 +1866,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
         // Fetch ligands from redocking results
         const fetchLigands = async () => {
           try {
-            const res = await fetch(`${API_BASE_URL}/api/redocking/csv/${selectedTarget}`, { cache: 'no-store' });
+            const res = await apiFetch(`${API_BASE_URL}/api/redocking/csv/${selectedTarget}`, { cache: 'no-store' });
             if (res.ok) {
               const data = await res.json();
               if (data.headers && data.rows) {
@@ -1908,7 +1919,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
       const fetchResultCsv = async () => {
         setLoadingResults(true);
         try {
-          const res = await fetch(`${API_BASE_URL}/api/docking/csv/${activeResultTarget}`);
+          const res = await apiFetch(`${API_BASE_URL}/api/docking/csv/${activeResultTarget}`);
           if (res.ok) {
             const data = await res.json();
             setResultsData({ headers: data.headers, rows: data.rows });
@@ -1929,7 +1940,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
     if (runningTaskId) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/docking/status/${runningTaskId}`);
+          const res = await apiFetch(`${API_BASE_URL}/api/docking/status/${runningTaskId}`);
           if (res.ok) {
             const data = await res.json();
             setTaskStatus(data);
@@ -1942,7 +1953,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
               if (data.status === 'not_found') {
                 showToast('warning', 'Task Stopped or Interrupted', 'The background server restarted or the task is no longer active.');
               }
-              const resultsRes = await fetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`);
+              const resultsRes = await apiFetch(`${API_BASE_URL}/api/docking/results?t=${Date.now()}`);
               if (resultsRes.ok) {
                 const results = await resultsRes.json();
                 setAvailableResults(results);
@@ -1987,7 +1998,7 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
       if (!prepareComplex && preparedReceptorPath) {
         body.prepared_receptor_path = preparedReceptorPath;
       }
-      const res = await fetch(`${API_BASE_URL}/api/docking/run`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/docking/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -2007,9 +2018,12 @@ function DockingTab({ onTaskStart, onTaskEnd, executionLogs, setExecutionLogs, i
   };
 
 
-  const downloadCsv = () => {
+  const downloadCsv = async () => {
     if (activeResultTarget) {
-      window.open(`${API_BASE_URL}/api/docking/download/${activeResultTarget}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/docking/download/${encodeURIComponent(activeResultTarget)}`,
+        `docking_results_${activeResultTarget}.csv`,
+      );
     }
   };
 
@@ -2548,7 +2562,7 @@ export default function AnalysisPage() {
     }
     setCancelling(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/${activeTab}/cancel/${currentTaskId}`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/${activeTab}/cancel/${currentTaskId}`, {
         method: 'POST'
       });
       if (res.ok) {

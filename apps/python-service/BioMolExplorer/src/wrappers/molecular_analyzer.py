@@ -59,7 +59,7 @@ from kernel.descriptors import similarityFunctions, fingerprints
 from kernel.loggers import LoggerManager
 from kernel.descriptors import Descriptors
 from kernel.utilities import fileHandling, fileReading
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 
@@ -68,13 +68,14 @@ logger = LoggerManager.get_logger('molecular_analyzer', log_file='logs/analyzer.
 def read_filters(path:str):
 
     try:
-        path = BIOMOL_ROOT + path
+        path = resolve_biomol_path(os.path.dirname(path)) + os.path.basename(path)
         with open(path, 'r') as fp:
             filters = json.load(fp)
         return filters
     
     except Exception as e:
         logger.error(f'Error during to perform {path} in read_filters wrapper function', exc_info=True)
+        raise
 
 
 def compute_similarity(base_input_path:str, base_output_path:str, 
@@ -84,8 +85,8 @@ def compute_similarity(base_input_path:str, base_output_path:str,
 
     try:
         
-        base_input_path  = f'{base_input_path}/'
-        base_output_path = f'{base_output_path}/Similarity/'
+        base_input_path = resolve_biomol_path(base_input_path)
+        base_output_path = os.path.join(resolve_biomol_path(base_output_path), 'Similarity', '')
 
         script_path = '/src/scripts/crawlers/similarmols.json'
         filters = read_filters(script_path)
@@ -97,6 +98,7 @@ def compute_similarity(base_input_path:str, base_output_path:str,
     
     except Exception as e:
         logger.error(f'Error during to perform the wrapper compute_similarity function', exc_info=True)
+        raise
     
     
 
@@ -104,8 +106,8 @@ def analyze_graphs(base_input_path:str, base_output_path:str, metric, fingerprin
     
     try:
         
-        base_input_path  = f'{base_input_path}/'
-        base_output_path = f'{base_output_path}/'
+        base_input_path = resolve_biomol_path(base_input_path)
+        base_output_path = resolve_biomol_path(base_output_path)
         
         ga = GraphAnalysis()
         ga.set_inputpath(base_input_path)
@@ -114,6 +116,7 @@ def analyze_graphs(base_input_path:str, base_output_path:str, metric, fingerprin
     
     except Exception as e:
         logger.error(f'Error during to perform the wrapper analyze_graphs function', exc_info=True)
+        raise
 
 
 
@@ -124,13 +127,13 @@ def filter_mutagenic_tumorigenic(base_input_path:str, base_output_path:str, data
     
     try:
         
-        base_input_path  = f'{base_input_path}/'
-        base_output_path = f'{base_output_path}/'
+        base_input_path = resolve_biomol_path(base_input_path)
+        base_output_path = resolve_biomol_path(base_output_path)
 
         mutagenic = [m.lower() for m in mutagenic]
         tumorigenic = [t.lower() for t in tumorigenic]
         
-        file = BIOMOL_ROOT + base_input_path + datawarrior_filename
+        file = os.path.join(base_input_path, datawarrior_filename)
         if not os.path.isfile(file):
             logger.error(f'Error during to perform the filter_mutagenic_tumorigenic function', exc_info=True)
             logger.error(f'File {file} not found!!', exc_info=True)
@@ -143,6 +146,7 @@ def filter_mutagenic_tumorigenic(base_input_path:str, base_output_path:str, data
 
     except Exception as e:
         logger.error(f'Error during to perform the wrapper filter_mutagenic_tumorigenic function', exc_info=True)
+        raise
 
 
 
@@ -151,14 +155,13 @@ def generate_fingerprints(base_input_path:str, morgan_n_bits:Optional[int]=2048,
 
     try:
 
-        base_output_path  = f'{base_input_path}/Fingerprints/'
-        base_input_path  = f'{base_input_path}/'
+        base_input_path = resolve_biomol_path(base_input_path)
+        base_output_path = os.path.join(base_input_path, 'Fingerprints', '')
 
         f1 = fileHandling(input_path=base_input_path, output_path=base_output_path)
         ds = Descriptors(inputpath=base_input_path, outputpath=base_output_path)
                 
-        from kernel.config import BIOMOL_ROOT
-        files = [f for f in os.listdir(os.path.join(BIOMOL_ROOT, base_input_path.lstrip('/'))) if f.endswith('_MOLS.csv') or f.endswith('_SIMS.csv')]
+        files = [f for f in os.listdir(base_input_path) if f.endswith('_MOLS.csv') or f.endswith('_SIMS.csv')]
         for filename in files:
             filename = filename.split('.')[0]
             data = f1.csv_to_dataframe(filename)
@@ -184,3 +187,4 @@ def generate_fingerprints(base_input_path:str, morgan_n_bits:Optional[int]=2048,
     except Exception as e:
         logger.error(f'Error during to perform the wrapper generate_fingerprints function', exc_info=True)
         logger.error(f'[ERROR]: {e}', exc_info=True)
+        raise

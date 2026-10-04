@@ -6,6 +6,7 @@ import Link from 'next/link';
 import '../pdb.css';
 import { API_BASE_URL } from '../../../config';
 import { useToast } from '../../../components/ToastProvider';
+import { apiFetch } from '@/lib/apiFetch';
 
 type CsvData = {
   headers: string[];
@@ -30,7 +31,7 @@ export default function PdbCsvPage() {
     setError('');
 
     try {
-      const response = await fetch(`${apiBase}/api/files/csv/PDB/${encodeURIComponent(target)}/${encodeURIComponent(csvFile)}`, {
+      const response = await apiFetch(`${apiBase}/api/files/csv/PDB/${encodeURIComponent(target)}/${encodeURIComponent(csvFile)}`, {
         cache: 'no-store'
       });
       const data = await response.json();
@@ -53,7 +54,7 @@ export default function PdbCsvPage() {
 
     setDeletingRow(rowIndex);
     try {
-      const response = await fetch(`${apiBase}/api/files/csv/delete-row`, {
+      const response = await apiFetch(`${apiBase}/api/files/csv/delete-row`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target, csv_file: csvFile, row_index: rowIndex })
@@ -75,7 +76,7 @@ export default function PdbCsvPage() {
     if (!target) return;
 
     try {
-      const response = await fetch(`${apiBase}/api/files/download/PDB/csv/${encodeURIComponent(target)}/${encodeURIComponent(csvFile)}`);
+      const response = await apiFetch(`${apiBase}/api/files/download/PDB/csv/${encodeURIComponent(target)}/${encodeURIComponent(csvFile)}`);
       if (!response.ok) {
         throw new Error('Failed to download CSV file.');
       }

@@ -357,7 +357,7 @@ select:focus {
 }
 
 .molecule-link:hover::after {
-    content: 'Visualizar molécula em 2D/3D';
+    content: 'View molecule in 2D/3D';
     position: absolute;
     left: 50%;
     bottom: 100%;

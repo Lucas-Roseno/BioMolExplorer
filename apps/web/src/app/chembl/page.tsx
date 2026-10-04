@@ -6,6 +6,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { useToast } from '../../components/ToastProvider';
 import InfoTooltip from '../../components/InfoTooltip';
 import { useFiles } from '../../hooks/useFiles';
+import { apiFetch, downloadWithAuth } from '@/lib/apiFetch';
 
 type ChemblData = { molecules?: string[]; similars?: string[] };
 
@@ -29,7 +30,7 @@ export default function ChemblPage() {
       natural_product_molecules: fd.get('natural_product_molecules') === 'on'
     };
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chembl/search`, {
+      const response = await apiFetch(`${API_BASE_URL}/api/chembl/search`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
       const data = await response.json();
@@ -59,7 +60,7 @@ export default function ChemblPage() {
           attempts++;
           await new Promise(r => setTimeout(r, 2500));
           try {
-            const statusRes = await fetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(taskId)}`);
+            const statusRes = await apiFetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(taskId)}`);
             if (!statusRes.ok) continue;
             const statusData = await statusRes.json();
             if (statusData.status === 'completed') {
@@ -67,7 +68,11 @@ export default function ChemblPage() {
               showToast('success', 'Download completed!', 'ChEMBL compounds have been saved successfully.');
             } else if (statusData.status === 'error') {
               isDone = true;
-              showToast('error', 'Processing failed', 'An error occurred while processing the ChEMBL data. Please try again.');
+              showToast(
+                'error',
+                'Processing failed',
+                statusData.message || 'An error occurred while processing the ChEMBL data. Please try again.',
+              );
             }
           } catch {
             // Transient network error during polling — keep trying
@@ -91,7 +96,7 @@ export default function ChemblPage() {
   const handleDeleteTarget = async (target: string) => {
     if (!confirm(`Delete all data for "${target}"? This action cannot be undone.`)) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/target/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE_URL}/api/files/delete/ChEMBL/target/${encodeURIComponent(target)}`, { method: 'DELETE' });
       if (!res.ok) {
         showToast('error', 'Could not delete', 'An error occurred while removing this target. Please try again.');
         return;
@@ -103,9 +108,12 @@ export default function ChemblPage() {
     }
   };
 
-  const handleDownloadTarget = (target: string) => {
+  const handleDownloadTarget = async (target: string) => {
     try {
-      window.open(`${API_BASE_URL}/api/files/download/ChEMBL/zip/${encodeURIComponent(target)}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/files/download/ChEMBL/zip/${encodeURIComponent(target)}`,
+        `${target}_chembl.zip`,
+      );
     } catch {
       showToast('error', 'Download failed', 'Could not start the download. Please try again.');
     }
@@ -114,7 +122,7 @@ export default function ChemblPage() {
   const handleDeleteSubdir = async (subdir: string, target: string) => {
     if (!confirm(`Delete folder "${subdir}" from "${target}"?`)) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/category/${subdir}/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE_URL}/api/files/delete/ChEMBL/category/${subdir}/${encodeURIComponent(target)}`, { method: 'DELETE' });
       if (!res.ok) {
         showToast('error', 'Could not delete folder', 'An error occurred while removing this folder. Please try again.');
         return;
@@ -126,9 +134,12 @@ export default function ChemblPage() {
     }
   };
 
-  const handleDownloadSubdir = (subdir: string, target: string) => {
+  const handleDownloadSubdir = async (subdir: string, target: string) => {
     try {
-      window.open(`${API_BASE_URL}/api/files/download/ChEMBL/category/zip/${subdir}/${encodeURIComponent(target)}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/files/download/ChEMBL/category/zip/${encodeURIComponent(subdir)}/${encodeURIComponent(target)}`,
+        `${target}_${subdir}.zip`,
+      );
     } catch {
       showToast('error', 'Download failed', 'Could not start the download. Please try again.');
     }
@@ -137,7 +148,7 @@ export default function ChemblPage() {
   const handleDeleteFile = async (subdir: string, target: string, file: string) => {
     if (!confirm(`Delete file "${file}"?`)) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/files/delete/ChEMBL/file/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE_URL}/api/files/delete/ChEMBL/file/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
       if (!res.ok) {
         showToast('error', 'Could not delete file', 'An error occurred while removing this file. Please try again.');
         return;
@@ -150,9 +161,12 @@ export default function ChemblPage() {
   };
 
   // Initiates download of a single file.
-  const handleDownloadFile = (subdir: string, target: string, file: string) => {
+  const handleDownloadFile = async (subdir: string, target: string, file: string) => {
     try {
-      window.open(`${API_BASE_URL}/api/files/download/ChEMBL/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/files/download/ChEMBL/${encodeURIComponent(subdir)}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`,
+        file,
+      );
     } catch {
       showToast('error', 'Download failed', 'Could not start the download. Please try again.');
     }
@@ -162,7 +176,7 @@ export default function ChemblPage() {
   const openMoleculeViewer = async (subdir: string, target: string, file: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/files/molecule/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+      const res = await apiFetch(`${API_BASE_URL}/api/files/molecule/${subdir}/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
       if (!res.ok) {
         showToast('error', 'Could not load molecule', 'The molecule visualization could not be loaded. Please try again.');
         return;

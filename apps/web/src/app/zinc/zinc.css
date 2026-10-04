@@ -1,10 +1,10 @@
-/* Container mais compacto */
+/* More compact container */
 .compact-container {
     padding: 15px 20px;
     max-width: 100%;
 }
 
-/* Grupo de formulário em linha (lado a lado) */
+/* Inline form group (side by side) */
 .compact-form-group {
     display: flex;
     align-items: center;
@@ -35,7 +35,7 @@ input[type="file"] {
     cursor: pointer;
 }
 
-/* Opções e botão em linha */
+/* Inline options and button */
 .compact-options {
     display: flex;
     justify-content: space-between;
@@ -47,7 +47,7 @@ input[type="file"] {
     padding: 6px 15px;
     font-size: 0.95rem;
     margin-top: 0;
-    /* Remove margem padrão se houver */
+    /* Remove default margin if present */
 }
 
 .helper-text {
@@ -58,12 +58,12 @@ input[type="file"] {
     text-align: right;
 }
 
-/* --- Estilos da Tabela ZINC --- */
+/* --- ZINC table styles --- */
 #zinc-list {
     margin-top: 10px;
     overflow-y: auto;
     max-height: 600px;
-    /* Limite de altura para scroll */
+    /* Height limit for scrolling */
 }
 
 .zinc-file-section {
@@ -122,7 +122,7 @@ input[type="file"] {
     background-color: #f0f8ff;
 }
 
-/* Colunas específicas */
+/* Specific columns */
 .col-zinc-id {
     font-weight: bold;
     color: #2c3e50;
@@ -132,7 +132,7 @@ input[type="file"] {
 .col-smile {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     color: #e67e22;
-    /* Laranja escuro para destacar o SMILE */
+    /* Dark orange to highlight the SMILES string */
     word-break: break-all;
 }
 

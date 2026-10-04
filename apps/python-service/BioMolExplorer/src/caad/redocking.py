@@ -52,6 +52,8 @@ matplotlib.use('agg')
 #----------------------------------------------------------------------------------------------
 import subprocess
 import os
+import shlex
+import shutil
 import math
 import time
 import matplotlib.pyplot as plt
@@ -75,6 +77,21 @@ from kernel.config import BIOMOL_ROOT
 from kernel.descriptors import Descriptors
 from kernel.process_manager import ActiveSubprocesses
 #----------------------------------------------------------------------------------------------
+
+
+def _resolve_vina_executable() -> str:
+    """Return a usable AutoDock Vina executable for the active environment."""
+    candidates = [
+        os.environ.get('VINA_PATH'),
+        shutil.which('vina'),
+        str(Path(sys.executable).resolve().parent / 'vina'),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    raise FileNotFoundError(
+        "AutoDock Vina was not found. Set VINA_PATH or install vina in the active Python environment."
+    )
 
     
 class Docking():
@@ -604,7 +621,7 @@ class DockVina(Docking):
         files_to_perform = [f for f in os.listdir((self.outputpath)) if f.endswith('.vina')] 
             
         for file in files_to_perform:
-            command = f'vina --config {file}'
+            command = f'{shlex.quote(_resolve_vina_executable())} --config {shlex.quote(file)}'
             self.perform_subprocess(command, self.outputpath)
             
        
@@ -726,7 +743,10 @@ class DockVina(Docking):
                      os.fsync(dir_fd)
                      time.sleep(1)
                      
-                     command  = f'vina --config {receptor}_{mol}.vina'
+                     command  = (
+                         f'{shlex.quote(_resolve_vina_executable())} '
+                         f'--config {shlex.quote(f"{receptor}_{mol}.vina")}'
+                     )
                      validate = self.perform_subprocess(command, self.outputpath)
                      
                      if not validate:

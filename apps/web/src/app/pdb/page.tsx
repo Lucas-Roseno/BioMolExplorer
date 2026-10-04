@@ -7,6 +7,7 @@ import LoadingOverlay from '../../components/LoadingOverlay';
 import { useToast } from '../../components/ToastProvider';
 import InfoTooltip from '../../components/InfoTooltip';
 import { useFiles } from '../../hooks/useFiles';
+import { apiFetch, downloadWithAuth } from '@/lib/apiFetch';
 
 export default function PdbPage() {
   const { showToast } = useToast();
@@ -31,7 +32,7 @@ export default function PdbPage() {
       attempts++;
       await new Promise(r => setTimeout(r, 2500));
       try {
-        const statusRes = await fetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(taskId)}`);
+        const statusRes = await apiFetch(`${API_BASE_URL}/api/jobs/status/${encodeURIComponent(taskId)}`);
         if (!statusRes.ok) continue; // Transient network issue — keep polling
 
         const statusData = await statusRes.json();
@@ -67,7 +68,7 @@ export default function PdbPage() {
     payload.must_have_ligand = payload.must_have_ligand === 'on' ? 'true' : 'false';
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/pdb/search`, {
+      const res = await apiFetch(`${API_BASE_URL}/api/pdb/search`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
 
@@ -92,7 +93,7 @@ export default function PdbPage() {
   const handleDelete = async (target: string) => {
     if (!confirm(`Delete all data for "${target}"? This action cannot be undone.`)) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/files/delete/PDB/${encodeURIComponent(target)}`, { method: 'DELETE' });
+      const res = await apiFetch(`${API_BASE_URL}/api/files/delete/PDB/${encodeURIComponent(target)}`, { method: 'DELETE' });
       if (!res.ok) {
         showToast('error', 'Could not delete', 'An error occurred while trying to remove this target. Please try again.');
         return;
@@ -105,9 +106,12 @@ export default function PdbPage() {
   };
 
   // Triggers downloading the complete target folder as a ZIP file
-  const handleDownloadTarget = (target: string) => {
+  const handleDownloadTarget = async (target: string) => {
     try {
-      window.open(`${API_BASE_URL}/api/files/download/PDB/zip/${encodeURIComponent(target)}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/files/download/PDB/zip/${encodeURIComponent(target)}`,
+        `${target}_pdb.zip`,
+      );
     } catch {
       showToast('error', 'Download failed', 'Could not start the download. Please try again.');
     }
@@ -116,7 +120,7 @@ export default function PdbPage() {
   const handleDeleteFile = async (target: string, file: string) => {
     if (!confirm(`Delete file "${file}"?`)) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/files/delete/PDB/file/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      const response = await apiFetch(`${API_BASE_URL}/api/files/delete/PDB/file/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok || data.status === 'error') {
         showToast('error', 'Could not delete file', 'The file could not be removed. Please try again.');
@@ -130,9 +134,12 @@ export default function PdbPage() {
     }
   };
 
-  const handleDownload = (target: string, file: string) => {
+  const handleDownload = async (target: string, file: string) => {
     try {
-      window.open(`${API_BASE_URL}/api/files/download/PDB/${encodeURIComponent(target)}/${encodeURIComponent(file)}`, '_blank');
+      await downloadWithAuth(
+        `${API_BASE_URL}/api/files/download/PDB/${encodeURIComponent(target)}/${encodeURIComponent(file)}`,
+        file,
+      );
     } catch {
       showToast('error', 'Download failed', 'Could not start the download. Please try again.');
     }
@@ -142,7 +149,7 @@ export default function PdbPage() {
   const open3DViewer = async (target: string, file: string) => {
     setViewer({ isOpen: true, file });
     try {
-      const res = await fetch(`${API_BASE_URL}/api/files/pdb_content/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
+      const res = await apiFetch(`${API_BASE_URL}/api/files/pdb_content/${encodeURIComponent(target)}/${encodeURIComponent(file)}`);
       if (!res.ok) {
         showToast('error', 'Could not load structure', 'The 3D structure file could not be retrieved. Try again or download the file manually.');
         setViewer({ isOpen: false, file: '' });

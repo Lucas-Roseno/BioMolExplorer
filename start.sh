@@ -134,7 +134,7 @@ else
 fi
 
 # 1. Inicia o Python Flask em background (já tem hot-reload via debug=True)
-PORT=$PYTHON_PORT FLASK_PORT=$PYTHON_PORT "$PYTHON_BIN" apps/python-service/app.py &
+BIOMOL_ALLOW_EXTERNAL_WORKSPACES=1 PORT=$PYTHON_PORT FLASK_PORT=$PYTHON_PORT "$PYTHON_BIN" apps/python-service/app.py &
 PYTHON_PID=$!
 
 # Configurar Node.js dinamicamente (NVM ou sistema)

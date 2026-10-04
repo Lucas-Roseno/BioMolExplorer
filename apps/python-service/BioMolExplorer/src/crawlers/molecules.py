@@ -59,7 +59,7 @@ import ast
 #----------------------------------------------------------------------------------------------
 from kernel.utilities import fileHandling, fileReading
 from kernel.loggers import LoggerManager
-from kernel.config import BIOMOL_ROOT
+from kernel.config import BIOMOL_ROOT, resolve_biomol_path
 from crawlers.settings import CrawlerSettings
 #----------------------------------------------------------------------------------------------
 
@@ -77,6 +77,9 @@ class MyMolecules():
         
     def get_path(self):
         return self.path
+
+    def resolve_path(self, path: str | None) -> str:
+        return resolve_biomol_path(path)
         
 
 
@@ -94,15 +97,13 @@ class Molecule(CrawlerSettings, MyMolecules):
     
     def set_bioactivitypath(self, path:str):
         self.__bioactivitypath = path
-        if not os.path.exists(self.get_path() + self.__bioactivitypath):
-            print('[ERROR]: The bioactivity path needs to be informed before!')
-            exit(1)
-    
-    
+        full_path = self.resolve_path(path)
+        if not os.path.isdir(full_path):
+            raise FileNotFoundError(f'Bioactivity path not found: {full_path}')
+
     def set_outputpath(self, path:str):
         self.__outputpath = path 
-        if not os.path.exists(self.get_path() + self.__outputpath):
-            os.makedirs(self.get_path() + self.__outputpath, exist_ok=True)
+        os.makedirs(self.resolve_path(path), exist_ok=True)
             
      
     def str_to_dict(self, value):
@@ -132,9 +133,10 @@ class Molecule(CrawlerSettings, MyMolecules):
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(molecule_id)[0]
 
-            filter_params['molecule_chembl_id'] = molecule_id
-            
-            molecule = files.csv_to_dataframe(molecule_id) if infile else self.__molecule.filter(**filter_params)
+            request_filters = dict(filter_params)
+            request_filters['molecule_chembl_id'] = molecule_id
+
+            molecule = files.csv_to_dataframe(molecule_id) if infile else self.__molecule.filter(**request_filters)
             
             try:
                 molecule = DataFrame.from_records(molecule)
@@ -157,12 +159,13 @@ class Molecule(CrawlerSettings, MyMolecules):
 
             except Exception as e:
                 self.logger.error(f'Error during to perform {molecule_id} molecule in __search_mol function', exc_info=True)
-                molecule = DataFrame()
+                raise
             
             self.save_molecule(molecule, molecule_id) if molecule.shape[0] > 0 else None
         
         except Exception as e:
             self.logger.error(f'Error during to perform {molecule_id} molecule in __search_mol function', exc_info=True)
+            raise
 
        
     
@@ -179,26 +182,29 @@ class Molecule(CrawlerSettings, MyMolecules):
     def search(self, filter_params:dict):
         
         f1    = fileHandling(input_path=self.__bioactivitypath, ext=self.__extension)
-        from kernel.config import BIOMOL_ROOT
-        files = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__bioactivitypath.lstrip('/'))) if f.endswith('.csv')]
+        files = [f.rsplit('.')[0] for f in os.listdir(self.resolve_path(self.__bioactivitypath)) if f.endswith('.csv')]
         
         mols = []
         for file in files:
             tmp  = f1.csv_to_dataframe(file)
             mols  = mols + tmp['molecule_chembl_id'].tolist()
         
-        np_filter  = filter_params.pop('natural_product', None)
+        request_filters = dict(filter_params)
+        np_filter  = request_filters.pop('natural_product', None)
         np_filter  = int(np_filter) if np_filter != None else None
 
-        mol_filter = filter_params.pop('molecule_type', None)
+        mol_filter = request_filters.pop('molecule_type', None)
         mol_filter = mol_filter.lower() if mol_filter != None else None
 
-        mwt_filter = filter_params.pop('molecule_weight', None)
+        mwt_filter = request_filters.pop('molecule_weight', None)
         mwt_filter = float(mwt_filter) if mwt_filter != None else None
         
         
         with futures.ThreadPoolExecutor(max_workers=10) as executor:
-            pool = {executor.submit(self.__search_mol, mol, filter_params, np_filter, mol_filter, mwt_filter) : mol for mol in mols}
+            pool = {
+                executor.submit(self.__search_mol, mol, dict(request_filters), np_filter, mol_filter, mwt_filter): mol
+                for mol in dict.fromkeys(mols)
+            }
 
         [future.result() for future in pool]
         
@@ -222,15 +228,14 @@ class SimilarMols(CrawlerSettings, MyMolecules):
     
     def set_bioactivitypath(self, path:str):
         self.__bioactivitypath = path
-        if not os.path.exists(self.get_path() + self.__bioactivitypath):
-            print('[ERROR]: The bioactivity path needs to be informed before!')
-            exit(1)
+        full_path = self.resolve_path(path)
+        if not os.path.isdir(full_path):
+            raise FileNotFoundError(f'Bioactivity path not found: {full_path}')
     
 
     def set_outputpath(self, path:str):
         self.__outputpath = path 
-        if not os.path.exists(self.get_path() + self.__outputpath):
-            os.makedirs(self.get_path() + self.__outputpath, exist_ok=True)
+        os.makedirs(self.resolve_path(path), exist_ok=True)
             
       
     def str_to_dict(self, value):
@@ -259,9 +264,10 @@ class SimilarMols(CrawlerSettings, MyMolecules):
             files   = fileHandling(input_path=self.__outputpath, ext=self.__extension)
             infile  =  files.isFile(molecule_id)[0]
 
-            filter_params['chembl_id'] = molecule_id
-            
-            molecules = files.csv_to_dataframe(molecule_id) if infile else self.__similarity.filter(**filter_params)
+            request_filters = dict(filter_params)
+            request_filters['chembl_id'] = molecule_id
+
+            molecules = files.csv_to_dataframe(molecule_id) if infile else self.__similarity.filter(**request_filters)
             
             try:
                 
@@ -279,13 +285,15 @@ class SimilarMols(CrawlerSettings, MyMolecules):
                 if mwt_filter:
                     molecules = molecules[molecules['molecule_properties'].apply(lambda x: x.get('full_mwt', float('inf')) <= mwt_filter)]
 
-            except:
-                molecules = DataFrame()
+            except Exception:
+                self.logger.error(f'Error while filtering similar molecules for {molecule_id}', exc_info=True)
+                raise
 
             self.save_molecule(molecules, molecule_id) if molecules.shape[0] > 0 else None
             
         except Exception as e:
             self.logger.error(f'Error during to perform {molecule_id} molecule in __search_similar_mols function', exc_info=True)
+            raise
             
         
      
@@ -301,25 +309,28 @@ class SimilarMols(CrawlerSettings, MyMolecules):
     def search(self, filter_params:dict) -> None:
         
         f1    = fileHandling(input_path=self.__bioactivitypath, ext=self.__extension)
-        from kernel.config import BIOMOL_ROOT
-        files = [f.rsplit('.')[0] for f in os.listdir(os.path.join(BIOMOL_ROOT, self.__bioactivitypath.lstrip('/'))) if f.endswith('.csv')]
+        files = [f.rsplit('.')[0] for f in os.listdir(self.resolve_path(self.__bioactivitypath)) if f.endswith('.csv')]
         
         mols = []
         for file in files:
             tmp  = f1.csv_to_dataframe(file)
             mols  = mols + tmp['molecule_chembl_id'].tolist()
         
-        np_filter  = filter_params.pop('natural_product', None)
+        request_filters = dict(filter_params)
+        np_filter  = request_filters.pop('natural_product', None)
         np_filter  = int(np_filter) if np_filter != None else None
 
-        mol_filter = filter_params.pop('molecule_type', None)
+        mol_filter = request_filters.pop('molecule_type', None)
         mol_filter = mol_filter.lower() if mol_filter != None else None
 
-        mwt_filter = filter_params.pop('molecule_weight', None)
+        mwt_filter = request_filters.pop('molecule_weight', None)
         mwt_filter = float(mwt_filter) if mwt_filter != None else None
 
         with futures.ThreadPoolExecutor(max_workers=10) as executor:
-            pool = {executor.submit(self.__search_similar_mols, mol, filter_params, np_filter, mol_filter, mwt_filter) : mol for mol in mols}
+            pool = {
+                executor.submit(self.__search_similar_mols, mol, dict(request_filters), np_filter, mol_filter, mwt_filter): mol
+                for mol in dict.fromkeys(mols)
+            }
 
         [future.result() for future in pool]
         
@@ -339,15 +350,14 @@ class ZincMols(MyMolecules):
 
     def set_uri_inputpath(self, path:str):
         self.__uri_inputpath = path
-        if not os.path.exists(self.get_path() + self.__uri_inputpath):
-            print('[ERROR]: The uri path needs to be informed before!')
-            exit(1)
+        full_path = self.resolve_path(path)
+        if not os.path.isfile(full_path):
+            raise FileNotFoundError(f'ZINC URI file not found: {full_path}')
             
 
     def set_outputpath(self, path:str):
         self.__outputpath = path 
-        if not os.path.exists(self.get_path() + self.__outputpath):
-            os.makedirs(self.get_path() + self.__outputpath, exist_ok=True)
+        os.makedirs(self.resolve_path(path), exist_ok=True)
             
             
 
@@ -375,18 +385,19 @@ class ZincMols(MyMolecules):
         } 
 
         try:
-            response = requests.get(url, headers=headers, timeout=320)
-                
-            if response.status_code == 200:
-                conteudo = response.text.splitlines()[1:]
-                conteudo = [token.split(' ') for token in conteudo]
-                mol = DataFrame(conteudo, columns=['smile', 'zinc_id'])
-                print('File number:', idx, ' URL:', url) if verbose else None 
-            
+            response = session.get(url, headers=headers, timeout=320)
+            response.raise_for_status()
+            rows = [line.split() for line in response.text.splitlines()[1:] if line.strip()]
+            rows = [row[:2] for row in rows if len(row) >= 2]
+            mol = DataFrame(rows, columns=['smile', 'zinc_id'])
+            print('File number:', idx, ' URL:', url) if verbose else None
             return mol
                     
         except Exception as e:
             self.logger.error(f'Error during to perform {idx} molecule in {url} url in __search_in_zinc function', exc_info=True)
+            raise
+        finally:
+            session.close()
             
          
 
@@ -424,4 +435,5 @@ class ZincMols(MyMolecules):
             
         except Exception as e:
             self.logger.error(f'Error during to perform the search function', exc_info=True)
+            raise
         

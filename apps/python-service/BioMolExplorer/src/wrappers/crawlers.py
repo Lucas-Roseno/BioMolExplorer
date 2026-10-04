@@ -65,10 +65,18 @@ from crawlers.complex import PDBComplex, PolymerEntityType, ExperimentalMethod
 
 from kernel.loggers import LoggerManager
 from kernel.utilities import fileHandling
+from kernel.config import resolve_biomol_path
 #----------------------------------------------------------------------------------------------
 
 
 logger = LoggerManager.get_logger('crawlers', log_file='logs/loaders.log')
+
+
+def _directory(*parts: str) -> str:
+    """Build a normalized directory path accepted by legacy crawler classes."""
+    base, *children = parts
+    full_path = Path(resolve_biomol_path(base)).joinpath(*children)
+    return os.path.join(str(full_path), '')
 
 
 def read_filters(path:str):
@@ -107,15 +115,27 @@ def resolve_target_alias(target_name: str) -> str:
         return target_name
 
 
-def load_chembl(target_name:str, base_output_path:str):
+def _crawler_filters(filename: str, overrides: Optional[dict]) -> dict:
+    filters = read_filters(f'/src/scripts/crawlers/{filename}.json')
+    if overrides:
+        filters.update(overrides)
+    return filters
+
+
+def load_chembl(
+    target_name: str,
+    base_output_path: str,
+    target_filters: Optional[dict] = None,
+    bioactivity_filters: Optional[dict] = None,
+    molecule_filters: Optional[dict] = None,
+    similar_filters: Optional[dict] = None,
+):
     try:
-        base_path = base_output_path.lstrip('/')
-        
-        target_output_path = f'/{os.path.join(base_path, "ChEMBL", "targets")}/'
+        target_output_path = _directory(base_output_path, "ChEMBL", "targets")
         target_name_clean = target_name.replace(' ', '')
-        bioactivity_output_path = f'/{os.path.join(base_path, "ChEMBL", "bioactivity", target_name_clean)}/'
-        molecule_output_path = f'/{os.path.join(base_path, "ChEMBL", "molecules", target_name_clean)}/'
-        similar_output_path = f'/{os.path.join(base_path, "ChEMBL", "similars", target_name_clean)}/'
+        bioactivity_output_path = _directory(base_output_path, "ChEMBL", "bioactivity", target_name_clean)
+        molecule_output_path = _directory(base_output_path, "ChEMBL", "molecules", target_name_clean)
+        similar_output_path = _directory(base_output_path, "ChEMBL", "similars", target_name_clean)
 
         target = Targets()
         bioact = Bioactivity()
@@ -125,8 +145,7 @@ def load_chembl(target_name:str, base_output_path:str):
         # Resolve alias antes de buscar no ChEMBL (ex: 'Butyrylcholinesterase' -> 'Cholinesterase')
         chembl_target_name = resolve_target_alias(target_name)
 
-        script_path = '/src/scripts/crawlers/target.json'
-        filters = read_filters(script_path)
+        filters = _crawler_filters('target', target_filters)
         
         # Remove campos que o frontend salva mas que não são filtros válidos da API ChEMBL
         if 'target_name' in filters:
@@ -136,30 +155,33 @@ def load_chembl(target_name:str, base_output_path:str):
         target.search(chembl_target_name, filters)
 
         # Check if target was actually found by looking for the generated file
-        from kernel.config import BIOMOL_ROOT
-        target_file = os.path.join(BIOMOL_ROOT, target_output_path.lstrip('/'), f"{chembl_target_name.upper()}.csv")
+        target_file = os.path.join(target_output_path, f"{chembl_target_name.upper()}.csv")
         if not os.path.exists(target_file):
              raise ValueError(f"Target '{target_name}' not found in ChEMBL with the provided filters.")
 
-        script_path = '/src/scripts/crawlers/bioactivity.json'
-        filters = read_filters(script_path)
+        filters = _crawler_filters('bioactivity', bioactivity_filters)
+        # ``max_value_ref`` is an internal post-processing cutoff, while
+        # ``molecule_type`` is not a field of the ChEMBL activity resource.
+        # Keep the API cutoff and local cutoff aligned and never send internal
+        # UI/configuration keys to ChEMBL.
+        filters['max_value_ref'] = filters.get('standard_value__lte', filters.get('max_value_ref', 10000))
+        filters.pop('molecule_type', None)
         bioact.set_outputpath(bioactivity_output_path)
         bioact.set_targetpath(target_output_path)
         bioact.search(chembl_target_name, filters)
 
-        script_path = '/src/scripts/crawlers/molecules.json'
-        filters = read_filters(script_path)
+        filters = _crawler_filters('molecules', molecule_filters)
+        filters.pop('natural_product_molecules', None)
         mols.set_outputpath(molecule_output_path)
         mols.set_bioactivitypath(bioactivity_output_path)
         mols.search(filters)
 
-        script_path = '/src/scripts/crawlers/similarmols.json'
-        filters = read_filters(script_path)
+        filters = _crawler_filters('similarmols', similar_filters)
         sims.set_outputpath(similar_output_path)
         sims.set_bioactivitypath(bioactivity_output_path)
         sims.search(filters)
 
-        drugbank_output_path = f'/{os.path.join(base_path, "ChEMBL", "DrugBank")}/'
+        drugbank_output_path = _directory(base_output_path, "ChEMBL", "DrugBank")
         molecules = fileHandling(output_path=drugbank_output_path)
 
         molecules.prepare_datamols(target=target_name,
@@ -180,8 +202,7 @@ def load_pdb(target:str, base_output_path:str, pdb_ec:Optional[str]=None, organi
              ExperimentalMethodID:Optional[List[ExperimentalMethod]]=None,
              max_resolution:Optional[float]=None, must_have_ligand:Optional[bool]=True):
     try:
-        base_path = base_output_path.lstrip('/')
-        pdb_output_path = f'/{os.path.join(base_path, "PDB", target.replace(" ", ""))}/'
+        pdb_output_path = _directory(base_output_path, "PDB", target.replace(" ", ""))
         pdb = PDBComplex(output_path=pdb_output_path)
 
         filters = {
@@ -205,12 +226,11 @@ def load_pdb(target:str, base_output_path:str, pdb_ec:Optional[str]=None, organi
 
 def load_zinc(base_output_path:str, filename:str, verbose=False):
     try:
-        base_path = base_output_path.lstrip('/')
         zinc = ZincMols()
         output = filename.split('.')[0]
 
-        zinc_output_path = f'/{base_path}/'
-        zinc.set_uri_inputpath(f'/{os.path.join(base_path, filename)}')
+        zinc_output_path = _directory(base_output_path)
+        zinc.set_uri_inputpath(os.path.join(zinc_output_path, filename))
         zinc.set_outputpath(zinc_output_path)
         zinc.search(output_filename=output, verbose=verbose)
             

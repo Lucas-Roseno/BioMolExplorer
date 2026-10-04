@@ -472,7 +472,7 @@ select:focus {
     flex-direction: column;
     /* Empilha verticalmente */
     gap: 10px;
-    /* Espaço entre os avisos */
+    /* Space between warnings */
     max-width: 350px;
 }
 
@@ -488,7 +488,7 @@ select:focus {
     opacity: 0;
     transform: translateX(20px);
     transition: all 0.3s ease;
-    /* Cores padrão */
+    /* Default colors */
     background-color: #4CAF50;
     /* Verde sucesso */
 }
@@ -606,7 +606,7 @@ select:focus {
 }
 
 .pdb-molecule-link:hover::after {
-    content: 'Visualizar molécula em 3D';
+    content: 'View molecule in 3D';
     position: absolute;
     left: 50%;
     bottom: 100%;

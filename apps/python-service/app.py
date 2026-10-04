@@ -15,6 +15,7 @@ import uuid
 import threading
 import time
 import logging
+import tempfile
 from pathlib import Path
 import re
 
@@ -34,17 +35,436 @@ from wrappers.admet import ADMETWrapper
 from wrappers.docking import perform_consensus, get_available_ligands, get_better_complex
 from kernel.process_manager import ActiveSubprocesses, TaskCancelledException
 
+# Auth & Workspace modules
+import auth as auth_module
+import workspace as workspace_module
+import dataset_import as dataset_import_module
+from similarity_workspace import SimilarityInputError, available_targets as similarity_targets, prepare_inputs
+
 # PATHs
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = dataset_import_module.MAX_IMPORT_BYTES
+app.config['MAX_FORM_PARTS'] = dataset_import_module.MAX_IMPORT_FILES * 2 + 100
+app.config['MAX_FORM_MEMORY_SIZE'] = 8 * 1024 * 1024
 ActiveSubprocesses.register_signal_handlers()
 BIOMOL_ROOT_PATH = os.path.abspath(os.path.join(BASE_DIR, 'BioMolExplorer'))
-PDB_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
-CHEMBL_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL')
 JSON_CRAWLERS_PATH = os.path.join(BIOMOL_ROOT_PATH, 'src', 'scripts', 'crawlers')
-ZINC_BASE_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
-DRUGBANK_PATH    = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
-ADMET_BASE_PATH  = os.path.join(DRUGBANK_PATH, 'ADMET')
+
+# Legacy path constants — still used for BIOMOL library internals (e.g. crawlers).
+# All user-facing data paths now resolve through workspace_module.resolve_workspace_path().
+_LEGACY_PDB_PATH    = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
+_LEGACY_CHEMBL_PATH = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL')
+_LEGACY_ZINC_PATH   = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
+_LEGACY_DRUGBANK    = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
+_LEGACY_ADMET       = os.path.join(_LEGACY_DRUGBANK, 'ADMET')
+
+# Initialize auth database on startup
+auth_module.init_db()
+
+# ==========================================
+# AUTH MIDDLEWARE
+# ==========================================
+
+# Routes that do NOT require authentication
+_PUBLIC_ROUTES = {
+    '/api/auth/setup',
+    '/api/auth/setup-required',
+    '/api/auth/login',
+}
+
+def _extract_token() -> str | None:
+    """Extract Bearer token from the Authorization header."""
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        return auth_header[7:]
+    return None
+
+@app.before_request
+def require_auth():
+    """Validate the session token on every request except public routes."""
+    if request.path in _PUBLIC_ROUTES:
+        return None  # Allow unauthenticated access
+    if request.method == 'OPTIONS':
+        return None  # CORS pre-flight
+
+    token = _extract_token()
+    user = auth_module.validate_token(token) if token else None
+    if user is None:
+        return jsonify({'status': 'error', 'message': 'Authentication required.'}), 401
+
+    # Attach to request context for use in route handlers
+    request.current_user = user
+
+    # Validate every supplied workspace before any endpoint turns it into a
+    # filesystem path. Workspace-management endpoints remain reachable with
+    # a stale browser selection so the user can recover by choosing another
+    # workspace.
+    workspace_name = request.headers.get('X-Workspace', '').strip()
+    workspace_optional = (
+        request.path.startswith('/api/auth')
+        or request.path.startswith('/api/users')
+        or request.path.startswith('/api/workspaces')
+        or request.path.startswith('/api/admin')
+        or request.path.startswith('/api/filesystem')
+    )
+    if not workspace_name and not workspace_optional:
+        return jsonify({
+            'status': 'error',
+            'message': 'Select an active workspace before using this feature.'
+        }), 400
+    if workspace_name and not workspace_optional:
+        try:
+            if not workspace_module.workspace_exists(user['username'], workspace_name):
+                return jsonify({
+                    'status': 'error',
+                    'message': 'The selected workspace does not exist or does not belong to this user.'
+                }), 404
+            workspace_module.resolve_workspace_path(user['username'], workspace_name)
+        except ValueError as exc:
+            return jsonify({'status': 'error', 'message': str(exc)}), 400
+    return None
+
+def _get_user():
+    """Return the current authenticated user dict."""
+    return getattr(request, 'current_user', None)
+
+def _get_workspace_path(sub: str | None = None) -> Path:
+    """
+    Resolve the active workspace path from request headers.
+    Optionally append a sub-path (e.g. 'datasets/PDB').
+
+    The client must send:
+      X-Workspace: <workspace_name>
+
+    Data endpoints require an explicitly selected, registered workspace. This
+    prevents accidental writes to the old shared repository directories.
+    """
+    user = _get_user()
+    workspace_name = request.headers.get('X-Workspace', '').strip()
+
+    if not user or not workspace_name:
+        raise ValueError('An active workspace is required.')
+    base = workspace_module.resolve_workspace_path(user['username'], workspace_name)
+
+    if sub:
+        return base / sub
+    return base
+
+
+def _new_task_state(**state) -> dict:
+    """Attach the current user/workspace scope to an asynchronous task."""
+    user = _get_user()
+    workspace_name = request.headers.get('X-Workspace', '').strip()
+    return {
+        '_owner': user['username'],
+        '_workspace': workspace_name,
+        **state,
+    }
+
+
+def _task_for_current_scope(task_id: str) -> dict | None:
+    task = active_tasks.get(task_id)
+    user = _get_user()
+    workspace_name = request.headers.get('X-Workspace', '').strip()
+    if not task or task.get('_owner') != user['username'] or task.get('_workspace') != workspace_name:
+        return None
+    return task
+
+
+def _public_task_state(task: dict) -> dict:
+    return {key: value for key, value in task.items() if not key.startswith('_')}
+
+def _pdb_path()     -> Path: return _get_workspace_path('datasets/PDB')
+def _chembl_path()  -> Path: return _get_workspace_path('datasets/ChEMBL')
+def _zinc_path()    -> Path: return _get_workspace_path('datasets/ZINC')
+def _results_path() -> Path: return _get_workspace_path('resultados')
+def _drugbank_path()-> Path: return _get_workspace_path('datasets/ChEMBL/DrugBank')
+def _admet_path()   -> Path: return _get_workspace_path('datasets/ChEMBL/DrugBank/ADMET')
+
+# Aliases kept for code readability where the variable name mirrors old constants:
+def PDB_BASE_PATH() -> str: return str(_pdb_path())
+def CHEMBL_BASE_PATH() -> str: return str(_chembl_path())
+def ZINC_BASE_PATH() -> str: return str(_zinc_path())
+def DRUGBANK_PATH() -> str: return str(_drugbank_path())
+def ADMET_BASE_PATH() -> str: return str(_admet_path())
+
+# ==========================================
+# AUTH ENDPOINTS
+# ==========================================
+
+@app.route('/api/auth/setup', methods=['POST'])
+def auth_setup():
+    """Create the first admin account. Only works when no admin exists."""
+    if not auth_module.setup_required():
+        return jsonify({'status': 'error', 'message': 'Admin account already configured.'}), 409
+
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    try:
+        user = auth_module.create_admin(username, password)
+        token = auth_module.generate_token(
+            auth_module.authenticate(username, password)['id']
+        )
+        return jsonify({'status': 'success', 'user': user, 'token': token}), 201
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+@app.route('/api/auth/setup-required', methods=['GET'])
+def auth_setup_required():
+    """Returns whether initial admin setup is needed. Public endpoint."""
+    return jsonify({'setup_required': auth_module.setup_required()})
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    """Authenticate a user and return a session token."""
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    user = auth_module.authenticate(username, password)
+    if user is None:
+        return jsonify({'status': 'error', 'message': 'Invalid username or password.'}), 401
+
+    token = auth_module.generate_token(user['id'])
+    return jsonify({'status': 'success', 'token': token, 'user': {
+        'id': user['id'],
+        'username': user['username'],
+        'is_admin': user['is_admin'],
+    }})
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    """Invalidate the current session token."""
+    token = _extract_token()
+    if token:
+        auth_module.revoke_token(token)
+    return jsonify({'status': 'success', 'message': 'Logged out.'})
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def auth_me():
+    """Return the current authenticated user's info."""
+    user = _get_user()
+    return jsonify({'status': 'success', 'user': user})
+
+
+# ==========================================
+# USER MANAGEMENT (admin only)
+# ==========================================
+
+@app.route('/api/users', methods=['GET'])
+def users_list():
+    """List all users. Admin only."""
+    user = _get_user()
+    try:
+        users = auth_module.list_users(user['id'])
+        return jsonify({'status': 'success', 'users': users})
+    except PermissionError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 403
+
+
+@app.route('/api/users', methods=['POST'])
+def users_create():
+    """Create a new regular user. Admin only."""
+    user = _get_user()
+    data = request.json or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+
+    try:
+        new_user = auth_module.create_user(username, password, user['id'])
+        return jsonify({'status': 'success', 'user': new_user}), 201
+    except PermissionError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 403
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+@app.route('/api/users/<int:target_user_id>', methods=['DELETE'])
+def users_delete(target_user_id: int):
+    """
+    Permanently delete a user and all their data.
+    Admin only. Requires 'confirm_username' in request body as double confirmation.
+    """
+    user = _get_user()
+    data = request.json or {}
+    confirm_username = data.get('confirm_username', '').strip()
+
+    # Fetch the target user to verify the confirmation string
+    target = auth_module.get_user_by_id(target_user_id)
+    if target is None:
+        return jsonify({'status': 'error', 'message': 'User not found.'}), 404
+
+    if confirm_username.lower() != target['username'].lower():
+        return jsonify({
+            'status': 'error',
+            'message': 'Confirmation username does not match. Please type the exact username to confirm deletion.'
+        }), 400
+
+    try:
+        auth_module.delete_user(target_user_id, user['id'])
+        return jsonify({'status': 'success', 'message': f"User '{target['username']}' permanently deleted."})
+    except PermissionError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 403
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+# ==========================================
+# WORKSPACE MANAGEMENT
+# ==========================================
+
+@app.route('/api/workspaces', methods=['GET'])
+def workspaces_list():
+    """List all workspaces belonging to the current user."""
+    user = _get_user()
+    workspaces = workspace_module.list_workspaces(user['username'])
+    external_paths_enabled = os.environ.get(
+        'BIOMOL_ALLOW_EXTERNAL_WORKSPACES', ''
+    ).lower() in {'1', 'true', 'yes'}
+    return jsonify({
+        'status': 'success',
+        'workspaces': workspaces,
+        'external_paths_enabled': external_paths_enabled,
+    })
+
+
+@app.route('/api/workspaces', methods=['POST'])
+def workspaces_create():
+    """Create a new workspace for the current user."""
+    user = _get_user()
+    data = request.json or {}
+    name = data.get('name', '').strip()
+
+    try:
+        storage_parent = data.get('storage_parent')
+        external_paths_enabled = os.environ.get(
+            'BIOMOL_ALLOW_EXTERNAL_WORKSPACES', ''
+        ).lower() in {'1', 'true', 'yes'}
+        if storage_parent and not external_paths_enabled:
+            raise ValueError(
+                'Custom workspace folders are disabled in this process. '
+                'If you are running locally, restart the application with ./start.sh.'
+            )
+        ws = workspace_module.create_workspace(user['username'], name, storage_parent)
+        return jsonify({'status': 'success', 'workspace': ws}), 201
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+
+@app.route('/api/workspaces/<string:name>', methods=['DELETE'])
+def workspaces_delete(name: str):
+    """Delete a workspace and all its contents permanently."""
+    user = _get_user()
+    try:
+        workspace_module.delete_workspace(user['username'], name)
+        return jsonify({'status': 'success', 'message': f"Workspace '{name}' deleted."})
+    except ValueError as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 404
+
+
+@app.route('/api/workspaces/import-dataset', methods=['POST'])
+def workspace_import_dataset():
+    """Import a validated PDB/ChEMBL dataset into the active workspace."""
+    user = _get_user()
+    workspace_name = request.headers.get('X-Workspace', '').strip()
+    if not workspace_name:
+        return jsonify({
+            'status': 'error',
+            'message': 'Selecione o workspace que receberá o dataset.',
+            'issues': [{
+                'path': 'workspace',
+                'reason': 'O cabeçalho X-Workspace não foi informado.',
+                'code': 'missing_workspace',
+            }],
+        }), 400
+    if not workspace_module.workspace_exists(user['username'], workspace_name):
+        return jsonify({
+            'status': 'error',
+            'message': 'O workspace selecionado não existe ou não pertence ao usuário.',
+            'issues': [{
+                'path': workspace_name,
+                'reason': 'Workspace não encontrado para o usuário autenticado.',
+                'code': 'workspace_not_found',
+            }],
+        }), 404
+
+    content_length = request.content_length
+    if content_length is not None and content_length > dataset_import_module.MAX_IMPORT_BYTES:
+        return jsonify({
+            'status': 'error',
+            'message': 'O dataset excede o limite total permitido.',
+            'issues': [{
+                'path': 'datasets',
+                'reason': f'O limite por importação é {dataset_import_module.MAX_IMPORT_BYTES} bytes.',
+                'code': 'dataset_too_large',
+            }],
+        }), 413
+
+    files = request.files.getlist('files')
+    relative_paths = request.form.getlist('relative_paths')
+    empty_directories = request.form.getlist('empty_directories')
+    if len(files) != len(relative_paths):
+        return jsonify({
+            'status': 'error',
+            'message': 'O manifesto do upload está incompleto.',
+            'issues': [{
+                'path': 'datasets',
+                'reason': 'A quantidade de arquivos não corresponde à quantidade de caminhos enviados.',
+                'code': 'manifest_mismatch',
+            }],
+        }), 400
+
+    uploads = [
+        dataset_import_module.UploadItem(relative_path=relative_path, stream=file.stream)
+        for file, relative_path in zip(files, relative_paths, strict=True)
+    ]
+    try:
+        result = dataset_import_module.import_dataset(
+            workspace_module.resolve_workspace_path(user['username'], workspace_name),
+            uploads,
+            empty_directories=empty_directories,
+        )
+        return jsonify({
+            'status': 'success',
+            'message': 'Dataset importado com segurança.',
+            **result,
+        }), 201
+    except dataset_import_module.DatasetImportError as exc:
+        return jsonify({
+            'status': 'error',
+            'message': str(exc),
+            'issues': [issue.as_dict() for issue in exc.issues],
+        }), 400
+    except OSError as exc:
+        app.logger.exception('Dataset import failed due to a filesystem error')
+        return jsonify({
+            'status': 'error',
+            'message': 'Não foi possível gravar o dataset no workspace.',
+            'issues': [{
+                'path': 'datasets',
+                'reason': exc.strerror or str(exc),
+                'code': 'filesystem_error',
+            }],
+        }), 500
+
+
+@app.route('/api/admin/workspaces', methods=['GET'])
+def admin_workspaces_list():
+    """List workspaces for all users. Admin read-only view."""
+    user = _get_user()
+    if not user.get('is_admin'):
+        return jsonify({'status': 'error', 'message': 'Admin access required.'}), 403
+    all_ws = workspace_module.list_all_workspaces()
+    return jsonify({'status': 'success', 'workspaces': all_ws})
+
+
 
 # ==========================================
 # FILESYSTEM BROWSER API
@@ -98,48 +518,70 @@ def browse_filesystem():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route('/api/filesystem/native-picker', methods=['GET'])
+@app.route('/api/filesystem/native-picker', methods=['GET', 'POST'])
 def native_folder_picker():
     """
-    Opens the native OS file explorer dialog starting at the project root directory.
-    """
-    project_root = os.path.abspath(os.path.join(BASE_DIR, '..', '..'))
-    initial_dir = request.args.get('initial_dir', project_root)
-    if not os.path.isdir(initial_dir):
-        initial_dir = project_root
+    Open a native directory chooser on the local BioMolExplorer machine.
 
-    selected_path = ""
-    # Try Tkinter first
+    The route is intentionally unavailable to hosted or non-loopback clients:
+    opening an OS dialog is a privileged local-desktop operation.
+    """
+    external_paths_enabled = os.environ.get(
+        'BIOMOL_ALLOW_EXTERNAL_WORKSPACES', ''
+    ).lower() in {'1', 'true', 'yes'}
+    local_client = request.headers.get('X-BioMol-Local-Client') == '1'
+    if not external_paths_enabled:
+        return jsonify({
+            'status': 'error',
+            'message': 'Restart the local application with ./start.sh before choosing a folder.',
+        }), 403
+    if not local_client:
+        return jsonify({
+            'status': 'error',
+            'message': 'The system folder picker is available only on the local application.',
+        }), 403
+
+    initial_dir = request.args.get('initial_dir', str(Path.home()))
+    if not os.path.isdir(initial_dir):
+        initial_dir = str(Path.home())
+
+    import subprocess
+    if shutil.which('zenity'):
+        command = [
+            'zenity', '--file-selection', '--directory',
+            f'--filename={initial_dir}/',
+            '--title=Escolha onde criar o workspace — BioMolExplorer',
+        ]
+    elif shutil.which('kdialog'):
+        command = [
+            'kdialog', '--getexistingdirectory', initial_dir,
+            '--title', 'Escolha onde criar o workspace — BioMolExplorer',
+        ]
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'No supported system folder picker was found (zenity or kdialog).',
+        }), 501
+
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes('-topmost', True)
-        selected_path = filedialog.askdirectory(
-            initialdir=initial_dir,
-            title="Select Folder - BioMolExplorer"
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=600,
+            check=False,
         )
-        root.destroy()
-    except Exception:
-        # Fallback to zenity native Linux file selection dialog
-        try:
-            import subprocess
-            res = subprocess.run(
-                ['zenity', '--file-selection', '--directory', f'--filename={initial_dir}/', '--title=Select Folder - BioMolExplorer'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            if res.returncode == 0:
-                selected_path = res.stdout.strip()
-        except Exception as e2:
-            return jsonify({'status': 'error', 'message': f'Could not open native OS picker: {str(e2)}'}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({'status': 'error', 'message': 'Folder selection timed out.'}), 408
+    except OSError as exc:
+        return jsonify({'status': 'error', 'message': f'Could not open the system folder picker: {exc}'}), 500
+
+    selected_path = result.stdout.strip() if result.returncode == 0 else ''
 
     if selected_path:
         return jsonify({'status': 'ok', 'path': selected_path})
-    else:
-        return jsonify({'status': 'cancelled', 'path': ''})
+    return jsonify({'status': 'cancelled', 'path': ''})
 
 
 @app.route('/api/filesystem/validate-folder', methods=['POST'])
@@ -218,8 +660,10 @@ def validate_folder_contents():
 
 @app.route('/api/tasks/status/<task_id>', methods=['GET'])
 def get_general_task_status(task_id):
-    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
-    return jsonify(status)
+    status = _task_for_current_scope(task_id)
+    if status is None:
+        return jsonify({'status': 'not_found', 'message': 'Task not found'}), 404
+    return jsonify(_public_task_state(status))
 
 
 @app.route('/load_pdb', methods=['POST'])
@@ -234,35 +678,36 @@ def run_load_pdb():
             if any("NMR" in method.value for method in data['ExperimentalMethodID']):
                 data['max_resolution'] = None
 
+        workspace_base_path = str(_get_workspace_path('datasets'))
         task_id = str(uuid.uuid4())
-        active_tasks[task_id] = {
+        active_tasks[task_id] = _new_task_state(**{
             'status': 'running',
             'message': f"Loading PDB data for {data.get('target')}...",
             'progress': {'phase': 'Downloading PDB structures...'}
-        }
+        })
 
         def worker():
             try:
                 warnings = load_pdb(
                     target=data.get('target'),
-                    base_output_path='datasets',
+                    base_output_path=workspace_base_path,
                     pdb_ec=data.get('pdb_ec'),
                     PolymerEntityTypeID=data.get('PolymerEntityTypeID'),
                     ExperimentalMethodID=data.get('ExperimentalMethodID'),
                     max_resolution=data.get('max_resolution'),
                     must_have_ligand=data.get('must_have_ligand', True)
                 )
-                active_tasks[task_id] = {
+                active_tasks[task_id].update({
                     'status': 'completed',
                     'message': f"PDB data for {data.get('target')} loaded successfully",
                     'warnings': warnings
-                }
+                })
             except Exception as e:
                 print(f"Error in load_pdb async worker: {e}")
-                active_tasks[task_id] = {
+                active_tasks[task_id].update({
                     'status': 'error',
                     'message': str(e)
-                }
+                })
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -279,11 +724,11 @@ def run_load_pdb():
 @app.route('/pdb_files', methods=['GET'])
 def get_pdb_list():
     pdb_data = {}
-    if not os.path.exists(PDB_BASE_PATH):
+    if not os.path.exists(PDB_BASE_PATH()):
         return jsonify({})
 
-    for target_dir in os.listdir(PDB_BASE_PATH):
-        target_path = os.path.join(PDB_BASE_PATH, target_dir)
+    for target_dir in os.listdir(PDB_BASE_PATH()):
+        target_path = os.path.join(PDB_BASE_PATH(), target_dir)
         if os.path.isdir(target_path):
             pdb_files = [f for f in os.listdir(target_path) if f.endswith('.pdb')]
             if pdb_files:
@@ -298,7 +743,7 @@ def get_pdb_csv(target, csv_file):
     if '..' in target or '..' in csv_file:
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
-    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    file_path = os.path.join(PDB_BASE_PATH(), target, csv_file)
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
 
@@ -319,7 +764,7 @@ def _perform_pdb_cascade_delete(target, pdb_code):
     """
     Helper to remove a .pdb file and its references from all CSVs in a target folder.
     """
-    target_dir = os.path.join(PDB_BASE_PATH, target)
+    target_dir = os.path.join(PDB_BASE_PATH(), target)
     pdb_file = f"{pdb_code}.pdb"
     file_path = os.path.join(target_dir, pdb_file)
     
@@ -384,7 +829,7 @@ def delete_pdb_csv_row():
     if '..' in target or '..' in csv_file:
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
-    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    file_path = os.path.join(PDB_BASE_PATH(), target, csv_file)
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
 
@@ -440,7 +885,7 @@ def download_pdb_csv(target, csv_file):
     if '..' in target or '..' in csv_file:
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
-    file_path = os.path.join(PDB_BASE_PATH, target, csv_file)
+    file_path = os.path.join(PDB_BASE_PATH(), target, csv_file)
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'CSV file not found'}), 404
 
@@ -453,7 +898,7 @@ def download_pdb_csv(target, csv_file):
 def download_pdb_zip(target):
     if not target: return jsonify({'status': 'error', 'message': 'Target not specified'}), 400
     if '..' in target: return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
-    target_dir = os.path.join(PDB_BASE_PATH, target)
+    target_dir = os.path.join(PDB_BASE_PATH(), target)
     if not os.path.isdir(target_dir): return jsonify({'status': 'error', 'message': 'Target directory not found'}), 404
     zip_buffer = io.BytesIO()
     try:
@@ -478,7 +923,7 @@ def download_pdb(target, pdb_file):
     if '..' in target or '..' in pdb_file:
         return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
 
-    file_path = os.path.join(PDB_BASE_PATH, target, pdb_file)
+    file_path = os.path.join(PDB_BASE_PATH(), target, pdb_file)
     
     try:
         if os.path.exists(file_path):
@@ -497,8 +942,8 @@ def delete_pdb():
     if not target or not pdb_file:
         return jsonify({'status': 'error', 'message': 'Target or PDB file not specified'}), 400
 
-    file_path = os.path.join(PDB_BASE_PATH, target, pdb_file)
-    target_dir = os.path.join(PDB_BASE_PATH, target)
+    file_path = os.path.join(PDB_BASE_PATH(), target, pdb_file)
+    target_dir = os.path.join(PDB_BASE_PATH(), target)
     
     try:
         # Extract PDB code from filename (remove extension)
@@ -522,14 +967,14 @@ def delete_pdb_target():
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
 
-    target_dir_path = os.path.join(PDB_BASE_PATH, target)
+    target_dir_path = os.path.join(PDB_BASE_PATH(), target)
     
     try:
         if os.path.exists(target_dir_path) and os.path.isdir(target_dir_path):
             shutil.rmtree(target_dir_path) # Remove the entire folder and its contents
             
             # Also remove docking results if the PDB target is deleted
-            docking_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target)
+            docking_dir = os.path.join(_results_path(), 'docking', target)
             if os.path.isdir(docking_dir):
                 shutil.rmtree(docking_dir)
                 
@@ -542,8 +987,7 @@ def delete_pdb_target():
 # ---CHEMBL functions ---
 @app.route('/load_chembl', methods=['POST'])
 def run_load_chembl():
-    """Updates JSON files with user data and runs the ChEMBL crawler."""
-    pass
+    """Validate request-scoped filters and start the ChEMBL crawler."""
     try:
         user_data = request.json
         
@@ -558,9 +1002,7 @@ def run_load_chembl():
 
         # 1. Validate Target Name
         target_name = target_data.get('target_name')
-        print(target_name)
         if not target_name or not isinstance(target_name, str) or len(target_name.strip()) == 0:
-            print('erro aqui')
             return jsonify({'status': 'error', 'message': "Target name is required."}), 400
         
         target_name = target_name.strip() # Use stripped version
@@ -598,50 +1040,54 @@ def run_load_chembl():
             return jsonify({'status': 'error', 'message': "Max Molecule Weight must be a number."}), 400
         # --- End Validation ---
 
-        # Temporary change of the correct directory so that the code work
-        pass
-        pass
-        
-        def update_json_file(file_path, new_data):
-            # Check if file exists, if not, create it
-            if not os.path.exists(file_path):
-                with open(file_path, 'w') as f:
-                    json.dump({}, f, indent=4)
-                    
-            with open(file_path, 'r') as f:
-                json_data = json.load(f)
-            json_data.update(new_data)
-            with open(file_path, 'w') as f:
-                json.dump(json_data, f, indent=4)
-                
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'target.json'), target_data)
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'bioactivity.json'), bioactivity_data)
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'molecules.json'), molecules_data)
-        update_json_file(os.path.join(JSON_CRAWLERS_PATH, 'similarmols.json'), similarmols_data)
-
+        workspace_base_path = str(_get_workspace_path('datasets'))
         task_id = str(uuid.uuid4())
-        active_tasks[task_id] = {
+        active_tasks[task_id] = _new_task_state(**{
             'status': 'running',
             'message': f"Loading ChEMBL data for '{target_name}'...",
             'progress': {'phase': 'Scraping ChEMBL & processing molecules...'}
-        }
+        })
 
         def worker():
             try:
-                load_chembl(
-                    target_name=target_name,
-                    base_output_path='datasets'
-                )
-                active_tasks[task_id] = {
+                last_error = None
+                for attempt in range(3):
+                    try:
+                        load_chembl(
+                            target_name=target_name,
+                            base_output_path=workspace_base_path,
+                            target_filters=dict(target_data),
+                            bioactivity_filters=dict(bioactivity_data),
+                            molecule_filters=dict(molecules_data),
+                            similar_filters=dict(similarmols_data),
+                        )
+                        last_error = None
+                        break
+                    except Exception as exc:
+                        last_error = exc
+                        error_text = str(exc).lower()
+                        transient = any(marker in error_text for marker in (
+                            'status 429', 'status 500', 'status 502', 'status 503', 'status 504',
+                            '/spore', 'connection', 'timed out', 'temporarily unavailable',
+                        ))
+                        if not transient or attempt == 2:
+                            raise
+                        active_tasks[task_id]['progress'] = {
+                            'phase': f'ChEMBL temporarily unavailable; retrying ({attempt + 2}/3)...'
+                        }
+                        time.sleep(2 ** attempt)
+                if last_error is not None:
+                    raise last_error
+                active_tasks[task_id].update({
                     'status': 'completed',
                     'message': f"ChEMBL data for '{target_name}' loaded successfully!"
-                }
+                })
             except Exception as e:
                 print(f"Error in load_chembl async worker: {e}")
-                active_tasks[task_id] = {
+                active_tasks[task_id].update({
                     'status': 'error',
                     'message': str(e)
-                }
+                })
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -654,16 +1100,13 @@ def run_load_chembl():
     except Exception as e:
         print(e)
         return jsonify({'status': 'error', 'message': str(e)}), 400
-    finally:
-    # Come back to the original directory
-        pass
         
 
 @app.route('/chembl_files', methods=['GET'])
 def get_chembl_list():
     """Lists downloaded ChEMBL files (molecules and similars) grouped by target."""
     chembl_data = {}
-    if not os.path.exists(CHEMBL_BASE_PATH):
+    if not os.path.exists(CHEMBL_BASE_PATH()):
         return jsonify(chembl_data)
 
     sub_dirs = ["molecules", "similars"]
@@ -671,7 +1114,7 @@ def get_chembl_list():
 
     # First, find all unique target directories across all sub-directories
     for sub_dir in sub_dirs:
-        sub_dir_path = os.path.join(CHEMBL_BASE_PATH, sub_dir)
+        sub_dir_path = os.path.join(CHEMBL_BASE_PATH(), sub_dir)
         if os.path.isdir(sub_dir_path):
             for target_name in os.listdir(sub_dir_path):
                 if os.path.isdir(os.path.join(sub_dir_path, target_name)):
@@ -682,7 +1125,7 @@ def get_chembl_list():
         chembl_data[target] = {"molecules": [], "similars": []}
         
         for sub_dir in sub_dirs:
-            target_path = os.path.join(CHEMBL_BASE_PATH, sub_dir, target)
+            target_path = os.path.join(CHEMBL_BASE_PATH(), sub_dir, target)
             if os.path.isdir(target_path):
                 csv_files = sorted([f for f in os.listdir(target_path) if f.endswith('.csv')])
                 if csv_files:
@@ -703,7 +1146,7 @@ def download_chembl(sub_dir_name, target, csv_file):
     if sub_dir_name not in ['molecules', 'similars']:
             return jsonify({'status': 'error', 'message': 'Invalid directory'}), 400
 
-    file_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target, csv_file)
+    file_path = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target, csv_file)
     
     try:
         if os.path.exists(file_path):
@@ -729,7 +1172,7 @@ def download_chembl_zip(target):
         files_added = 0
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
             for sub_dir in sub_dirs:
-                target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir, target)
+                target_dir = os.path.join(CHEMBL_BASE_PATH(), sub_dir, target)
                 if os.path.isdir(target_dir):
                     for filename in os.listdir(target_dir):
                         if filename.endswith('.csv'):
@@ -766,7 +1209,7 @@ def download_chembl_category_zip(sub_dir_name, target):
     if sub_dir_name not in ['molecules', 'similars']:
         return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
 
-    target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
+    target_dir = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target)
 
     if not os.path.isdir(target_dir):
         return jsonify({'status': 'error', 'message': 'Category folder not found for this target'}), 404
@@ -814,7 +1257,7 @@ def delete_chembl_category():
     if sub_dir_name not in ['molecules', 'similars']:
         return jsonify({'status': 'error', 'message': 'Invalid category'}), 400
 
-    target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
+    target_dir = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target)
 
     try:
         if os.path.isdir(target_dir):
@@ -839,23 +1282,23 @@ def delete_chembl_target():
         deleted_something = False
         # 1. Delete main ChEMBL folders
         for sub_dir_name in ['molecules', 'similars', 'bioactivity']:
-            target_dir = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
+            target_dir = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target)
             if os.path.isdir(target_dir):
                 shutil.rmtree(target_dir)
                 deleted_something = True
                 
         # 2. Delete DrugBank consolidated files
         for suffix in ['_MOLS.csv', '_SIMS.csv', '_FULL.csv']:
-            drugbank_file = os.path.join(DRUGBANK_PATH, f"{target}{suffix}")
+            drugbank_file = os.path.join(DRUGBANK_PATH(), f"{target}{suffix}")
             if os.path.exists(drugbank_file):
                 os.remove(drugbank_file)
                 deleted_something = True
                 
         # 3. Delete ADMET results
-        if os.path.isdir(ADMET_BASE_PATH):
-            for fname in os.listdir(ADMET_BASE_PATH):
+        if os.path.isdir(ADMET_BASE_PATH()):
+            for fname in os.listdir(ADMET_BASE_PATH()):
                 if fname.startswith(f"{target}_") or fname == target:
-                    fpath = os.path.join(ADMET_BASE_PATH, fname)
+                    fpath = os.path.join(ADMET_BASE_PATH(), fname)
                     if os.path.isdir(fpath):
                         shutil.rmtree(fpath)
                     else:
@@ -863,7 +1306,18 @@ def delete_chembl_target():
                     deleted_something = True
                     
         # 4. Delete Graph Cache
-        maxcomp_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'data', 'maxcomp')
+        input_dir = next((p for p in input_root.iterdir() if p.is_dir() and p.name.replace(" ", "").lower() == target_normalized), None) if input_root.is_dir() else None
+        source_file = None
+        if input_dir is not None:
+            candidate = input_dir / f"{input_dir.name}_{dataset_type}.csv"
+            if candidate.is_file(): source_file = candidate
+        if source_file is None:
+            candidate = legacy_root / f"{target}_{dataset_type}.csv"
+            if candidate.is_file(): source_file = candidate
+        if source_file is None:
+            return jsonify({"success": False, "needs_processing": True, "message": f"No molecular data found for {target} in this workspace."}), 404
+
+        maxcomp_dir = os.path.join(_results_path(), 'grafos', 'data', 'maxcomp')
         if os.path.isdir(maxcomp_dir):
             for fname in os.listdir(maxcomp_dir):
                 if fname.startswith(f"Tanimoto_morgan_{target}_"):
@@ -871,7 +1325,7 @@ def delete_chembl_target():
                     deleted_something = True
                     
         # 5. Delete Docking results
-        docking_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target)
+        docking_dir = os.path.join(_results_path(), 'docking', target)
         if os.path.isdir(docking_dir):
             shutil.rmtree(docking_dir)
             deleted_something = True
@@ -897,7 +1351,7 @@ def delete_chembl():
     if sub_dir_name not in ['molecules', 'similars']:
             return jsonify({'status': 'error', 'message': 'Invalid directory'}), 400
 
-    file_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target, csv_file)
+    file_path = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target, csv_file)
     
     try:
         # Identify the molecule ID (e.g., CHEMBL123) from the filename
@@ -909,19 +1363,19 @@ def delete_chembl():
             
             # 2. Cascade delete: Search and remove the ID from all CSVs in ChEMBL related folders for this target
             search_dirs = [
-                os.path.join(CHEMBL_BASE_PATH, 'molecules', target),
-                os.path.join(CHEMBL_BASE_PATH, 'similars', target),
-                os.path.join(CHEMBL_BASE_PATH, 'bioactivity', target),
-                DRUGBANK_PATH,
-                ADMET_BASE_PATH,
-                os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target)
+                os.path.join(CHEMBL_BASE_PATH(), 'molecules', target),
+                os.path.join(CHEMBL_BASE_PATH(), 'similars', target),
+                os.path.join(CHEMBL_BASE_PATH(), 'bioactivity', target),
+                DRUGBANK_PATH(),
+                ADMET_BASE_PATH(),
+                os.path.join(_results_path(), 'docking', target)
             ]
             
             for directory in search_dirs:
                 if os.path.exists(directory) and os.path.isdir(directory):
                     for filename in os.listdir(directory):
                         # Optimize for DrugBank and ADMET: only check files related to the target
-                        if directory in [DRUGBANK_PATH, ADMET_BASE_PATH] and not filename.startswith(f"{target}_"):
+                        if directory in [DRUGBANK_PATH(), ADMET_BASE_PATH()] and not filename.startswith(f"{target}_"):
                             continue
                             
                         if filename.endswith('.csv'):
@@ -946,12 +1400,23 @@ def delete_chembl():
                                 print(f"Error updating ChEMBL CSV {filename}: {str(e)}", file=sys.stderr)
 
             # Cleanup empty folders
-            target_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target)
+            target_path = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target)
             if os.path.exists(target_path) and not os.listdir(target_path):
                  os.rmdir(target_path) 
                  
             # 3. Delete Graph Cache to force re-generation without the deleted molecule
-            maxcomp_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'data', 'maxcomp')
+        input_dir = next((p for p in input_root.iterdir() if p.is_dir() and p.name.replace(" ", "").lower() == target_normalized), None) if input_root.is_dir() else None
+        source_file = None
+        if input_dir is not None:
+            candidate = input_dir / f"{input_dir.name}_{dataset_type}.csv"
+            if candidate.is_file(): source_file = candidate
+        if source_file is None:
+            candidate = legacy_root / f"{target}_{dataset_type}.csv"
+            if candidate.is_file(): source_file = candidate
+        if source_file is None:
+            return jsonify({"success": False, "needs_processing": True, "message": f"No molecular data found for {target} in this workspace."}), 404
+
+            maxcomp_dir = os.path.join(_results_path(), 'grafos', 'data', 'maxcomp')
             if os.path.isdir(maxcomp_dir):
                 for fname in os.listdir(maxcomp_dir):
                     if fname.startswith(f"Tanimoto_morgan_{target}_"):
@@ -984,39 +1449,29 @@ def run_load_zinc():
         if file.filename == '':
             return jsonify({'status': 'error', 'message': 'No selected file'}), 400
 
-        if not file.filename.endswith('.uri'):
+        if not file.filename.lower().endswith('.uri'):
              return jsonify({'status': 'error', 'message': 'File must be a .uri file'}), 400
 
-        # 2. Determine Parameters based on Filename
+        # 2. The model is explicit in the UI. Keep the filename inference only
+        # for compatibility with clients released before the selector existed.
         filename_original = file.filename
-        # Verifica se contém os termos (case-sensitive, conforme seu código original)
-        has_2d = '2D' in filename_original
-        has_3d = '3D' in filename_original
-        
-        if not has_2d and not has_3d:
-            return jsonify({'status': 'error', 'message': 'Invalid Model: Filename must contain "2D" or "3D"'}), 400
+        workspace_base_path = str(_get_workspace_path('datasets/ZINC'))
+        model = request.form.get('model', '').strip().upper()
+        if not model:
+            model = '2D' if '2D' in filename_original.upper() else '3D' if '3D' in filename_original.upper() else ''
+        if model not in {'2D', '3D'}:
+            return jsonify({'status': 'error', 'message': 'Select the ZINC model (2D or 3D).'}), 400
 
         # 3. Get Verbose Parameter
         verbose_flag = request.form.get('verbose') == 'on'
 
         # 4. Save the uploaded file AND set the flags strictly based on what we actully save
-        if not os.path.exists(ZINC_BASE_PATH):
-            os.makedirs(ZINC_BASE_PATH)
+        if not os.path.exists(ZINC_BASE_PATH()):
+            os.makedirs(ZINC_BASE_PATH())
             
-        # CORREÇÃO: Determinar qual arquivo será salvo e ajustar as flags para load_zinc
-        # Se tiver "2D", priorizamos salvar como zinc_2d.uri e processar APENAS 2D.
-        # Caso contrário (tem "3D" e não "2D"), salvamos como zinc_3d.uri e processamos APENAS 3D.
+        target_filename = f"zinc_{model.lower()}.uri"
         
-        if has_2d:
-            target_filename = "zinc_2d.uri"
-            run_2d = True
-            run_3d = False
-        else:
-            target_filename = "zinc_3d.uri"
-            run_2d = False
-            run_3d = True
-        
-        file_path = os.path.join(ZINC_BASE_PATH, target_filename)
+        file_path = os.path.join(ZINC_BASE_PATH(), target_filename)
         
         # Remove arquivo antigo se existir para evitar conflitos
         if os.path.exists(file_path):
@@ -1024,24 +1479,42 @@ def run_load_zinc():
             
         file.save(file_path)
 
-        # 5. Run the Crawler Wrapper
-        pass
-        pass
-        pass
+        # 5. ZINC retrieval can take several minutes, so use the same scoped
+        # background-job contract as PDB and ChEMBL.
+        task_id = str(uuid.uuid4())
+        active_tasks[task_id] = _new_task_state(**{
+            'status': 'running',
+            'message': f'Processing ZINC {model} data...',
+            'progress': {'phase': f'Downloading ZINC {model} compounds...'}
+        })
 
-        try:
-            load_zinc(
-                base_output_path='datasets/ZINC',
-                filename=target_filename,
-                verbose=verbose_flag
-            )
-        finally:
-            pass
+        def worker():
+            try:
+                load_zinc(
+                    base_output_path=workspace_base_path,
+                    filename=target_filename,
+                    verbose=verbose_flag
+                )
+                active_tasks[task_id].update({
+                    'status': 'completed',
+                    'message': f'ZINC {model} data loaded successfully.'
+                })
+            except requests.exceptions.ConnectionError:
+                active_tasks[task_id].update({
+                    'status': 'error',
+                    'message': 'The ZINC server (files.docking.org) is unavailable. Please try again later.'
+                })
+            except Exception as exc:
+                app.logger.exception('ZINC worker failed')
+                active_tasks[task_id].update({'status': 'error', 'message': str(exc)})
 
-        return jsonify({'status': 'success', 'message': f'ZINC processing for {filename_original} completed.'})
+        threading.Thread(target=worker, daemon=True).start()
+        return jsonify({
+            'status': 'success',
+            'task_id': task_id,
+            'message': f'ZINC {model} processing started in background.'
+        }), 202
 
-    except requests.exceptions.ConnectionError:
-        return jsonify({'status': 'error', 'message': 'The ZINC server (files.docking.org) is unavailable. Please try again later.'}), 503
     except Exception as e:
         print(f"ZINC Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -1051,8 +1524,8 @@ def run_load_zinc():
 def get_zinc_list():
     """Lists files in the ZINC dataset directory. Deprecated or used as fallback."""
     files = []
-    if os.path.exists(ZINC_BASE_PATH):
-        for f in sorted(os.listdir(ZINC_BASE_PATH)):
+    if os.path.exists(ZINC_BASE_PATH()):
+        for f in sorted(os.listdir(ZINC_BASE_PATH())):
             if not f.startswith('.'): 
                 files.append(f)
     return jsonify(files)
@@ -1064,10 +1537,10 @@ def get_zinc_content():
     to be displayed in a table.
     """
     data = []
-    if os.path.exists(ZINC_BASE_PATH):
-        for f in sorted(os.listdir(ZINC_BASE_PATH)):
+    if os.path.exists(ZINC_BASE_PATH()):
+        for f in sorted(os.listdir(ZINC_BASE_PATH())):
             if f.endswith('.csv'): # Process only CSVs
-                file_path = os.path.join(ZINC_BASE_PATH, f)
+                file_path = os.path.join(ZINC_BASE_PATH(), f)
                 try:
                     df = pd.read_csv(file_path)
                     # Check if required columns exist
@@ -1085,10 +1558,10 @@ def download_zinc_zip(target):
     try:
         files_added = 0
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-            if os.path.exists(ZINC_BASE_PATH):
-                for filename in os.listdir(ZINC_BASE_PATH):
+            if os.path.exists(ZINC_BASE_PATH()):
+                for filename in os.listdir(ZINC_BASE_PATH()):
                     if filename.endswith('.csv') or filename.endswith('.uri'):
-                        zf.write(os.path.join(ZINC_BASE_PATH, filename), arcname=filename)
+                        zf.write(os.path.join(ZINC_BASE_PATH(), filename), arcname=filename)
                         files_added += 1
         if files_added == 0: return jsonify({'status': 'error', 'message': 'No ZINC files found'}), 404
         zip_buffer.seek(0)
@@ -1105,30 +1578,36 @@ def download_zinc_file(filename):
     if '..' in filename or '/' in filename:
          return jsonify({'status': 'error', 'message': 'Invalid filename'}), 400
          
-    file_path = os.path.join(ZINC_BASE_PATH, filename)
+    file_path = os.path.join(ZINC_BASE_PATH(), filename)
     if os.path.exists(file_path):
         return send_file(file_path, as_attachment=True)
     return jsonify({'status': 'error', 'message': 'File not found'}), 404
 
 @app.route('/delete_zinc', methods=['POST'])
 def delete_zinc():
-    data = request.json
-    filename = data.get('filename')
-
-    if not filename:
-        return jsonify({'status': 'error', 'message': 'Filename not specified'}), 400
-
-    file_path = os.path.join(ZINC_BASE_PATH, filename)
-    
+    data = request.get_json(silent=True) or {}
+    zinc_dir = Path(ZINC_BASE_PATH())
     try:
-        if os.path.exists(file_path):
-            if os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-            else:
-                os.remove(file_path)
+        if data.get('clear_all') is True:
+            deleted = []
+            if zinc_dir.is_dir():
+                for entry in zinc_dir.iterdir():
+                    if entry.is_file() and entry.suffix.lower() in {'.csv', '.uri'}:
+                        entry.unlink()
+                        deleted.append(entry.name)
+            return jsonify({'status': 'success', 'message': 'ZINC dataset cleared.', 'deleted': deleted})
+
+        filename = data.get('filename', '')
+        if not filename:
+            return jsonify({'status': 'error', 'message': 'Filename not specified'}), 400
+        if Path(filename).name != filename or Path(filename).suffix.lower() not in {'.csv', '.uri'}:
+            return jsonify({'status': 'error', 'message': 'Invalid ZINC filename'}), 400
+
+        file_path = zinc_dir / filename
+        if file_path.is_file():
+            file_path.unlink()
             return jsonify({'status': 'success', 'message': f'{filename} deleted successfully'})
-        else:
-            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+        return jsonify({'status': 'error', 'message': 'File not found'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -1151,7 +1630,7 @@ def get_molecule_data(sub_dir_name, target, csv_file):
     if sub_dir_name not in ['molecules', 'similars']:
             return jsonify({'status': 'error', 'message': 'Invalid directory'}), 400
 
-    file_path = os.path.join(CHEMBL_BASE_PATH, sub_dir_name, target, csv_file)
+    file_path = os.path.join(CHEMBL_BASE_PATH(), sub_dir_name, target, csv_file)
 
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'File not found'}), 404
@@ -1232,7 +1711,7 @@ def get_pdb_content(target, pdb_file):
     if '..' in target or '..' in pdb_file:
         return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
 
-    file_path = os.path.join(PDB_BASE_PATH, target, pdb_file)
+    file_path = os.path.join(PDB_BASE_PATH(), target, pdb_file)
     
     try:
         if os.path.exists(file_path):
@@ -1255,8 +1734,8 @@ def get_target_pdb(target_name):
     if '..' in target_name:
         return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
 
-    # Use PDB_BASE_PATH which should be '.../datasets/PDB'
-    target_dir = os.path.join(PDB_BASE_PATH, target_name)
+    # Use PDB_BASE_PATH() which should be '.../datasets/PDB'
+    target_dir = os.path.join(PDB_BASE_PATH(), target_name)
     
     if not os.path.isdir(target_dir):
         return jsonify({'status': 'error', 'message': f"PDB directory for target '{target_name}' not found"}), 404
@@ -1289,33 +1768,47 @@ def process_graphs():
     """
     Manually runs the similarity pipeline for the graphs.
     """
-    pass
+    data = request.get_json(silent=True) or {}
+    target = str(data.get('target', '')).strip()
+    if not target:
+        return jsonify({'success': False, 'code': 'target_required', 'message': 'Select a target before processing similarity.'}), 400
+
     try:
-        pass
-        pass
+        workspace_root = _get_workspace_path()
+        input_dir, metadata = prepare_inputs(workspace_root, target)
+    except SimilarityInputError as exc:
+        return jsonify({'success': False, 'code': 'input_unavailable', 'message': str(exc)}), 422
+    except Exception:
+        app.logger.error('Could not prepare similarity inputs', exc_info=True)
+        return jsonify({'success': False, 'code': 'input_preparation_failed', 'message': 'Could not prepare molecular data for similarity.'}), 500
 
-        rel_db_path = '/datasets/ChEMBL/DrugBank'
-        full_db_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
-        
-        if not os.path.exists(full_db_path):
-             return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
+    task_id = str(uuid.uuid4())
+    active_tasks[task_id] = _new_task_state(**{
+        'status': 'running', 'message': f"Preparing similarity network for '{target}'...",
+        'progress': {'phase': 'Generating molecular fingerprints'}, 'target': target, 'dataset': metadata,
+    })
+    graph_output_path = workspace_root / 'resultados' / 'grafos'
 
-        generate_fingerprints(base_input_path=rel_db_path, morgan=True, maccs=True, pharmacophore=True)
-        compute_similarity(base_input_path=rel_db_path + '/Fingerprints',
-                           base_output_path=rel_db_path,
-                           metric=similarityFunctions.TanimotoSimilarity,
-                            fingerprint=fingerprints.Morgan)
-        analyze_graphs(base_input_path=rel_db_path,
-                        base_output_path='/resultados/grafos',
-                        metric=similarityFunctions.TanimotoSimilarity,
-                        fingerprint=fingerprints.Morgan)
-                        
-        return jsonify({'success': True, 'message': 'Processing completed successfully.'})
-    except Exception as e:
-        app.logger.error(f"Error processing graphs: {e}", exc_info=True)
-        return jsonify({'success': False, 'message': str(e)}), 500
-    finally:
-        pass
+    def worker():
+        try:
+            generate_fingerprints(base_input_path=str(input_dir), morgan=True, maccs=True, pharmacophore=True)
+            active_tasks[task_id]['progress'] = {'phase': 'Calculating Tanimoto similarities'}
+            compute_similarity(base_input_path=str(input_dir / 'Fingerprints'), base_output_path=str(input_dir), metric=similarityFunctions.TanimotoSimilarity, fingerprint=fingerprints.Morgan)
+            active_tasks[task_id]['progress'] = {'phase': 'Building graph components'}
+            analyze_graphs(base_input_path=str(input_dir), base_output_path=str(graph_output_path), metric=similarityFunctions.TanimotoSimilarity, fingerprint=fingerprints.Morgan)
+            active_tasks[task_id].update({'status': 'completed', 'message': 'Similarity graph is ready.'})
+        except Exception:
+            app.logger.error('Error processing similarity graphs', exc_info=True)
+            active_tasks[task_id].update({'status': 'error', 'code': 'processing_failed', 'message': 'Similarity processing failed. Check the server logs for details.'})
+
+    threading.Thread(target=worker, daemon=True).start()
+    return jsonify({'success': True, 'task_id': task_id, 'message': 'Similarity processing started.', 'dataset': metadata}), 202
+
+
+@app.route('/api/analysis/targets', methods=['GET'])
+def get_similarity_targets():
+    """List targets with molecular inputs in the active workspace."""
+    return jsonify({'success': True, 'targets': similarity_targets(_chembl_path())})
 
 @app.route('/api/analysis/graph-data', methods=['GET'])
 def get_graph_data():
@@ -1331,19 +1824,18 @@ def get_graph_data():
         pass
         pass
 
-        # Defining paths relative to CWD
-        rel_db_path = '/datasets/ChEMBL/DrugBank'
-        
-        # Optimization: if datasets do not exist, skip processing
-        full_db_path = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank')
-        if not os.path.exists(full_db_path):
-             return jsonify({'success': False, 'message': f'Datasets path {full_db_path} not found.'}), 404
-
-        # Executing original workflow functions (21-dataAnalysis.py)
+        # Current workspace data is materialized under resultados/similarity/inputs.
+        # DrugBank remains supported only as a legacy fallback.
+        workspace_root = _get_workspace_path()
+        input_root = workspace_root / "resultados" / "similarity" / "inputs"
+        legacy_root = _drugbank_path()
 
         dataset_type = request.args.get('datasetType', 'MOLS')
-        if dataset_type not in ['MOLS', 'SIMS']:
-            dataset_type = 'MOLS'
+        if dataset_type not in ["MOLS", "SIMS"]:
+            dataset_type = "MOLS"
+        graph_view = request.args.get("view", "strongest")
+        if graph_view not in ["strongest", "full"]:
+            graph_view = "strongest"
 
         # --- 1. Load Processed Data & Check if Outdated ---
         outdated = False
@@ -1352,18 +1844,34 @@ def get_graph_data():
         # Check source files (MOLS and SIMS)
         source_mols = None
         source_sims = None
-        if os.path.exists(full_db_path):
-            for f in os.listdir(full_db_path):
+        if os.path.exists(str(legacy_root)):
+            for f in os.listdir(str(legacy_root)):
                 if f.endswith('_MOLS.csv') and f.replace('_MOLS.csv', '').replace(' ', '').lower() == target_normalized:
-                    source_mols = os.path.join(full_db_path, f)
+                    source_mols = os.path.join(str(legacy_root), f)
                 elif f.endswith('_SIMS.csv') and f.replace('_SIMS.csv', '').replace(' ', '').lower() == target_normalized:
-                    source_sims = os.path.join(full_db_path, f)
+                    source_sims = os.path.join(str(legacy_root), f)
 
-        maxcomp_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'data', 'maxcomp')
+        input_dir = next((p for p in input_root.iterdir() if p.is_dir() and p.name.replace(" ", "").lower() == target_normalized), None) if input_root.is_dir() else None
+        source_file = None
+        if input_dir is not None:
+            candidate = input_dir / f"{input_dir.name}_{dataset_type}.csv"
+            if candidate.is_file(): source_file = candidate
+        if source_file is None:
+            candidate = legacy_root / f"{target}_{dataset_type}.csv"
+            if candidate.is_file(): source_file = candidate
+        if source_file is None:
+            return jsonify({"success": False, "needs_processing": True, "message": f"No molecular data found for {target} in this workspace."}), 404
+
+        maxcomp_dir = os.path.join(_results_path(), 'grafos', 'data', 'maxcomp')
         csv_file = None
         correct_alvo = target # fallback
+        if graph_view == 'full':
+            candidate = os.path.join(str(input_dir), 'Similarity', f'Tanimoto_morgan_{input_dir.name}_{dataset_type}.csv')
+            if os.path.isfile(candidate):
+                csv_file = candidate
+                correct_alvo = input_dir.name
         
-        if os.path.exists(maxcomp_dir):
+        elif os.path.exists(maxcomp_dir):
             for filename in os.listdir(maxcomp_dir):
                 if filename.startswith('Tanimoto_morgan_') and filename.endswith(f'_{dataset_type}.csv'):
                     alvo = filename.replace('Tanimoto_morgan_', '').replace(f'_{dataset_type}.csv', '')
@@ -1377,10 +1885,8 @@ def get_graph_data():
         else:
             # Check modification times
             generated_mtime = os.path.getmtime(csv_file)
-            source_file = source_mols if dataset_type == 'MOLS' else source_sims
-            if source_file and os.path.exists(source_file):
-                if os.path.getmtime(source_file) > generated_mtime:
-                    outdated = True
+            if source_file.is_file() and source_file.stat().st_mtime > generated_mtime:
+                outdated = True
                     
         if outdated:
             return jsonify({'success': False, 'needs_processing': True, 'message': f'Graph data needs to be calculated for {target}.'}), 404
@@ -1390,7 +1896,7 @@ def get_graph_data():
         edges_df = pd.read_csv(csv_file)
         
         # Read molecule data (to map ID -> SMILES) flexibly
-        mols_file = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', f'{correct_alvo}_{dataset_type}.csv')
+        mols_file = str(source_file)
         
         smiles_map = {}
         if os.path.exists(mols_file):
@@ -1437,7 +1943,11 @@ def get_graph_data():
             if csv_file:
                 # The actual filename was picked up in the loop (e.g., Tanimoto_morgan_...csv)
                 filename = os.path.basename(csv_file)
-                full_graph_file = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'Similarity', filename)
+                full_graph_file = os.path.join(str(input_dir), 'Similarity', filename)
+                if not os.path.exists(full_graph_file):
+                    full_graph_file = os.path.join(str(_results_path()), 'grafos', 'data', 'Similarity', filename)
+                if not os.path.exists(full_graph_file):
+                    full_graph_file = os.path.join(str(_drugbank_path()), 'Similarity', filename)
                 
                 if os.path.exists(full_graph_file):
                     import networkx as nx
@@ -1456,7 +1966,8 @@ def get_graph_data():
             'data': {
                 'nodes': nodes,
                 'links': links,
-                'fullGraphDegrees': full_graph_degrees
+                'fullGraphDegrees': full_graph_degrees,
+                'view': graph_view,
             }
         }
         return jsonify(response_data)
@@ -1473,7 +1984,7 @@ def get_graph_data():
 def list_analysis_plots():
     """Returns a list of filename names of the images generated in the analysis."""
     try:
-        plots_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'plots')
+        plots_dir = os.path.join(_results_path(), 'grafos', 'plots')
         if not os.path.exists(plots_dir):
             return jsonify({'success': True, 'data': []})
             
@@ -1490,7 +2001,7 @@ def get_analysis_plot(filename):
         if '..' in filename or '/' in filename:
             return jsonify({'success': False, 'message': 'Invalid filename.'}), 400
             
-        file_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'grafos', 'plots', filename)
+        file_path = os.path.join(_results_path(), 'grafos', 'plots', filename)
         
         if os.path.exists(file_path):
             return send_file(file_path, mimetype='image/png')
@@ -1542,7 +2053,7 @@ def get_analysis_molecule_image():
 # Dictionary to store logs for each task
 task_logs = {}
 
-def redocking_worker(task_id, target, charge_type, prepare_complex):
+def redocking_worker(task_id, target, charge_type, prepare_complex, workspace_root, task_scope):
     threading.current_thread().task_id = task_id
     import logging
     pass
@@ -1587,8 +2098,10 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
         l.addHandler(h)
         handlers.append((l, h))
     
-    out_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados/redocking', target.replace(' ', ''))
-    in_dir = os.path.join(BIOMOL_ROOT_PATH, 'datasets/PDB', target.replace(' ', ''))
+    results_path = os.path.join(workspace_root, 'resultados')
+    pdb_path = os.path.join(workspace_root, 'datasets', 'PDB')
+    out_dir = os.path.join(results_path, 'redocking', target.replace(' ', ''))
+    in_dir = os.path.join(pdb_path, target.replace(' ', ''))
 
     # Clean stale output files from previous runs so progress counter starts cleanly at 0
     if os.path.exists(out_dir):
@@ -1605,6 +2118,7 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
     try:
         task_start_time = time.time()
         active_tasks[task_id] = {
+            **task_scope,
             'status': 'running',
             'target': target,
             'message': f'Running redocking for {target}...',
@@ -1658,9 +2172,9 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
         log_updater.start()
 
         perform_redocking(
-            base_input_path=os.path.join(BIOMOL_ROOT_PATH, 'datasets/PDB'),
+            base_input_path=pdb_path,
             target=target,
-            base_output_path=os.path.join(BIOMOL_ROOT_PATH, 'resultados/redocking'),
+            base_output_path=os.path.join(results_path, 'redocking'),
             prepare_complex=prepare_complex,
             charge_type=charge_type
         )
@@ -1695,12 +2209,12 @@ def redocking_worker(task_id, target, charge_type, prepare_complex):
 def get_redocking_targets():
     """Lists downloaded PDB targets that can be used for redocking."""
     pdb_data = {}
-    if not os.path.exists(PDB_BASE_PATH):
+    if not os.path.exists(PDB_BASE_PATH()):
         return jsonify([])
 
     targets = []
-    for target_dir in os.listdir(PDB_BASE_PATH):
-        target_path = os.path.join(PDB_BASE_PATH, target_dir)
+    for target_dir in os.listdir(PDB_BASE_PATH()):
+        target_path = os.path.join(PDB_BASE_PATH(), target_dir)
         if os.path.isdir(target_path):
             pdb_files = [f for f in os.listdir(target_path) if f.endswith('.pdb')]
             if pdb_files:
@@ -1716,8 +2230,8 @@ def run_redocking_task():
     prepare_complex = data.get('prepare_complex', True)
     prepared_receptor_path = data.get('prepared_receptor_path')
 
-    if not target:
-        return jsonify({'status': 'error', 'message': 'Target is required'}), 400
+    if not target or any(separator in target for separator in ('..', '/', '\\')):
+        return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
     # If prepare_complex is False, the user must confirm they have a prepared receptor
     if not prepare_complex:
@@ -1734,7 +2248,21 @@ def run_redocking_task():
             return jsonify({'status': 'error', 'message': f'Invalid Prepared Receptor folder: No prepared .pdbqt files found inside "{prepared_receptor_path}". Please select a valid Prepared folder.'}), 400
 
     task_id = str(uuid.uuid4())
-    thread = threading.Thread(target=redocking_worker, args=(task_id, target, charge_type, prepare_complex))
+    workspace_root = str(_get_workspace_path())
+    thread = threading.Thread(
+        target=redocking_worker,
+        args=(
+            task_id,
+            target,
+            charge_type,
+            prepare_complex,
+            workspace_root,
+            {
+                '_owner': _get_user()['username'],
+                '_workspace': request.headers.get('X-Workspace', '').strip(),
+            },
+        ),
+    )
     thread.start()
 
     return jsonify({'status': 'success', 'task_id': task_id})
@@ -1742,9 +2270,10 @@ def run_redocking_task():
 
 @app.route('/api/redocking/status/<task_id>', methods=['GET'])
 def get_redocking_status(task_id):
-    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
-    logs = task_logs.get(task_id, "")
-    return jsonify({**status, 'logs': logs})
+    status = _task_for_current_scope(task_id)
+    if status is None:
+        return jsonify({'status': 'not_found', 'message': 'Task not found'})
+    return jsonify({**status, 'logs': task_logs.get(task_id, "")})
 
 
 def finalize_partial_rmsd(target_name):
@@ -1755,8 +2284,8 @@ def finalize_partial_rmsd(target_name):
         from kernel.descriptors import Descriptors
         desc = Descriptors()
         target_clean = target_name.replace(' ', '')
-        in_dir = os.path.join(BIOMOL_ROOT_PATH, 'datasets/PDB', target_clean)
-        out_dir = os.path.join(BIOMOL_ROOT_PATH, 'resultados/redocking', target_clean)
+        in_dir = os.path.join(_pdb_path(), target_clean)
+        out_dir = os.path.join(_results_path(), 'redocking', target_clean)
         csv_path = os.path.join(in_dir, 'pdb_codes.csv')
         
         if not os.path.exists(csv_path) or not os.path.exists(out_dir):
@@ -1789,13 +2318,13 @@ def finalize_partial_rmsd(target_name):
 @app.route('/api/redocking/cancel/<task_id>', methods=['POST'])
 def cancel_redocking_task(task_id):
     """Cancels a running redocking task and saves partial results."""
-    if task_id in active_tasks:
-        if active_tasks[task_id].get('status') == 'running':
-            active_tasks[task_id]['status'] = 'cancelled'
-            active_tasks[task_id]['message'] = 'Stopping redocking and saving partial results...'
+    task = _task_for_current_scope(task_id)
+    if task and task.get('status') == 'running':
+            task['status'] = 'cancelled'
+            task['message'] = 'Stopping redocking and saving partial results...'
             ActiveSubprocesses.kill_by_task_id(task_id)
             ActiveSubprocesses._kill_orphans()
-            target_name = active_tasks[task_id].get('target')
+            target_name = task.get('target')
             finalize_partial_rmsd(target_name)
             return jsonify({'success': True, 'message': 'Cancellation requested and partial results saved'})
     return jsonify({'success': False, 'message': 'Task not running or not found'}), 404
@@ -1805,11 +2334,11 @@ def cancel_redocking_task(task_id):
 def list_redocking_results():
     """Lists targets that have redocking results (pdb_codes.csv with RMSD)."""
     results = []
-    if not os.path.exists(PDB_BASE_PATH):
+    if not os.path.exists(PDB_BASE_PATH()):
         return jsonify([])
 
-    for target_dir in os.listdir(PDB_BASE_PATH):
-        csv_path = os.path.join(PDB_BASE_PATH, target_dir, 'pdb_codes.csv')
+    for target_dir in os.listdir(PDB_BASE_PATH()):
+        csv_path = os.path.join(PDB_BASE_PATH(), target_dir, 'pdb_codes.csv')
         if os.path.exists(csv_path):
             try:
                 df = pd.read_csv(csv_path)
@@ -1822,7 +2351,7 @@ def list_redocking_results():
 
 @app.route('/api/redocking/csv/<target>', methods=['GET'])
 def get_redocking_csv(target):
-    csv_path = os.path.join(PDB_BASE_PATH, target, 'pdb_codes.csv')
+    csv_path = os.path.join(PDB_BASE_PATH(), target, 'pdb_codes.csv')
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
 
@@ -1842,7 +2371,7 @@ def get_redocking_csv(target):
 
 @app.route('/api/redocking/download/<target>', methods=['GET'])
 def download_redocking_csv(target):
-    csv_path = os.path.join(PDB_BASE_PATH, target, 'pdb_codes.csv')
+    csv_path = os.path.join(PDB_BASE_PATH(), target, 'pdb_codes.csv')
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
     
@@ -1855,15 +2384,103 @@ def download_redocking_csv(target):
 # Dictionary to store ADMET task logs
 admet_task_logs = {}
 
-def admet_worker(task_id: str, target: str, input_file: str | None = None):
+def _admet_target_variants(target: str) -> list[str]:
+    return list(dict.fromkeys(v for v in (target, target.replace(' ', '')) if v))
+
+
+def _raw_admet_csvs(base_path: str, category: str, target: str) -> list[str]:
+    paths = []
+    for variant in _admet_target_variants(target):
+        target_dir = os.path.join(base_path, category, variant)
+        if not os.path.isdir(target_dir):
+            continue
+        paths.extend(
+            os.path.join(target_dir, name)
+            for name in sorted(os.listdir(target_dir))
+            if name.lower().endswith('.csv') and os.path.isfile(os.path.join(target_dir, name))
+        )
+    return list(dict.fromkeys(paths))
+
+
+def _load_raw_admet_group(paths: list[str]) -> pd.DataFrame:
+    frames = []
+    for path in paths:
+        try:
+            frame = pd.read_csv(path)
+        except (OSError, ValueError, pd.errors.ParserError):
+            continue
+        if 'molecule_chembl_id' not in frame.columns:
+            continue
+        if 'canonical_smiles' not in frame.columns and 'molecule_structures' not in frame.columns:
+            continue
+        frames.append(frame)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True).drop_duplicates(subset=['molecule_chembl_id'])
+
+
+def _ensure_admet_group_files(workspace_root: str, target: str) -> bool:
+    drugbank_path = os.path.join(workspace_root, 'datasets', 'ChEMBL', 'DrugBank')
+    os.makedirs(drugbank_path, exist_ok=True)
+    if any(os.path.isfile(os.path.join(drugbank_path, f'{target}_{suffix}.csv'))
+           for suffix in ('MOLS', 'SIMS', 'FULL')):
+        return True
+    chembl_path = os.path.join(workspace_root, 'datasets', 'ChEMBL')
+    mols = _load_raw_admet_group(_raw_admet_csvs(chembl_path, 'molecules', target))
+    sims = _load_raw_admet_group(_raw_admet_csvs(chembl_path, 'similars', target))
+    if mols.empty and sims.empty:
+        return False
+    if not mols.empty and not sims.empty:
+        sims = sims[~sims['molecule_chembl_id'].isin(set(mols['molecule_chembl_id']))]
+    groups = {'MOLS': mols, 'SIMS': sims}
+    groups['FULL'] = pd.concat([f for f in (mols, sims) if not f.empty], ignore_index=True)
+    groups['FULL'] = groups['FULL'].drop_duplicates(subset=['molecule_chembl_id'])
+    for suffix, frame in groups.items():
+        if frame.empty:
+            continue
+        destination = os.path.join(drugbank_path, f'{target}_{suffix}.csv')
+        fd, temporary = tempfile.mkstemp(prefix=f'.{target}_{suffix}.', suffix='.csv', dir=drugbank_path)
+        os.close(fd)
+        try:
+            frame.to_csv(temporary, index=False)
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    return True
+
+
+def _admet_available_targets(workspace_root: str) -> list[str]:
+    drugbank_path = os.path.join(workspace_root, 'datasets', 'ChEMBL', 'DrugBank')
+    chembl_path = os.path.join(workspace_root, 'datasets', 'ChEMBL')
+    targets = set()
+    if os.path.isdir(drugbank_path):
+        for fname in os.listdir(drugbank_path):
+            for suffix in ('_MOLS.csv', '_SIMS.csv', '_FULL.csv'):
+                if fname.endswith(suffix):
+                    targets.add(fname[:-len(suffix)])
+                    break
+    for category in ('molecules', 'similars'):
+        category_path = os.path.join(chembl_path, category)
+        if os.path.isdir(category_path):
+            targets.update(name for name in os.listdir(category_path)
+                           if os.path.isdir(os.path.join(category_path, name)))
+    available = []
+    for target in sorted(targets):
+        if _ensure_admet_group_files(workspace_root, target):
+            available.append(target)
+    return available
+
+
+def admet_worker(task_id: str, target: str, workspace_root: str, input_file: str | None = None):
     """Background worker that runs the ADMET pipeline for a given ChEMBL target.
 
     Reads the three consolidated DrugBank files:
-        {DRUGBANK_PATH}/{target}_MOLS.csv
-        {DRUGBANK_PATH}/{target}_SIMS.csv
-        {DRUGBANK_PATH}/{target}_FULL.csv
+        {DRUGBANK_PATH()}/{target}_MOLS.csv
+        {DRUGBANK_PATH()}/{target}_SIMS.csv
+        {DRUGBANK_PATH()}/{target}_FULL.csv
 
-    Writes results to {ADMET_BASE_PATH}/ (= DrugBank/ADMET/).
+    Writes results to {ADMET_BASE_PATH()}/ (= DrugBank/ADMET/).
     """
     log_stream = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
@@ -1905,22 +2522,23 @@ def admet_worker(task_id: str, target: str, input_file: str | None = None):
 
     try:
 
-        # Verify that at least one DrugBank group file exists for this target
+        # Convert imported raw ChEMBL molecule folders when needed.
+        drugbank_path = os.path.join(workspace_root, 'datasets', 'ChEMBL', 'DrugBank')
+        output_path = os.path.join(drugbank_path, 'ADMET')
+        _ensure_admet_group_files(workspace_root, target)
         found_any = any(
-            os.path.isfile(os.path.join(DRUGBANK_PATH, f"{target}_{sfx}.csv"))
+            os.path.isfile(os.path.join(drugbank_path, f"{target}_{sfx}.csv"))
             for sfx in ('MOLS', 'SIMS', 'FULL')
         )
         if not found_any:
             raise FileNotFoundError(
                 f"No DrugBank group files found for target '{target}'. "
-                f"Expected files like '{target}_MOLS.csv' in {DRUGBANK_PATH}. "
+                f"Expected files like '{target}_MOLS.csv' in {drugbank_path}. "
                 f"Please download ChEMBL data first."
             )
 
-        output_path = ADMET_BASE_PATH
-
         wrapper = ADMETWrapper(
-            drugbank_path=DRUGBANK_PATH,
+            drugbank_path=drugbank_path,
             output_path=output_path,
             target=target,
             verbose=True,
@@ -1969,7 +2587,11 @@ def run_admet_task():
         return jsonify({'status': 'error', 'message': 'Invalid target name'}), 400
 
     task_id = str(uuid.uuid4())
-    thread  = threading.Thread(target=admet_worker, args=(task_id, target, None))
+    workspace_root = str(_get_workspace_path())
+    thread = threading.Thread(
+        target=admet_worker,
+        args=(task_id, target, workspace_root, None),
+    )
     thread.start()
 
     return jsonify({'status': 'success', 'task_id': task_id})
@@ -1998,10 +2620,10 @@ def cancel_admet_task(task_id):
 def list_admet_results():
     """Lists targets that have completed ADMET results in DrugBank/ADMET/."""
     results = set()
-    if not os.path.isdir(ADMET_BASE_PATH):
+    if not os.path.isdir(ADMET_BASE_PATH()):
         return jsonify([])
 
-    for fname in os.listdir(ADMET_BASE_PATH):
+    for fname in os.listdir(ADMET_BASE_PATH()):
         if fname.endswith('.csv'):
             # Strip the group suffix to get the target name
             for sfx in ('_MOLS.csv', '_SIMS.csv', '_FULL.csv'):
@@ -2031,12 +2653,12 @@ def get_admet_csv(target):
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
-    if not os.path.isdir(ADMET_BASE_PATH):
+    if not os.path.isdir(ADMET_BASE_PATH()):
         return jsonify({'status': 'error', 'message': 'No ADMET results found'}), 404
 
     groups = []
     for suffix in ('MOLS', 'SIMS', 'FULL'):
-        csv_path = _find_matching_admet_csv(ADMET_BASE_PATH, target, suffix)
+        csv_path = _find_matching_admet_csv(ADMET_BASE_PATH(), target, suffix)
         if not csv_path or not os.path.isfile(csv_path):
             continue
         try:
@@ -2073,7 +2695,7 @@ def get_admet_plot(target, filename):
     if not filename.endswith('.png'):
         return jsonify({'status': 'error', 'message': 'Only PNG files are served'}), 400
 
-    file_path = os.path.join(ADMET_BASE_PATH, filename)
+    file_path = os.path.join(ADMET_BASE_PATH(), filename)
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'Plot not found'}), 404
 
@@ -2086,11 +2708,11 @@ def list_admet_plots(target):
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
-    if not os.path.isdir(ADMET_BASE_PATH):
+    if not os.path.isdir(ADMET_BASE_PATH()):
         return jsonify([])
 
     plots = sorted([
-        f for f in os.listdir(ADMET_BASE_PATH)
+        f for f in os.listdir(ADMET_BASE_PATH())
         if f.startswith(target) and f.endswith('_egg.png')
     ])
     return jsonify(plots)
@@ -2104,7 +2726,7 @@ def download_admet_csv(target, group):
     if group not in ('MOLS', 'SIMS', 'FULL'):
         return jsonify({'status': 'error', 'message': 'group must be MOLS, SIMS, or FULL'}), 400
 
-    csv_path = os.path.join(ADMET_BASE_PATH, f"{target}_{group}.csv")
+    csv_path = os.path.join(ADMET_BASE_PATH(), f"{target}_{group}.csv")
     if not os.path.isfile(csv_path):
         return jsonify({'status': 'error', 'message': 'Results CSV not found'}), 404
 
@@ -2119,19 +2741,9 @@ def download_admet_csv(target, group):
 def list_admet_available_targets():
     """
     Lists targets eligible for ADMET analysis — those that have at least one
-    DrugBank group file (_MOLS.csv / _SIMS.csv / _FULL.csv) in DRUGBANK_PATH.
+    DrugBank group file (_MOLS.csv / _SIMS.csv / _FULL.csv) in DRUGBANK_PATH().
     """
-    if not os.path.isdir(DRUGBANK_PATH):
-        return jsonify([])
-
-    targets = set()
-    for fname in os.listdir(DRUGBANK_PATH):
-        for sfx in ('_MOLS.csv', '_SIMS.csv', '_FULL.csv'):
-            if fname.endswith(sfx):
-                targets.add(fname[: -len(sfx)])
-                break
-
-    return jsonify(sorted(targets))
+    return jsonify(_admet_available_targets(str(_get_workspace_path())))
 
 
 # ==========================================
@@ -2174,16 +2786,13 @@ def _resolve_dock6_app_path() -> str:
 def _resolve_base_mols_path(custom_base_mols: str, library: str) -> str:
     if not custom_base_mols:
         if library == 'zinc':
-            return os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ZINC')
-        return os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'ChEMBL', 'DrugBank', 'ADMET')
+            return str(_zinc_path())
+        return str(_admet_path())
 
     path = custom_base_mols
     if not os.path.isabs(path):
-        candidate = os.path.join(BIOMOL_ROOT_PATH, path)
-        if os.path.exists(candidate):
-            path = candidate
-        else:
-            path = os.path.abspath(path)
+        # Relative selections always belong to the active workspace.
+        path = os.path.join(str(_get_workspace_path()), path)
 
     # Auto-correct if user selected a subdirectory (e.g. .../ADMET/Molecules) where CSV files are in parent directory
     if os.path.exists(path) and os.path.isdir(path):
@@ -2197,7 +2806,15 @@ def _resolve_base_mols_path(custom_base_mols: str, library: str) -> str:
     return path
 
 
-def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwargs: dict):
+def docking_worker(
+    task_id: str,
+    target: str,
+    pdb_code,
+    library: str,
+    dock_kwargs: dict,
+    workspace_root: str,
+    task_scope: dict,
+):
     """
     Background thread that orchestrates the full consensus docking pipeline.
     Calls perform_consensus() exactly as the professor's code does.
@@ -2239,7 +2856,7 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
     except Exception:
         total_mols = 0
 
-    base_output_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+    base_output_path = os.path.join(workspace_root, 'resultados', 'docking')
 
     def _update_logs_and_progress():
         vina_dir = os.path.join(base_output_path, target.replace(' ', ''), 'Vina')
@@ -2285,6 +2902,7 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
         docking_task_logs[task_id] = log_stream.getvalue()
 
     active_tasks[task_id] = {
+        **task_scope,
         'status': 'running',
         'message': f'Running Docking for {target}...',
         'progress': {
@@ -2301,7 +2919,7 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
     try:
 
         # ── Paths (all absolute, portable) ────────────────────────────────────
-        base_input_path  = os.path.join(BIOMOL_ROOT_PATH, 'datasets', 'PDB')
+        base_input_path = os.path.join(workspace_root, 'datasets', 'PDB')
 
         # Use the user-supplied base_selected_mols if provided, otherwise use the defaults
         custom_base_mols = dock_kwargs.pop('base_selected_mols', None)
@@ -2329,8 +2947,9 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
         pdb_tuple = None
         if isinstance(pdb_code, dict):
             target_pdb_id = pdb_code.get('pdb_id')
+            target_dir = target.replace(' ', '')
             if not target_pdb_id:
-                best = get_better_complex(os.path.join(base_input_path, target) + '/')
+                best = get_better_complex(os.path.join(base_input_path, target_dir) + '/')
                 if best and len(best) > 0:
                     # best[0] is e.g. ('9L27', 'ACT', 301, 'A')
                     pdb_tuple = (best[0][0], best[0][1], str(best[0][2]), best[0][3])
@@ -2348,7 +2967,7 @@ def docking_worker(task_id: str, target: str, pdb_code, library: str, dock_kwarg
             
         if not pdb_tuple or len(pdb_tuple) != 4 or any(x is None for x in pdb_tuple):
             # Fallback to the best complex if tuple is invalid
-            best = get_better_complex(os.path.join(base_input_path, target) + '/')
+            best = get_better_complex(os.path.join(base_input_path, target.replace(' ', '')) + '/')
             if best and len(best) > 0:
                 pdb_tuple = (best[0][0], best[0][1], str(best[0][2]), best[0][3])
             else:
@@ -2395,7 +3014,7 @@ def get_ligands_docking(target, pdb_code):
         return jsonify({'status': 'error', 'message': 'Invalid file path'}), 400
 
     try:
-        target_path = os.path.join(PDB_BASE_PATH, target)
+        target_path = os.path.join(PDB_BASE_PATH(), target)
 
         # If pdb_code == target, auto-resolve the best complex via scoring CSV
         if pdb_code == target:
@@ -2426,8 +3045,9 @@ def run_docking_task():
     pdb_code = data.get('pdb_code')  # list/tuple: [pdb_id, resname, resnum, chain]
     library  = data.get('library', 'chembl')
 
-    if not target or not pdb_code:
-        return jsonify({'status': 'error', 'message': 'target and pdb_code are required'}), 400
+    if (not target or any(separator in target for separator in ('..', '/', '\\'))
+            or not pdb_code):
+        return jsonify({'status': 'error', 'message': 'Invalid target or pdb_code'}), 400
 
     # ── Optional user-supplied paths ────────────────────────────────────────
     custom_base_mols      = data.get('base_selected_mols')        # may be None
@@ -2496,9 +3116,21 @@ def run_docking_task():
         return jsonify({'status': 'error', 'message': f'Invalid molecules folder: No molecule CSV files found inside "{effective_base_mols}". Please select a folder containing molecule CSV files or run ADMET filter first.'}), 400
 
     task_id = str(uuid.uuid4())
-    thread  = threading.Thread(
+    workspace_root = str(_get_workspace_path())
+    thread = threading.Thread(
         target=docking_worker,
-        args=(task_id, target, pdb_code, library, {**dock_kwargs, 'mol_filename': mol_filename, 'base_selected_mols': effective_base_mols}),
+        args=(
+            task_id,
+            target,
+            pdb_code,
+            library,
+            {**dock_kwargs, 'mol_filename': mol_filename, 'base_selected_mols': effective_base_mols},
+            workspace_root,
+            {
+                '_owner': _get_user()['username'],
+                '_workspace': request.headers.get('X-Workspace', '').strip(),
+            },
+        ),
         daemon=True
     )
     thread.task_id = task_id
@@ -2510,18 +3142,19 @@ def run_docking_task():
 @app.route('/api/docking/status/<task_id>', methods=['GET'])
 def get_docking_status(task_id):
     """Returns the current status and live logs of a running docking task."""
-    status = active_tasks.get(task_id, {'status': 'not_found', 'message': 'Task not found'})
-    logs   = docking_task_logs.get(task_id, '')
-    return jsonify({**status, 'logs': logs})
+    status = _task_for_current_scope(task_id)
+    if status is None:
+        return jsonify({'status': 'not_found', 'message': 'Task not found'})
+    return jsonify({**status, 'logs': docking_task_logs.get(task_id, '')})
 
 
 @app.route('/api/docking/cancel/<task_id>', methods=['POST'])
 def cancel_docking_task(task_id):
     """Cancels a running docking task and generates partial results."""
-    if task_id in active_tasks:
-        if active_tasks[task_id].get('status') == 'running':
-            active_tasks[task_id]['status'] = 'cancelled'
-            active_tasks[task_id]['message'] = 'Stopping docking and saving partial results...'
+    task = _task_for_current_scope(task_id)
+    if task and task.get('status') == 'running':
+            task['status'] = 'cancelled'
+            task['message'] = 'Stopping docking and saving partial results...'
             ActiveSubprocesses.kill_by_task_id(task_id)
             return jsonify({'success': True, 'message': 'Cancellation requested'})
     return jsonify({'success': False, 'message': 'Task not running or not found'}), 404
@@ -2530,7 +3163,7 @@ def cancel_docking_task(task_id):
 @app.route('/api/docking/results', methods=['GET'])
 def list_docking_results():
     """Lists targets that have a completed docking consensus CSV."""
-    docking_base = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking')
+    docking_base = os.path.join(_results_path(), 'docking')
     if not os.path.exists(docking_base):
         return jsonify([])
 
@@ -2547,7 +3180,7 @@ def get_docking_csv(target):
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
-    csv_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, f"{target}.csv")
+    csv_path = os.path.join(_results_path(), 'docking', target, f"{target}.csv")
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
 
@@ -2565,7 +3198,7 @@ def get_docking_plot(target):
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
-    file_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, 'correlation.png')
+    file_path = os.path.join(_results_path(), 'docking', target, 'correlation.png')
     if not os.path.exists(file_path):
         return jsonify({'status': 'error', 'message': 'Plot not found'}), 404
 
@@ -2578,7 +3211,7 @@ def download_docking_csv(target):
     if '..' in target:
         return jsonify({'status': 'error', 'message': 'Invalid target'}), 400
 
-    csv_path = os.path.join(BIOMOL_ROOT_PATH, 'resultados', 'docking', target, f"{target}.csv")
+    csv_path = os.path.join(_results_path(), 'docking', target, f"{target}.csv")
     if not os.path.exists(csv_path):
         return jsonify({'status': 'error', 'message': 'Results not found'}), 404
 

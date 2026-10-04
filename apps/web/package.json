@@ -12,16 +12,24 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@rdkit/rdkit": "^2025.3.4-1.0.0",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@react-three/postprocessing": "^3.1.1",
+    "gsap": "^3.15.0",
     "next": "16.1.6",
+    "postprocessing": "^6.39.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-force-graph-2d": "^1.29.1",
     "react-force-graph-3d": "^1.29.1",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "three": "^0.186.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

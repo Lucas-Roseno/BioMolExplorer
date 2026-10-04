@@ -6,15 +6,25 @@ async function proxyRequest(request: Request) {
 
     const headers = new Headers(request.headers);
     headers.delete('host');
+    // This header is internal and must never be trusted from the browser.
+    // Native filesystem dialogs are allowed only when the UI itself was
+    // opened through a loopback address on the same machine.
+    headers.delete('x-biomol-local-client');
+    if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+        headers.set('X-BioMol-Local-Client', '1');
+    }
 
-    const init: RequestInit = {
+    const init: RequestInit & { duplex?: "half" } = {
         method: request.method,
         headers,
         signal: AbortSignal.timeout(1_800_000), // 30 minutes timeout
     };
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
-        init.body = await request.arrayBuffer();
+        // Keep uploads streaming end-to-end instead of buffering a complete
+        // researcher dataset inside the Next.js process.
+        init.body = request.body;
+        init.duplex = 'half';
     }
 
     try {

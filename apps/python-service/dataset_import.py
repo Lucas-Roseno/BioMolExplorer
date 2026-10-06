@@ -21,8 +21,16 @@ from typing import BinaryIO, Iterable, Sequence
 
 
 MAX_IMPORT_FILES = int(os.environ.get("BIOMOL_DATASET_IMPORT_MAX_FILES", "25000"))
-MAX_IMPORT_BYTES = int(
-    os.environ.get("BIOMOL_DATASET_IMPORT_MAX_BYTES", str(10 * 1024**3))
+_DEFAULT_MAX_IMPORT_BYTES = 10 * 1024**3
+_configured_max_import_bytes = int(
+    os.environ.get("BIOMOL_DATASET_IMPORT_MAX_BYTES", str(_DEFAULT_MAX_IMPORT_BYTES))
+)
+# Non-positive values are never valid request limits. Treat them as unset so a
+# stale local environment cannot make every body-bearing request return 413.
+MAX_IMPORT_BYTES = (
+    _configured_max_import_bytes
+    if _configured_max_import_bytes > 0
+    else _DEFAULT_MAX_IMPORT_BYTES
 )
 MAX_FILE_BYTES = int(
     os.environ.get("BIOMOL_DATASET_IMPORT_MAX_FILE_BYTES", str(512 * 1024**2))

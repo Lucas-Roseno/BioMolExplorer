@@ -1,5 +1,7 @@
 // Auto-generated 3D molecules from PubChem
-export const MOLECULES_3D = [
+import { CAPTOPRIL_3D } from "./captopril3D";
+
+const GENERATED_MOLECULES_3D = [
   {
     "name": "alpha-Humulene",
     "atoms": [
@@ -5028,3 +5030,7 @@ export const MOLECULES_3D = [
     ]
   }
 ];
+
+// Captopril replaces the former alpha-humulene at index 0 without shifting
+// the remaining indices used by the landing page and login scene.
+export const MOLECULES_3D = [CAPTOPRIL_3D, ...GENERATED_MOLECULES_3D.slice(1)];

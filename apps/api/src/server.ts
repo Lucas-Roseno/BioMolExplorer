@@ -18,9 +18,11 @@ app.use(express.json());
 app.use((req, res, next) => {
   const auth = req.headers['authorization'];
   const ws   = req.headers['x-workspace'];
+  const localClient = req.headers['x-biomol-local-client'];
   res.locals.authHeaders = {
     ...(auth ? { Authorization: auth as string } : {}),
     ...(ws   ? { 'X-Workspace': ws as string }  : {}),
+    ...(localClient === '1' ? { 'X-BioMol-Local-Client': '1' } : {}),
   };
   next();
 });

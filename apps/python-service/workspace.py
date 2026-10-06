@@ -8,6 +8,7 @@ Each workspace is an isolated directory containing that user's datasets and resu
 import os
 import re
 import shutil
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -82,20 +83,72 @@ def resolve_workspace_path(username: str, workspace_name: str) -> Path:
     return registry_path
 
 
+def resolve_workspace_datasets_path(username: str, workspace_name: str) -> Path:
+    """Return the datasets root, including a locally attached dataset if set."""
+    registry_path = _workspace_registry_path(username, workspace_name)
+    workspace_path = resolve_workspace_path(username, workspace_name)
+    meta_path = registry_path / ".workspace.json"
+    if meta_path.is_file():
+        try:
+            datasets_path = json.loads(meta_path.read_text(encoding="utf-8")).get("datasets_path")
+            if datasets_path:
+                resolved = Path(datasets_path).expanduser().resolve()
+                if resolved.name != "datasets" or not resolved.is_dir():
+                    raise ValueError("The attached datasets folder is no longer available.")
+                return resolved
+        except json.JSONDecodeError as exc:
+            raise ValueError("The workspace metadata is invalid.") from exc
+    return workspace_path / "datasets"
+
+
+def attach_datasets_path(username: str, workspace_name: str, datasets_path: str) -> dict:
+    """Attach an existing local datasets directory without copying its files."""
+    workspace_path = resolve_workspace_path(username, workspace_name)
+    registry_path = _workspace_registry_path(username, workspace_name)
+    selected = Path(datasets_path).expanduser()
+    if not selected.is_absolute():
+        raise ValueError("The datasets folder must be an absolute path.")
+    selected = selected.resolve()
+    if selected.name != "datasets":
+        raise ValueError("Select the folder named exactly 'datasets'.")
+    if not selected.is_dir():
+        raise ValueError("The selected datasets folder does not exist.")
+    if not os.access(selected, os.R_OK | os.W_OK | os.X_OK):
+        raise ValueError("The selected datasets folder must be readable and writable.")
+    for source in ("PDB", "ChEMBL", "ZINC"):
+        source_path = selected / source
+        if source_path.exists() and not source_path.is_dir():
+            raise ValueError(f"'{source}' must be a directory inside datasets.")
+        source_path.mkdir(exist_ok=True)
+
+    meta_path = registry_path / ".workspace.json"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("Could not read the workspace metadata.") from exc
+    meta["datasets_path"] = str(selected)
+    meta_json = json.dumps(meta, indent=2)
+    meta_path.write_text(meta_json, encoding="utf-8")
+    external_meta_path = workspace_path / ".workspace.json"
+    if external_meta_path != meta_path:
+        external_meta_path.write_text(meta_json, encoding="utf-8")
+    return _workspace_info(username, registry_path)
+
+
 # ---------------------------------------------------------------------------
 # Dataset sub-path shortcuts  (mirrors the old hardcoded constants)
 # ---------------------------------------------------------------------------
 
 def pdb_path(username: str, workspace_name: str) -> Path:
-    return resolve_workspace_path(username, workspace_name) / "datasets" / "PDB"
+    return resolve_workspace_datasets_path(username, workspace_name) / "PDB"
 
 
 def chembl_path(username: str, workspace_name: str) -> Path:
-    return resolve_workspace_path(username, workspace_name) / "datasets" / "ChEMBL"
+    return resolve_workspace_datasets_path(username, workspace_name) / "ChEMBL"
 
 
 def zinc_path(username: str, workspace_name: str) -> Path:
-    return resolve_workspace_path(username, workspace_name) / "datasets" / "ZINC"
+    return resolve_workspace_datasets_path(username, workspace_name) / "ZINC"
 
 
 def results_path(username: str, workspace_name: str) -> Path:
@@ -273,16 +326,21 @@ def _workspace_info(username: str, registry_path: Path) -> dict:
         except Exception:
             pass
 
-    # Calculate rough disk usage (non-recursive for speed)
+    datasets_path = resolve_workspace_datasets_path(username, registry_path.name)
+    size_roots = [storage_path]
+    if datasets_path != storage_path / "datasets":
+        size_roots.append(datasets_path)
     size_bytes = sum(
         f.stat().st_size
-        for f in storage_path.rglob("*")
+        for root in size_roots
+        for f in root.rglob("*")
         if f.is_file() and f.name != ".workspace.json"
     )
 
     return {
         "name": registry_path.name,
         "path": str(storage_path),
+        "datasets_path": str(datasets_path),
         "created_at": created_at,
         "owner": username,
         "size_bytes": size_bytes,

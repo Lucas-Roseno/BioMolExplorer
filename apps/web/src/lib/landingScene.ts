@@ -34,12 +34,14 @@ export const LANDING_MOLECULES: readonly LandingMolecule[] = [
     rotation: [0, 0, 0],
     scale: 0.7,
     moleculeIndex: 0,
+    // Keep the opening camera distance spacious despite captopril's more
+    // compact geometry, leaving room for the hero copy and information card.
     visualRadius: 5.8,
     label: {
-      title: "α-Humuleno",
-      formula: "C₁₅H₂₄",
-      description: "Componente do óleo essencial de Cordia verbenacea usado no Acheflan, fitomedicamento com P&D 100% nacional.",
-      position: [1.5, -2.8, 0],
+      title: "Captopril",
+      formula: "C₉H₁₅NO₃S · 217,29 g/mol",
+      description: "Inibidor da ECA: seu grupo tiol interage com o zinco da enzima, ajudando a reduzir a formação de angiotensina II e a pressão arterial.",
+      position: [1.7, -1.75, 0],
       distanceFactor: 9,
     },
   },

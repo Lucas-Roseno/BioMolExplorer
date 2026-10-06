@@ -77,7 +77,7 @@ export default function CanvasScene({
                     <div
                       role="note"
                       aria-label={[molecule.label.title, molecule.label.formula, molecule.label.description].join(". ")}
-                      className="w-56 rounded-xl border border-[#47366d]/15 bg-[#f6f4f8]/72 px-3 py-2 text-[#34274c] shadow-[0_8px_24px_rgba(71,54,109,0.12)] backdrop-blur-md"
+                      className="w-72 rounded-xl border border-[#47366d]/15 bg-[#f6f4f8]/72 px-3 py-2 text-[#34274c] shadow-[0_8px_24px_rgba(71,54,109,0.12)] backdrop-blur-md"
                     >
                       <p className="text-[0.65rem] font-bold tracking-[0.12em] uppercase">
                         {molecule.label.title}

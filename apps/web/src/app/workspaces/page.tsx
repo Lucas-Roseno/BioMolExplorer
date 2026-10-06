@@ -1,16 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { apiFetch } from "@/lib/apiFetch";
-import {
-  DatasetSelectionSummary,
-  DatasetValidationIssue,
-  findEmptySelectedDirectories,
-  formatDatasetBytes,
-  validateDatasetSelection,
-} from "@/lib/datasetImport";
 import { useAuth } from "@/components/AuthProvider";
 import "./workspaces.css";
 
@@ -20,6 +13,7 @@ interface Workspace {
   size_bytes: number;
   owner: string;
   path: string;
+  datasets_path?: string;
 }
 
 declare global {
@@ -50,7 +44,7 @@ function formatDate(iso: string | null): string {
 
 export default function WorkspacesPage() {
   const router = useRouter();
-  const { user: currentUser, token, isLoading: authLoading, logout, setActiveWorkspace } = useAuth();
+  const { user: currentUser, workspace: activeWorkspace, token, isLoading: authLoading, logout, setActiveWorkspace, clearActiveWorkspace } = useAuth();
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
@@ -77,14 +71,16 @@ export default function WorkspacesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [workspaceDeleteTarget, setWorkspaceDeleteTarget] = useState<Workspace | null>(null);
+  const [workspaceDeleteError, setWorkspaceDeleteError] = useState("");
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
-  const datasetInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<Workspace | null>(null);
-  const [datasetSelection, setDatasetSelection] = useState<DatasetSelectionSummary | null>(null);
-  const [datasetIssues, setDatasetIssues] = useState<DatasetValidationIssue[]>([]);
+  const [datasetPath, setDatasetPath] = useState("");
   const [datasetUploadError, setDatasetUploadError] = useState("");
   const [datasetUploadSuccess, setDatasetUploadSuccess] = useState("");
   const [uploadingDataset, setUploadingDataset] = useState(false);
+  const [selectingDatasetFolder, setSelectingDatasetFolder] = useState(false);
 
   const authHeaders = useCallback(
     () => ({ "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` }),
@@ -132,67 +128,62 @@ export default function WorkspacesPage() {
 
   const openDatasetImport = (workspace: Workspace) => {
     setUploadTarget(workspace);
-    setDatasetSelection(null);
-    setDatasetIssues([]);
+    setDatasetPath("");
     setDatasetUploadError("");
     setDatasetUploadSuccess("");
-    if (datasetInputRef.current) datasetInputRef.current.value = "";
   };
 
   const closeDatasetImport = () => {
     if (uploadingDataset) return;
     setUploadTarget(null);
-    setDatasetSelection(null);
-    setDatasetIssues([]);
+    setDatasetPath("");
     setDatasetUploadError("");
     setDatasetUploadSuccess("");
   };
 
-  const handleDatasetFolderChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const files = Array.from(input.files ?? []);
+  const handleSelectDatasetFolder = async () => {
     setDatasetUploadError("");
-    setDatasetUploadSuccess("");
-    const emptyDirectories = await findEmptySelectedDirectories(input);
-    const result = validateDatasetSelection(files, emptyDirectories);
-    setDatasetSelection(result.summary);
-    setDatasetIssues(result.issues);
+    setSelectingDatasetFolder(true);
+    try {
+      if (window.biomolDesktop) {
+        const selected = await window.biomolDesktop.selectWorkspaceParent();
+        if (selected) setDatasetPath(selected);
+        return;
+      }
+      const res = await apiFetch("/api/filesystem/native-picker", { method: "POST", headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok || data.status === "error") throw new Error(data.message ?? "Unable to open the folder picker.");
+      if (data.status === "ok" && data.path) setDatasetPath(data.path);
+    } catch (error: unknown) {
+      setDatasetUploadError(error instanceof Error ? error.message : "Unable to select the folder.");
+    } finally {
+      setSelectingDatasetFolder(false);
+    }
   };
 
   const handleDatasetImport = async () => {
-    if (!uploadTarget || !datasetSelection || !token) return;
+    if (!uploadTarget || !datasetPath || !token) return;
     setUploadingDataset(true);
     setDatasetUploadError("");
     setDatasetUploadSuccess("");
-    setDatasetIssues([]);
-
-    const formData = new FormData();
-    datasetSelection.files.forEach((file, index) => {
-      formData.append("relative_paths", datasetSelection.paths[index]);
-      formData.append("files", file, file.name);
-    });
-    datasetSelection.emptyDirectories.forEach(directory => formData.append("empty_directories", directory));
 
     try {
-      const response = await apiFetch("/api/workspaces/import-dataset", {
+      const response = await apiFetch(`/api/workspaces/${encodeURIComponent(uploadTarget.name)}/attach-datasets`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Workspace": uploadTarget.name,
-        },
-        body: formData,
+        headers: authHeaders(),
+        body: JSON.stringify({ datasets_path: datasetPath }),
       });
-      const data = await response.json();
+      const data = response.headers.get("content-type")?.includes("application/json")
+        ? await response.json()
+        : {};
       if (!response.ok) {
-        setDatasetIssues(Array.isArray(data.issues) ? data.issues : []);
-        throw new Error(data.message ?? "The dataset was rejected by the server.");
+        throw new Error(data.message ?? "The datasets folder was rejected by the server.");
       }
-      setDatasetUploadSuccess(
-        `${data.file_count ?? datasetSelection.files.length} files imported into ${uploadTarget.name}.`
-      );
-      setDatasetSelection(null);
-      if (datasetInputRef.current) datasetInputRef.current.value = "";
-      await fetchWorkspaces();
+      // Persist the server-confirmed workspace before navigating so every
+      // home-page request is immediately scoped to the attached datasets.
+      setActiveWorkspace((data.workspace ?? uploadTarget) as import("@/components/AuthProvider").Workspace);
+      router.replace("/");
+      return;
     } catch (error: unknown) {
       setDatasetUploadError(error instanceof Error ? error.message : "Unable to import the dataset.");
     } finally {
@@ -277,6 +268,26 @@ export default function WorkspacesPage() {
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : "Error.");
     } finally { setDeleting(false); }
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!workspaceDeleteTarget) return;
+    setWorkspaceDeleteError("");
+    setDeletingWorkspace(true);
+    try {
+      const res = await apiFetch(`/api/workspaces/${encodeURIComponent(workspaceDeleteTarget.name)}`, {
+        method: "DELETE", headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Failed to delete workspace.");
+      if (activeWorkspace?.name === workspaceDeleteTarget.name) clearActiveWorkspace();
+      setWorkspaceDeleteTarget(null);
+      await fetchWorkspaces();
+    } catch (error: unknown) {
+      setWorkspaceDeleteError(error instanceof Error ? error.message : "Unable to delete the workspace.");
+    } finally {
+      setDeletingWorkspace(false);
+    }
   };
 
   if (authLoading || loading) {
@@ -393,7 +404,18 @@ export default function WorkspacesPage() {
                     onClick={() => openDatasetImport(ws)}
                   >
                     <i className="fas fa-file-import" aria-hidden="true" />
-                    Import dataset
+                    Use existing dataset
+                  </button>
+                  <button
+                    className="workspace-card-delete"
+                    type="button"
+                    onClick={() => {
+                      setWorkspaceDeleteTarget(ws);
+                      setWorkspaceDeleteError("");
+                    }}
+                  >
+                    <i className="far fa-trash-alt" aria-hidden="true" />
+                    Delete workspace
                   </button>
                 </article>
               ))
@@ -458,15 +480,14 @@ export default function WorkspacesPage() {
               <span className="workspace-modal-icon" aria-hidden="true"><i className="fas fa-database" /></span>
               <div>
                 <span>Workspace: {uploadTarget.name}</span>
-                <h3 id="dataset-import-title">Import existing dataset</h3>
+                <h3 id="dataset-import-title">Use existing dataset</h3>
               </div>
             </div>
 
             <div className="workspace-dataset-guidance">
               <p>
-                Select the root folder named exactly <strong>datasets</strong>. Names are case-sensitive:
-                it must contain <strong>PDB</strong>, <strong>ChEMBL</strong>, or both, with no other folder
-                at the same level.
+                Select the root folder named exactly <strong>datasets</strong>. The workspace will use it directly:
+                no file is uploaded or copied.
               </p>
               <pre aria-label="Required dataset structure">{`datasets/
 ├── PDB/
@@ -481,37 +502,26 @@ export default function WorkspacesPage() {
     ├── similars/Target/*.csv
     └── targets/*.csv`}</pre>
               <ul>
-                <li>When ChEMBL is included, all five folders shown are required, cannot be empty, and must contain the same targets.</li>
-                <li>ZIP archives, executables, shortcuts, hidden files, and formats unrelated to biomolecular data are rejected.</li>
-                <li>Existing PDB and ChEMBL data in the workspace will not be overwritten.</li>
-                <li>No file is written to the destination until validation is complete.</li>
+                <li>PDB, ChEMBL and ZINC pages will read and write directly in this folder.</li>
+                <li>Any missing PDB, ChEMBL or ZINC directory will be created automatically.</li>
+                <li>The linked folder must remain available and writable while this workspace is in use.</li>
               </ul>
             </div>
 
-            <label className={`workspace-dataset-picker ${uploadingDataset ? "is-disabled" : ""}`}>
-              <input
-                ref={datasetInputRef}
-                type="file"
-                multiple
-                disabled={uploadingDataset}
-                onChange={handleDatasetFolderChange}
-                {...({ webkitdirectory: "", directory: "" } as unknown as React.InputHTMLAttributes<HTMLInputElement>)}
-              />
+            <button type="button" className={`workspace-dataset-picker ${uploadingDataset ? "is-disabled" : ""}`} onClick={handleSelectDatasetFolder} disabled={uploadingDataset || selectingDatasetFolder}>
               <i className="fas fa-folder-open" aria-hidden="true" />
               <span>
                 <strong>Choose the datasets folder</strong>
-                <small>The entire folder will be validated before upload.</small>
+                <small>{selectingDatasetFolder ? "Opening system dialog..." : datasetPath || "Select it with the system dialog."}</small>
               </span>
-            </label>
+            </button>
 
-            {datasetSelection && (
+            {datasetPath && (
               <div className="workspace-dataset-summary" role="status">
                 <i className="fas fa-check-circle" aria-hidden="true" />
                 <div>
-                  <strong>Valid local structure</strong>
-                  <span>
-                    {datasetSelection.sources.join(" + ")} · {datasetSelection.files.length.toLocaleString("en-US")} files · {formatDatasetBytes(datasetSelection.totalBytes)}
-                  </span>
+                  <strong>Local folder selected</strong>
+                  <span>{datasetPath}</span>
                 </div>
               </div>
             )}
@@ -524,20 +534,6 @@ export default function WorkspacesPage() {
             )}
 
             {datasetUploadError && <p className="workspace-modal-error" role="alert">{datasetUploadError}</p>}
-            {datasetIssues.length > 0 && (
-              <div className="workspace-dataset-issues" role="alert" aria-label="Items blocking the import">
-                <strong>Fix the items below:</strong>
-                <ul>
-                  {datasetIssues.map((currentIssue, index) => (
-                    <li key={`${currentIssue.code}-${currentIssue.path}-${index}`}>
-                      <code>{currentIssue.path}</code>
-                      <span>{currentIssue.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             <div className="workspace-modal-actions">
               <button type="button" className="workspaces-secondary-button" onClick={closeDatasetImport} disabled={uploadingDataset}>
                 {datasetUploadSuccess ? "Close" : "Cancel"}
@@ -547,9 +543,9 @@ export default function WorkspacesPage() {
                   type="button"
                   className="workspaces-primary-button"
                   onClick={handleDatasetImport}
-                  disabled={!datasetSelection || uploadingDataset}
+                  disabled={!datasetPath || uploadingDataset}
                 >
-                  {uploadingDataset ? <><i className="fas fa-circle-notch fa-spin" aria-hidden="true" /> Validating and importing...</> : "Import dataset"}
+                  {uploadingDataset ? <><i className="fas fa-circle-notch fa-spin" aria-hidden="true" /> Linking datasets...</> : "Use this dataset"}
                 </button>
               )}
             </div>
@@ -641,6 +637,30 @@ export default function WorkspacesPage() {
                 <button type="submit" className="workspaces-primary-button" disabled={creatingUser}>{creatingUser ? "Creating..." : "Create user"}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {workspaceDeleteTarget && (
+        <div className="workspace-modal-backdrop">
+          <div className="workspace-modal workspace-modal-danger" role="alertdialog" aria-modal="true" aria-labelledby="delete-workspace-title">
+            <div className="workspace-modal-heading">
+              <span className="workspace-modal-icon" aria-hidden="true"><i className="fas fa-exclamation-triangle" /></span>
+              <div><span>Irreversible action</span><h3 id="delete-workspace-title">Delete workspace</h3></div>
+            </div>
+            <p>
+              Delete <strong>{workspaceDeleteTarget.name}</strong> and its managed results? This cannot be undone.
+              {workspaceDeleteTarget.datasets_path && workspaceDeleteTarget.datasets_path !== `${workspaceDeleteTarget.path}/datasets`
+                ? " The linked external datasets folder will be preserved."
+                : " Its managed datasets will also be deleted."}
+            </p>
+            {workspaceDeleteError && <p className="workspace-modal-error" role="alert">{workspaceDeleteError}</p>}
+            <div className="workspace-modal-actions">
+              <button type="button" className="workspaces-secondary-button" onClick={() => setWorkspaceDeleteTarget(null)} disabled={deletingWorkspace}>Cancel</button>
+              <button type="button" className="workspaces-danger-button" onClick={handleDeleteWorkspace} disabled={deletingWorkspace}>
+                {deletingWorkspace ? "Deleting..." : "Delete permanently"}
+              </button>
+            </div>
           </div>
         </div>
       )}

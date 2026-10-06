@@ -98,9 +98,9 @@ def _source_signature(files: list[Path]) -> str:
     return digest.hexdigest()
 
 
-def prepare_inputs(workspace_root: Path, target: str) -> tuple[Path, dict]:
+def prepare_inputs(workspace_root: Path, target: str, datasets_root: Path | None = None) -> tuple[Path, dict]:
     """Materialize MOLS/SIMS files under resultados, returning their metadata."""
-    chembl_root = workspace_root / "datasets" / "ChEMBL"
+    chembl_root = (datasets_root or workspace_root / "datasets") / "ChEMBL"
     molecules_dir = _target_directory(chembl_root / "molecules", target)
     similars_dir = _target_directory(chembl_root / "similars", target)
     mols = _load_partition(molecules_dir)

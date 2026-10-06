@@ -1,7 +1,7 @@
 const fs = require('fs');
 
 const MOLECULES = [
-  "alpha-Humulene",
+  "Captopril",
   "Caffeine",
   "Rivastigmine",
   "Tacrine",

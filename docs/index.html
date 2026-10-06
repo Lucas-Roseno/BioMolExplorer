@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="BioMolExplorer connects structural biology, bioactivity data, molecular similarity, docking and ADMET analysis in one research workflow.">
+  <meta name="theme-color" content="#47366d">
+  <meta property="og:title" content="BioMolExplorer — Molecular clarity for the next discovery">
+  <meta property="og:description" content="An integrated computational platform for evidence-driven molecular research and drug discovery.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lucas-roseno.github.io/BioMolExplorer/">
+  <title>BioMolExplorer — Molecular clarity for the next discovery</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <header class="site-header" data-header>
+    <div class="shell header-inner">
+      <a class="brand" href="#top" aria-label="BioMolExplorer home">
+        <span class="brand-mark" aria-hidden="true">B</span>
+        <span>
+          <strong>BioMolExplorer</strong>
+          <small>Molecular research workflow</small>
+        </span>
+      </a>
+
+      <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="site-navigation" data-menu-toggle>
+        <span class="sr-only">Toggle navigation</span>
+        <span></span><span></span>
+      </button>
+
+      <nav id="site-navigation" class="site-nav" aria-label="Main navigation" data-navigation>
+        <a href="#workflow">Workflow</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#research">Research</a>
+        <a href="#download">Download</a>
+      </nav>
+
+      <a class="header-download" href="https://github.com/Lucas-Roseno/BioMolExplorer/releases/latest/download/biomolexplorer_amd64.deb" download>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg>
+        Download .deb
+      </a>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="hero" id="top">
+      <div class="hero-glow hero-glow-one" aria-hidden="true"></div>
+      <div class="hero-glow hero-glow-two" aria-hidden="true"></div>
+      <div class="shell hero-grid">
+        <div class="hero-copy reveal">
+          <p class="eyebrow"><span></span> Neurodegenerative drug discovery</p>
+          <h1>Molecular clarity <em>for the next discovery.</em></h1>
+          <p class="hero-lead">BioMolExplorer connects biological targets, compound evidence, molecular docking and ADMET profiling to help researchers prioritize the next therapeutic hypothesis.</p>
+
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/Lucas-Roseno/BioMolExplorer/releases/latest/download/biomolexplorer_amd64.deb" download>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg>
+              Download for Ubuntu
+            </a>
+            <a class="button button-secondary" href="https://github.com/Lucas-Roseno/BioMolExplorer" target="_blank" rel="noopener noreferrer">
+              View source on GitHub
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
+          </div>
+
+          <div class="release-meta" aria-label="Download information">
+            <span>Version 2.0.0</span>
+            <span>AMD64</span>
+            <span>Ubuntu 22.04+</span>
+            <span>MIT License</span>
+          </div>
+        </div>
+
+        <div class="molecule-stage reveal" aria-label="Abstract molecular structure illustration">
+          <div class="stage-label"><span></span> Interactive molecular space</div>
+          <svg class="molecule" viewBox="0 0 620 620" role="img" aria-label="Stylized molecular structure">
+            <defs>
+              <linearGradient id="bond" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#47366d"/>
+                <stop offset="1" stop-color="#b9afea"/>
+              </linearGradient>
+              <radialGradient id="atom-main">
+                <stop offset="0" stop-color="#c8c1ee"/>
+                <stop offset=".7" stop-color="#705d9d"/>
+                <stop offset="1" stop-color="#47366d"/>
+              </radialGradient>
+              <filter id="soft-shadow" x="-100%" y="-100%" width="300%" height="300%">
+                <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#47366d" flood-opacity=".22"/>
+              </filter>
+            </defs>
+            <g class="bonds" stroke="url(#bond)" stroke-width="9" stroke-linecap="round" opacity=".8">
+              <path d="M310 302 194 205M310 302 435 211M310 302 430 397M310 302 203 423M194 205 111 300M435 211 518 305M430 397 324 505M203 423 324 505"/>
+            </g>
+            <g filter="url(#soft-shadow)">
+              <circle cx="310" cy="302" r="57" fill="url(#atom-main)"/>
+              <circle cx="194" cy="205" r="38" fill="#72bfe5"/>
+              <circle cx="435" cy="211" r="44" fill="#9686de"/>
+              <circle cx="430" cy="397" r="39" fill="#dc83ad"/>
+              <circle cx="203" cy="423" r="42" fill="#b9afea"/>
+              <circle cx="111" cy="300" r="27" fill="#f0edf8" stroke="#9686de" stroke-width="7"/>
+              <circle cx="518" cy="305" r="31" fill="#e3c45b"/>
+              <circle cx="324" cy="505" r="28" fill="#f0edf8" stroke="#705d9d" stroke-width="7"/>
+            </g>
+            <g fill="#34274c" font-family="DM Mono, monospace" font-weight="500" text-anchor="middle">
+              <text x="310" y="309" font-size="19" fill="white">CADD</text>
+              <text x="194" y="211" font-size="15">N</text>
+              <text x="435" y="217" font-size="15" fill="white">C</text>
+              <text x="430" y="403" font-size="15">O</text>
+              <text x="518" y="311" font-size="15">S</text>
+            </g>
+          </svg>
+          <div class="data-chip data-chip-one"><strong>PDB</strong><span>Structural context</span></div>
+          <div class="data-chip data-chip-two"><strong>ChEMBL</strong><span>Compound evidence</span></div>
+          <div class="data-chip data-chip-three"><strong>ADMET</strong><span>Candidate profiling</span></div>
+        </div>
+      </div>
+      <a class="scroll-cue" href="#workflow"><span>Follow the workflow</span><i></i></a>
+    </section>
+
+    <section class="section workflow" id="workflow">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div>
+            <p class="eyebrow"><span></span> One connected workflow</p>
+            <h2>Evidence in.<br><em>Better decisions out.</em></h2>
+          </div>
+          <p>Move from target context to candidate prioritization without losing the biological rationale behind each decision.</p>
+        </div>
+
+        <div class="workflow-grid">
+          <article class="workflow-card reveal">
+            <div class="card-number">01</div>
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a3 3 0 0 0 2.6 4.5h8.8A3 3 0 0 0 19 17l-5-9V3M7.5 14h9"/></svg></div>
+            <h3>Map the biological target</h3>
+            <p>Start with structural evidence from PDB and define the molecular context that guides each screening decision.</p>
+            <ul><li>PDB structure retrieval</li><li>Target and ligand curation</li></ul>
+          </article>
+
+          <article class="workflow-card reveal">
+            <div class="card-number">02</div>
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="m9 11 6-4M9 13l6 4"/></svg></div>
+            <h3>Build compound evidence</h3>
+            <p>Connect ChEMBL bioactivity data and ZINC libraries to create an informed candidate space for exploration.</p>
+            <ul><li>Bioactivity mining</li><li>Similarity networks</li></ul>
+          </article>
+
+          <article class="workflow-card reveal">
+            <div class="card-number">03</div>
+            <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 14 5-5 4 4 7-8M20 10V5h-5"/><path d="M4 20h16"/></svg></div>
+            <h3>Prioritize the next experiment</h3>
+            <p>Use docking, graph analysis and ADMET profiling to focus experimental effort on the most promising compounds.</p>
+            <ul><li>Docking and redocking</li><li>Multi-criteria prioritization</li></ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section capabilities" id="capabilities">
+      <div class="shell capability-layout">
+        <div class="capability-intro reveal">
+          <p class="eyebrow eyebrow-light"><span></span> Built for focused research</p>
+          <h2>One platform.<br><em>A connected molecular story.</em></h2>
+          <p>From raw public data to an experimentally useful shortlist, BioMolExplorer keeps the complete computational path visible and reproducible.</p>
+          <a class="text-link" href="https://biomolexplorer.onrender.com" target="_blank" rel="noopener noreferrer">Open the web application <span>↗</span></a>
+        </div>
+
+        <div class="capability-list">
+          <article class="capability-item reveal">
+            <span>01</span><div><h3>Structural context</h3><p>PDB target exploration, molecular structure retrieval and interactive visualization.</p></div>
+          </article>
+          <article class="capability-item reveal">
+            <span>02</span><div><h3>Compound intelligence</h3><p>ChEMBL activity evidence and ZINC candidate libraries combined in one workflow.</p></div>
+          </article>
+          <article class="capability-item reveal">
+            <span>03</span><div><h3>Chemical-space analysis</h3><p>Molecular fingerprints, Tanimoto similarity and interactive graph-based exploration.</p></div>
+          </article>
+          <article class="capability-item reveal">
+            <span>04</span><div><h3>Decision support</h3><p>Docking, redocking validation and ADMET analysis for evidence-based prioritization.</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section research" id="research">
+      <div class="shell">
+        <div class="section-heading reveal">
+          <div><p class="eyebrow"><span></span> Scientific foundation</p><h2>Designed around the<br><em>research question.</em></h2></div>
+          <p>BioMolExplorer was developed within a multidisciplinary academic initiative connecting software engineering, bioinformatics and molecular modeling.</p>
+        </div>
+
+        <div class="research-panel reveal">
+          <div class="research-copy">
+            <span class="project-chip">NeuroPharmIA initiative</span>
+            <h3>Supporting multi-target discovery for neurodegenerative diseases.</h3>
+            <p>The platform reduces technical barriers in computer-aided drug design by bringing data retrieval, curation, visualization and molecular analysis into a single research environment.</p>
+            <a class="text-link dark-link" href="https://github.com/Lucas-Roseno/BioMolExplorer#readme" target="_blank" rel="noopener noreferrer">Read the project documentation <span>↗</span></a>
+          </div>
+          <div class="research-stats">
+            <div><strong>3</strong><span>Public molecular repositories</span></div>
+            <div><strong>5+</strong><span>Integrated analysis stages</span></div>
+            <div><strong>2.0</strong><span>Current platform version</span></div>
+            <div><strong>MIT</strong><span>Open-source license</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section download-section" id="download">
+      <div class="shell download-card reveal">
+        <div class="download-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="download-copy">
+          <p class="eyebrow eyebrow-light"><span></span> Desktop distribution</p>
+          <h2>Take BioMolExplorer<br><em>to your workstation.</em></h2>
+          <p>Install the desktop package on a 64-bit Ubuntu system and run the BioMolExplorer research environment locally.</p>
+          <div class="download-actions">
+            <a class="button button-white" href="https://github.com/Lucas-Roseno/BioMolExplorer/releases/latest/download/biomolexplorer_amd64.deb" download>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg>
+              Download biomolexplorer_amd64.deb
+            </a>
+            <a class="release-link" href="https://github.com/Lucas-Roseno/BioMolExplorer/releases/latest" target="_blank" rel="noopener noreferrer">Release notes ↗</a>
+          </div>
+        </div>
+        <div class="install-card">
+          <div class="install-card-head"><span>Ubuntu installation</span><small>v2.0.0 · AMD64</small></div>
+          <ol>
+            <li><span>1</span><div><strong>Download the package</strong><p>Save the <code>.deb</code> file to your Downloads folder.</p></div></li>
+            <li><span>2</span><div><strong>Install locally</strong><pre><code>sudo apt install ./biomolexplorer_amd64.deb</code></pre></div></li>
+            <li><span>3</span><div><strong>Launch BioMolExplorer</strong><p>Open it from the Ubuntu application menu.</p></div></li>
+          </ol>
+          <p class="checksum">SHA-256 · <code>07753965dca18ef52c7f6dcc36674c78f7e0122301c173fe8be6d1364747f566</code></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-main">
+      <div>
+        <a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">B</span><span><strong>BioMolExplorer</strong><small>Molecular research workflow</small></span></a>
+        <p>An integrated computational platform for evidence-driven molecular research and drug discovery.</p>
+      </div>
+      <div class="footer-links"><strong>Explore</strong><a href="#workflow">Workflow</a><a href="#capabilities">Capabilities</a><a href="#download">Download</a></div>
+      <div class="footer-links"><strong>Project</strong><a href="https://github.com/Lucas-Roseno/BioMolExplorer" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="https://github.com/Lucas-Roseno/BioMolExplorer#readme" target="_blank" rel="noopener noreferrer">Documentation ↗</a><a href="https://github.com/Lucas-Roseno/BioMolExplorer/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License ↗</a></div>
+    </div>
+    <div class="shell footer-bottom"><span>© 2026 BioMolExplorer</span><span>CEFET-MG · UFSJ</span></div>
+  </footer>
+</body>
+</html>

@@ -34,6 +34,7 @@ const ELEMENT_COLORS: Record<string, Pick<AtomDef, "color" | "emissive">> = {
   H: { color: "#eeeaff", emissive: "#705d9d" }, // white with a lavender tint
   N: { color: "#72bfe5", emissive: "#315c82" }, // contrasting cyan-blue
   O: { color: "#dc83ad", emissive: "#713651" }, // pink to distinguish oxygen
+  S: { color: "#e3c45b", emissive: "#70580f" }, // warm yellow — sulfur/thiol group
 };
 
 function getAtomColors(element: string, color: string, emissive: string) {

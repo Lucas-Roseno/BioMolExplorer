@@ -390,6 +390,28 @@
   color: #342654;
 }
 
+.workspace-card-delete {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border: 0;
+  border-top: 1px solid #f0d9dc;
+  background: #fff;
+  color: #a82e3b;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.workspace-card-delete:hover,
+.workspace-card-delete:focus-visible {
+  background: #fff7f8;
+}
+
 .workspaces-empty {
   grid-column: 1 / -1;
   padding: 48px 24px;
@@ -568,6 +590,9 @@
 }
 
 .workspace-dataset-picker {
+  width: 100%;
+  text-align: left;
+  font: inherit;
   display: flex;
   align-items: center;
   gap: 13px;

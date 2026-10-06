@@ -22,7 +22,12 @@ type Transition = {
 
 const LANDING_STOPS: readonly CameraStop[] = [
   // The first framing includes extra breathing room for the molecule label.
-  { moleculeIndex: 0, direction: new THREE.Vector3(0.13, 0.08, 1).normalize(), framing: 0.7 },
+  {
+    moleculeIndex: 0,
+    direction: new THREE.Vector3(0.13, 0.08, 1).normalize(),
+    framing: 0.54,
+    targetOffset: new THREE.Vector3(-1.4, 0.2, 0),
+  },
   // Aim well to the right of the molecule so it stays in the open left
   // margin instead of competing with the second section text.
   {

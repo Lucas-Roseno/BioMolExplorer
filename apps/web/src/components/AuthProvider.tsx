@@ -36,6 +36,7 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setActiveWorkspace: (ws: Workspace) => void;
+  clearActiveWorkspace: () => void;
   /** Build fetch options with Authorization + X-Workspace headers. */
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
 }
@@ -191,9 +192,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setWorkspace(ws);
   }, []);
 
+  const clearActiveWorkspace = useCallback(() => {
+    localStorage.removeItem(WORKSPACE_KEY);
+    setWorkspace(null);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, workspace, token, isLoading, login, logout, setActiveWorkspace, authFetch }),
-    [user, workspace, token, isLoading, login, logout, setActiveWorkspace, authFetch]
+    () => ({ user, workspace, token, isLoading, login, logout, setActiveWorkspace, clearActiveWorkspace, authFetch }),
+    [user, workspace, token, isLoading, login, logout, setActiveWorkspace, clearActiveWorkspace, authFetch]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
